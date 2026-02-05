@@ -215,11 +215,9 @@
                               </div>
                             </div>
                           </div>
-                          <p class="mb-1">Payments</p>
-                          <h4 class="card-title mb-3">$2,456</h4>
-                          <small class="text-danger fw-medium"
-                            ><i class="icon-base bx bx-down-arrow-alt"></i> -14.82%</small
-                          >
+                          <p class="mb-1">Nombre de tickets</p>
+                          <h4 class="card-title mb-3">{{ $nombreTickets ?? 0 }}</h4>
+                          <small class="text-muted fw-medium">Tickets enregistres</small>
                         </div>
                       </div>
                     </div>

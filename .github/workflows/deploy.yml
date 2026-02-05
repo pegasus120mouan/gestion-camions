@@ -30,6 +30,12 @@ jobs:
             echo "📦 Installation des dépendances..."
             composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
 
+            echo "🧹 Nettoyage du cache..."
+            php artisan config:clear
+            php artisan cache:clear
+            php artisan view:clear
+            php artisan route:clear
+
             echo "🗄️ Migration de la base de données..."
             php artisan migrate --force
 
@@ -37,6 +43,10 @@ jobs:
             php artisan config:cache
             php artisan route:cache
             php artisan view:cache
+
+            echo "🔑 Permissions..."
+            sudo chown -R www-data:www-data storage bootstrap/cache
+            sudo chmod -R 775 storage bootstrap/cache
 
             echo "🔄 Redémarrage des services..."
             sudo systemctl reload php8.2-fpm || sudo systemctl reload php-fpm || true

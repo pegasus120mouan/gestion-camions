@@ -24,6 +24,7 @@ Route::middleware('auth')->group(function () {
         $authUser = auth()->user();
         $nombreCamions = 0;
         $totalDepenses = 0;
+        $nombreTickets = 0;
 
         if ($authUser && $authUser->role === 'proprietaire') {
             $phpsessid = session('external_auth.phpsessid', '');
@@ -40,6 +41,15 @@ Route::middleware('auth')->group(function () {
                         $vehiculeIds = array_column($vehicules, 'vehicules_id');
                         $totalDepenses = \App\Models\Depense::whereIn('vehicule_id', $vehiculeIds)->sum('montant');
                     }
+
+                    $ticketsResponse = \Illuminate\Support\Facades\Http::acceptJson()
+                        ->timeout(10)
+                        ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
+                        ->get(config('services.external_auth.mes_tickets_url'));
+                    if ($ticketsResponse->successful()) {
+                        $pagination = $ticketsResponse->json('pagination');
+                        $nombreTickets = is_array($pagination) ? ($pagination['total'] ?? 0) : 0;
+                    }
                 } catch (\Throwable $e) {
                     $nombreCamions = 0;
                 }
@@ -49,6 +59,7 @@ Route::middleware('auth')->group(function () {
         return view('dashboard', [
             'nombreCamions' => $nombreCamions,
             'totalDepenses' => $totalDepenses,
+            'nombreTickets' => $nombreTickets,
         ]);
     })->name('dashboard');
 
