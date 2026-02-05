@@ -6,12 +6,70 @@ use App\Models\Camion;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
 class CamionController extends Controller
 {
     public function index(Request $request)
     {
+        $authUser = Auth::user();
+        if ($authUser && $authUser->role === 'proprietaire') {
+            $mesCamionsUrl = (string) config('services.external_auth.mes_camions_url');
+            $timeout = (int) config('services.external_auth.timeout', 10);
+            $phpsessid = (string) $request->session()->get('external_auth.phpsessid', '');
+
+            if (trim($phpsessid) === '') {
+                return view('camions.index', [
+                    'camions' => new LengthAwarePaginator([], 0, 20),
+                    'chauffeurs' => collect(),
+                    'external_camions' => [],
+                    'external_error' => "Session API manquante. Reconnectez-vous.",
+                ]);
+            }
+
+            try {
+                $response = Http::acceptJson()
+                    ->timeout($timeout)
+                    ->withHeaders([
+                        'Cookie' => 'PHPSESSID=' . $phpsessid,
+                    ])
+                    ->get($mesCamionsUrl);
+            } catch (\Throwable $e) {
+                return view('camions.index', [
+                    'camions' => new LengthAwarePaginator([], 0, 20),
+                    'chauffeurs' => collect(),
+                    'external_camions' => [],
+                    'external_error' => "Impossible de joindre le service camions.",
+                ]);
+            }
+
+            if (! $response->successful()) {
+                $message = (string) ($response->json('error') ?? 'Erreur API.');
+
+                return view('camions.index', [
+                    'camions' => new LengthAwarePaginator([], 0, 20),
+                    'chauffeurs' => collect(),
+                    'external_camions' => [],
+                    'external_error' => $message,
+                ]);
+            }
+
+            $vehicules = $response->json('vehicules');
+            if (! is_array($vehicules)) {
+                $vehicules = [];
+            }
+
+            return view('camions.index', [
+                'camions' => new LengthAwarePaginator([], 0, 20),
+                'chauffeurs' => collect(),
+                'external_camions' => $vehicules,
+                'external_error' => null,
+            ]);
+        }
+
         $query = Camion::query()->with('chauffeur')->latest();
 
         if ($request->filled('q')) {
@@ -34,6 +92,8 @@ class CamionController extends Controller
         return view('camions.index', [
             'camions' => $camions,
             'chauffeurs' => $chauffeurs,
+            'external_camions' => null,
+            'external_error' => null,
         ]);
     }
 

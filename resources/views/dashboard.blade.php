@@ -57,11 +57,9 @@
                               </div>
                             </div>
                           </div>
-                          <p class="mb-1">Profit</p>
-                          <h4 class="card-title mb-3">$12,628</h4>
-                          <small class="text-success fw-medium"
-                            ><i class="icon-base bx bx-up-arrow-alt"></i> +72.80%</small
-                          >
+                          <p class="mb-1">Nombre de camions</p>
+                          <h4 class="card-title mb-3">{{ $nombreCamions ?? 0 }}</h4>
+                          <small class="text-muted fw-medium">Véhicules enregistrés</small>
                         </div>
                       </div>
                     </div>
@@ -91,11 +89,9 @@
                               </div>
                             </div>
                           </div>
-                          <p class="mb-1">Sales</p>
-                          <h4 class="card-title mb-3">$4,679</h4>
-                          <small class="text-success fw-medium"
-                            ><i class="icon-base bx bx-up-arrow-alt"></i> +28.42%</small
-                          >
+                          <p class="mb-1">Depenses</p>
+                          <h4 class="card-title mb-3">{{ number_format($totalDepenses ?? 0, 0, ',', ' ') }} FCFA</h4>
+                          <small class="text-muted fw-medium">Total des depenses</small>
                         </div>
                       </div>
                     </div>

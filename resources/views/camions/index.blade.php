@@ -16,57 +16,108 @@
 
     <div class="card">
       <div class="table-responsive text-nowrap">
-        @php($disk = \Illuminate\Support\Facades\Storage::disk('s3'))
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Image face</th>
-              <th>Immatriculation</th>
-              <th>Marque</th>
-              <th>Modèle</th>
-              <th>Année</th>
-              <th>Chauffeur</th>
-              <th>Actif</th>
-              <th class="text-end">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="table-border-bottom-0">
-            @forelse($camions as $c)
+        @if(!empty($external_error))
+          <div class="alert alert-danger m-3">{{ $external_error }}</div>
+        @endif
+
+        @if(is_array($external_camions))
+          <table class="table">
+            <thead>
               <tr>
-                <td>
-                  @if(!empty($c->image_face))
-                    <img src="{{ method_exists($disk, 'temporaryUrl') ? $disk->temporaryUrl($c->image_face, now()->addMinutes(60)) : $disk->url($c->image_face) }}" alt="Image face" style="width: 50px; height: 50px; object-fit: cover;" />
-                  @endif
-                </td>
-                <td>
-                  <a href="{{ route('camions.show', $c) }}">{{ $c->immatriculation }}</a>
-                </td>
-                <td>{{ $c->marque }}</td>
-                <td>{{ $c->modele }}</td>
-                <td>{{ $c->annee }}</td>
-                <td>{{ $c->chauffeur?->name }} {{ $c->chauffeur?->prenom }}</td>
-                <td>{{ $c->actif ? 'Oui' : 'Non' }}</td>
-                <td class="text-end">
-                  <a class="btn btn-sm btn-outline-primary" href="{{ route('camions.edit', $c) }}">Modifier</a>
-                  <form class="d-inline" method="POST" action="{{ route('camions.destroy', $c) }}" onsubmit="return confirm('Supprimer ce camion ?');">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
-                  </form>
-                </td>
+                <th>Immatriculation</th>
+                <th>Date</th>
+                <th>Depenses</th>
               </tr>
-            @empty
+            </thead>
+            <tbody class="table-border-bottom-0">
+              @forelse($external_camions as $v)
+                <tr>
+                  <td>
+                    <a href="{{ route('vehicules.depenses', ['vehicule_id' => $v['vehicules_id'] ?? 0, 'matricule' => $v['matricule_vehicule'] ?? '']) }}">
+                      {{ $v['matricule_vehicule'] ?? '' }}
+                    </a>
+                  </td>
+                  <td>
+                    @php
+                      $dateCreated = $v['created_at'] ?? '';
+                      if ($dateCreated) {
+                        try {
+                          $dateCreated = \Carbon\Carbon::parse($dateCreated)->format('d-m-Y');
+                        } catch (\Exception $e) {}
+                      }
+                    @endphp
+                    {{ $dateCreated }}
+                  </td>
+                  <td>
+                    @php
+                      $vehiculeId = $v['vehicules_id'] ?? 0;
+                      $depenseTotal = \App\Models\Depense::where('vehicule_id', $vehiculeId)->sum('montant');
+                    @endphp
+                    {{ number_format($depenseTotal, 0, ',', ' ') }} FCFA
+                  </td>
+                </tr>
+              @empty
+                <tr>
+                  <td colspan="3" class="text-center">Aucun camion</td>
+                </tr>
+              @endforelse
+            </tbody>
+          </table>
+        @else
+          @php($disk = \Illuminate\Support\Facades\Storage::disk('s3'))
+          <table class="table">
+            <thead>
               <tr>
-                <td colspan="8" class="text-center">Aucun camion</td>
+                <th>Image face</th>
+                <th>Immatriculation</th>
+                <th>Marque</th>
+                <th>Modèle</th>
+                <th>Année</th>
+                <th>Chauffeur</th>
+                <th>Actif</th>
+                <th class="text-end">Actions</th>
               </tr>
-            @endforelse
-          </tbody>
-        </table>
+            </thead>
+            <tbody class="table-border-bottom-0">
+              @forelse($camions as $c)
+                <tr>
+                  <td>
+                    @if(!empty($c->image_face))
+                      <img src="{{ method_exists($disk, 'temporaryUrl') ? $disk->temporaryUrl($c->image_face, now()->addMinutes(60)) : $disk->url($c->image_face) }}" alt="Image face" style="width: 50px; height: 50px; object-fit: cover;" />
+                    @endif
+                  </td>
+                  <td>
+                    <a href="{{ route('camions.show', $c) }}">{{ $c->immatriculation }}</a>
+                  </td>
+                  <td>{{ $c->marque }}</td>
+                  <td>{{ $c->modele }}</td>
+                  <td>{{ $c->annee }}</td>
+                  <td>{{ $c->chauffeur?->name }} {{ $c->chauffeur?->prenom }}</td>
+                  <td>{{ $c->actif ? 'Oui' : 'Non' }}</td>
+                  <td class="text-end">
+                    <a class="btn btn-sm btn-outline-primary" href="{{ route('camions.edit', $c) }}">Modifier</a>
+                    <form class="d-inline" method="POST" action="{{ route('camions.destroy', $c) }}" onsubmit="return confirm('Supprimer ce camion ?');">
+                      @csrf
+                      @method('DELETE')
+                      <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
+                    </form>
+                  </td>
+                </tr>
+              @empty
+                <tr>
+                  <td colspan="8" class="text-center">Aucun camion</td>
+                </tr>
+              @endforelse
+            </tbody>
+          </table>
+        @endif
       </div>
     </div>
 
     <div class="mt-3">
-      {{ $camions->links() }}
+      @if(!is_array($external_camions))
+        {{ $camions->links() }}
+      @endif
     </div>
 
     <div class="modal fade" id="modalNouveauCamion" tabindex="-1" aria-hidden="true">

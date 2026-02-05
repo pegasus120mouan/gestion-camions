@@ -144,6 +144,21 @@
               </ul>
             </li>
 
+             <li class="menu-item">
+              <a href="javascript:void(0);" class="menu-link menu-toggle">
+                <i class="menu-icon tf-icons bx bx-map"></i>
+                <div class="text-truncate" data-i18n="Weighbridges">Mes Tickets</div>
+              </a>
+
+              <ul class="menu-sub">
+                <li class="menu-item">
+                  <a href="{{ route('tickets.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Weighbridges list">Liste des tickets</div>
+                  </a>
+                </li>
+              </ul>
+            </li>
+
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-map"></i>
