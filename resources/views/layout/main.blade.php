@@ -215,17 +215,13 @@
                 <div class="text-truncate" data-i18n="Agents">Agents</div>
               </a>
             </li>
-          <!--  <li class="menu-item">
-              <a
-                href="https://demos.themeselection.com/sneat-bootstrap-html-admin-template/html/vertical-menu-template/app-chat.html"
-                target="_blank"
-                class="menu-link">
-                <i class="menu-icon tf-icons bx bx-chat"></i>
-                <div class="text-truncate" data-i18n="Chat">Chat</div>
-                <div class="badge rounded-pill bg-label-primary text-uppercase fs-tiny ms-auto">Pro</div>
+           <li class="menu-item">
+              <a href="{{ route('financements.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-money"></i>
+                <div class="text-truncate" data-i18n="Financements">Financements</div>
               </a>
             </li>
-            <li class="menu-item">
+           <!-- <li class="menu-item">
               <a
                 href="https://demos.themeselection.com/sneat-bootstrap-html-admin-template/html/vertical-menu-template/app-calendar.html"
                 target="_blank"

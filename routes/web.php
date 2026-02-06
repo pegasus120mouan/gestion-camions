@@ -11,6 +11,7 @@ use App\Http\Controllers\DepenseController;
 use App\Http\Controllers\PontController;
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\UtilisateurController;
+use App\Http\Controllers\FinancementController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/index.html', function () {
@@ -96,6 +97,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/ponts', [PontController::class, 'index'])->name('ponts.index');
 
     Route::get('/agents', [AgentController::class, 'index'])->name('agents.index');
+
+    Route::get('/financements', [FinancementController::class, 'index'])->name('financements.index');
 
     Route::get('/depenses', [DepenseController::class, 'listeDepenses'])->name('depenses.liste');
     Route::get('/fiches-sortie', [DepenseController::class, 'listeFichesSortie'])->name('fiches_sortie.index');
