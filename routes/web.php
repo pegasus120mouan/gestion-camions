@@ -8,6 +8,8 @@ use App\Http\Controllers\PeseeController;
 use App\Http\Controllers\ProduitController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\DepenseController;
+use App\Http\Controllers\PontController;
+use App\Http\Controllers\AgentController;
 use App\Http\Controllers\UtilisateurController;
 use Illuminate\Support\Facades\Route;
 
@@ -88,4 +90,16 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/vehicules/{vehicule_id}/depenses', [DepenseController::class, 'index'])->name('vehicules.depenses');
     Route::post('/vehicules/{vehicule_id}/depenses', [DepenseController::class, 'store'])->name('vehicules.depenses.store');
+    Route::get('/vehicules/{vehicule_id}/fiche-sortie', [DepenseController::class, 'ficheSortie'])->name('vehicules.fiche_sortie');
+    Route::post('/vehicules/{vehicule_id}/fiche-sortie', [DepenseController::class, 'storeFicheSortie'])->name('vehicules.fiche_sortie.store');
+
+    Route::get('/ponts', [PontController::class, 'index'])->name('ponts.index');
+
+    Route::get('/agents', [AgentController::class, 'index'])->name('agents.index');
+
+    Route::get('/depenses', [DepenseController::class, 'listeDepenses'])->name('depenses.liste');
+    Route::get('/fiches-sortie', [DepenseController::class, 'listeFichesSortie'])->name('fiches_sortie.index');
+    Route::post('/fiches-sortie', [DepenseController::class, 'storeFicheSortieFromList'])->name('fiches_sortie.store');
+    Route::post('/fiches-sortie/{fiche_id}/associer-ticket', [DepenseController::class, 'associerTicket'])->name('fiches_sortie.associer_ticket');
+    Route::post('/fiches-sortie/{fiche_id}/prix-transport', [DepenseController::class, 'updatePrixTransport'])->name('fiches_sortie.update_prix_transport');
 });

@@ -9,9 +9,14 @@
           <p class="text-muted mb-0">{{ $vehicule['matricule_vehicule'] ?? '' }}</p>
         @endif
       </div>
-      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNouvelleDepense">
-        Nouvelle depense
-      </button>
+      <div>
+        <button type="button" class="btn btn-outline-secondary me-2" data-bs-toggle="modal" data-bs-target="#modalFicheSortie">
+          <i class="bx bx-file"></i> Fiche de sortie
+        </button>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNouvelleDepense">
+          Nouvelle depense
+        </button>
+      </div>
     </div>
 
     @if(session('success'))
@@ -93,6 +98,135 @@
     </div>
   </div>
 </div>
+
+<!-- Modal Fiche de Sortie -->
+<div class="modal fade" id="modalFicheSortie" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Fiche de sortie - {{ $vehicule['matricule_vehicule'] ?? '' }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form method="POST" action="{{ route('vehicules.fiche_sortie.store', ['vehicule_id' => $vehicule_id]) }}" id="formFicheSortie">
+          @csrf
+          <input type="hidden" name="id_pont" id="id_pont_hidden" />
+          <input type="hidden" name="id_agent" id="id_agent_hidden" />
+          <input type="hidden" name="pont_display" id="pont_display_hidden" />
+          <input type="hidden" name="agent_display" id="agent_display_hidden" />
+          <input type="hidden" name="matricule_vehicule" value="{{ $vehicule['matricule_vehicule'] ?? request('matricule', '') }}" />
+
+          <div class="mb-3">
+            <label class="form-label">Pont de pesage <span class="text-danger">*</span></label>
+            <input type="text" id="pont_input" class="form-control" placeholder="Tapez pour rechercher un pont..." list="ponts_list" autocomplete="off" required />
+            <datalist id="ponts_list">
+              @foreach($ponts ?? [] as $pont)
+                <option data-id="{{ $pont['id_pont'] }}" value="{{ $pont['nom_pont'] }} ({{ $pont['code_pont'] }})">
+              @endforeach
+            </datalist>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Agent <span class="text-danger">*</span></label>
+            <input type="text" id="agent_input" class="form-control" placeholder="Tapez pour rechercher un agent..." list="agents_list" autocomplete="off" required />
+            <datalist id="agents_list">
+              @foreach($agents ?? [] as $agent)
+                <option data-id="{{ $agent['id_agent'] }}" value="{{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})">
+              @endforeach
+            </datalist>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Date de chargement <span class="text-danger">*</span></label>
+            <input type="date" name="date_chargement" class="form-control" value="{{ date('Y-m-d') }}" required />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Poids sur le pont (kg) <span class="text-danger">*</span></label>
+            <input type="number" name="poids_pont" class="form-control" placeholder="Ex: 25000" min="0" step="0.01" required />
+          </div>
+
+          <div class="d-flex justify-content-end gap-2">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="bx bx-save"></i> Enregistrer la fiche
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Mapping ponts
+  var pontsMap = {
+    @foreach($ponts ?? [] as $pont)
+      "{{ $pont['nom_pont'] }} ({{ $pont['code_pont'] }})": {{ $pont['id_pont'] }},
+    @endforeach
+  };
+
+  // Mapping agents
+  var agentsMap = {
+    @foreach($agents ?? [] as $agent)
+      "{{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})": {{ $agent['id_agent'] }},
+    @endforeach
+  };
+
+  var pontInput = document.getElementById('pont_input');
+  var agentInput = document.getElementById('agent_input');
+  var idPontHidden = document.getElementById('id_pont_hidden');
+  var idAgentHidden = document.getElementById('id_agent_hidden');
+  var pontDisplayHidden = document.getElementById('pont_display_hidden');
+  var agentDisplayHidden = document.getElementById('agent_display_hidden');
+
+  if (pontInput) {
+    pontInput.addEventListener('change', function() {
+      var val = this.value;
+      idPontHidden.value = pontsMap[val] || '';
+      pontDisplayHidden.value = val;
+    });
+    pontInput.addEventListener('input', function() {
+      var val = this.value;
+      idPontHidden.value = pontsMap[val] || '';
+      pontDisplayHidden.value = val;
+    });
+  }
+
+  if (agentInput) {
+    agentInput.addEventListener('change', function() {
+      var val = this.value;
+      idAgentHidden.value = agentsMap[val] || '';
+      agentDisplayHidden.value = val;
+    });
+    agentInput.addEventListener('input', function() {
+      var val = this.value;
+      idAgentHidden.value = agentsMap[val] || '';
+      agentDisplayHidden.value = val;
+    });
+  }
+
+  // Validation avant soumission
+  var formFicheSortie = document.getElementById('formFicheSortie');
+  if (formFicheSortie) {
+    formFicheSortie.addEventListener('submit', function(e) {
+      if (!idPontHidden.value) {
+        e.preventDefault();
+        alert('Veuillez selectionner un pont valide dans la liste.');
+        pontInput.focus();
+        return false;
+      }
+      if (!idAgentHidden.value) {
+        e.preventDefault();
+        alert('Veuillez selectionner un agent valide dans la liste.');
+        agentInput.focus();
+        return false;
+      }
+    });
+  }
+});
+</script>
 
 <div class="modal fade" id="modalNouvelleDepense" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog" role="document">

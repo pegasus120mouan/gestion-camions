@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FicheSortie;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -126,6 +127,44 @@ class TicketController extends Controller
         } catch (\Throwable $e) {
             // Ignorer l'erreur, on continue sans autocomplétion
         }
+
+        // Récupérer les fiches de sortie associées aux tickets (par id_ticket)
+        $ticketIds = array_column($tickets, 'id_ticket');
+        $fichesSortie = [];
+        if (!empty($ticketIds)) {
+            $fiches = FicheSortie::whereIn('id_ticket', $ticketIds)->get()->keyBy('id_ticket');
+            foreach ($fiches as $idTicket => $fiche) {
+                $fichesSortie[$idTicket] = [
+                    'fiche_id' => $fiche->id,
+                    'origine' => $fiche->nom_pont,
+                    'date_chargement' => $fiche->date_chargement ? $fiche->date_chargement->format('d-m-Y') : '',
+                    'poids_parc' => $fiche->poids_pont,
+                    'prix_unitaire_transport' => $fiche->prix_unitaire_transport,
+                    'poids_unitaire_regime' => $fiche->poids_unitaire_regime,
+                ];
+            }
+        }
+
+        // Ajouter les infos de fiche de sortie à chaque ticket
+        foreach ($tickets as &$ticket) {
+            $idTicket = $ticket['id_ticket'] ?? null;
+            if ($idTicket && isset($fichesSortie[$idTicket])) {
+                $ticket['fiche_id'] = $fichesSortie[$idTicket]['fiche_id'];
+                $ticket['origine'] = $fichesSortie[$idTicket]['origine'];
+                $ticket['date_chargement_fiche'] = $fichesSortie[$idTicket]['date_chargement'];
+                $ticket['poids_parc'] = $fichesSortie[$idTicket]['poids_parc'];
+                $ticket['prix_unitaire_transport'] = $fichesSortie[$idTicket]['prix_unitaire_transport'];
+                $ticket['poids_unitaire_regime'] = $fichesSortie[$idTicket]['poids_unitaire_regime'];
+            } else {
+                $ticket['fiche_id'] = null;
+                $ticket['origine'] = '';
+                $ticket['date_chargement_fiche'] = '';
+                $ticket['poids_parc'] = '';
+                $ticket['prix_unitaire_transport'] = null;
+                $ticket['poids_unitaire_regime'] = null;
+            }
+        }
+        unset($ticket);
 
         return view('tickets.index', [
             'tickets' => $tickets,

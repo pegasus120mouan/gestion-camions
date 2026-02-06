@@ -141,6 +141,16 @@
                     <div class="text-truncate" data-i18n="Without menu">Liste des camions</div>
                   </a>
                 </li>
+                <li class="menu-item">
+                  <a href="{{ route('depenses.liste') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Without menu">Dépenses</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('fiches_sortie.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Without menu">Fiche de Sortie</div>
+                  </a>
+                </li>
               </ul>
             </li>
 
@@ -167,7 +177,7 @@
 
               <ul class="menu-sub">
                 <li class="menu-item">
-                  <a href="{{ route('ponts_pesage.index') }}" class="menu-link">
+                  <a href="{{ route('ponts.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Weighbridges list">Liste des ponts</div>
                   </a>
                 </li>
@@ -197,19 +207,15 @@
 
             <!-- Apps & Pages -->
             <li class="menu-header small text-uppercase">
-              <span class="menu-header-text">Apps &amp; Pages</span>
+              <span class="menu-header-text">Gestions</span>
             </li>
-          <!--  <li class="menu-item">
-              <a
-                href="https://demos.themeselection.com/sneat-bootstrap-html-admin-template/html/vertical-menu-template/app-email.html"
-                target="_blank"
-                class="menu-link">
-                <i class="menu-icon tf-icons bx bx-envelope"></i>
-                <div class="text-truncate" data-i18n="Email">Email</div>
-                <div class="badge rounded-pill bg-label-primary text-uppercase fs-tiny ms-auto">Pro</div>
+           <li class="menu-item">
+              <a href="{{ route('agents.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-user"></i>
+                <div class="text-truncate" data-i18n="Agents">Agents</div>
               </a>
             </li>
-            <li class="menu-item">
+          <!--  <li class="menu-item">
               <a
                 href="https://demos.themeselection.com/sneat-bootstrap-html-admin-template/html/vertical-menu-template/app-chat.html"
                 target="_blank"
