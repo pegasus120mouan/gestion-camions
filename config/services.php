@@ -43,6 +43,8 @@ return [
         'mes_ponts_url' => env('EXTERNAL_AUTH_MES_PONTS_URL', 'https://api.objetombrepegasus.online/api/camions/mes_ponts.php'),
         'mes_agents_url' => env('EXTERNAL_AUTH_MES_AGENTS_URL', 'https://api.objetombrepegasus.online/api/camions/mes_agents.php'),
         'mes_financements_url' => env('EXTERNAL_AUTH_MES_FINANCEMENTS_URL', 'https://api.objetombrepegasus.online/api/camions/mes_financements.php'),
+        'mes_usines_url' => env('EXTERNAL_AUTH_MES_USINES_URL', 'https://api.objetombrepegasus.online/api/camions/mes_usines.php'),
+        'mes_vehicules_url' => env('EXTERNAL_AUTH_MES_VEHICULES_URL', 'https://api.objetombrepegasus.online/api/camions/mes_vehicules.php'),
         'timeout' => (int) env('EXTERNAL_AUTH_TIMEOUT', 10),
     ],
 

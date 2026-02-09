@@ -17,6 +17,7 @@
             <tr>
               <th>Code</th>
               <th>Nom</th>
+              <th>Stock disponible</th>
               <th>Gerant</th>
               <th>Cooperatif</th>
               <th>Statut</th>
@@ -26,7 +27,14 @@
             @forelse($ponts as $p)
               <tr>
                 <td>{{ $p['code_pont'] ?? '' }}</td>
-                <td>{{ $p['nom_pont'] ?? '' }}</td>
+                <td>
+                  <a href="{{ route('ponts.stock', ['id_pont' => $p['id_pont'] ?? 0]) }}" class="text-primary fw-bold text-decoration-none">
+                    {{ $p['nom_pont'] ?? '' }}
+                  </a>
+                </td>
+                <td>
+                  <strong>{{ number_format((float)($p['stock_disponible'] ?? 0), 0, ',', ' ') }} kg</strong>
+                </td>
                 <td>{{ $p['gerant'] ?? '' }}</td>
                 <td>{{ $p['cooperatif'] ?? '-' }}</td>
                 <td>
@@ -39,7 +47,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="5" class="text-center">Aucun pont</td>
+                <td colspan="6" class="text-center">Aucun pont</td>
               </tr>
             @endforelse
           </tbody>

@@ -42,6 +42,7 @@
     <link rel="stylesheet" href="{{ asset('assets/vendor/libs/apex-charts/apex-charts.css') }}" />
 
     <!-- Page CSS -->
+    @yield('page-styles')
 
     <!-- Helpers -->
     <script src="{{ asset('assets/vendor/js/helpers.js') }}"></script>
@@ -172,13 +173,45 @@
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-map"></i>
-                <div class="text-truncate" data-i18n="Weighbridges">Ponts de pesage</div>
+                <div class="text-truncate" data-i18n="Weighbridges">Gestion ponts PGF</div>
               </a>
 
               <ul class="menu-sub">
                 <li class="menu-item">
                   <a href="{{ route('ponts.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Weighbridges list">Liste des ponts</div>
+                  </a>
+                </li>
+
+                <li class="menu-item">
+                  <a href="{{ route('ponts.sorties') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Sorties">Sorties</div>
+                  </a>
+                </li>
+              </ul>
+            </li>
+
+            <li class="menu-item">
+              <a href="javascript:void(0);" class="menu-link menu-toggle">
+                <i class="menu-icon tf-icons bx bx-map"></i>
+                <div class="text-truncate" data-i18n="Weighbridges">Gestion Stocks PGF</div>
+              </a>
+
+              <ul class="menu-sub">
+                <li class="menu-item">
+                  <a href="{{ route('stocks_pgf.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Weighbridges list">Stocks</div>
+                  </a>
+                </li>
+
+                <li class="menu-item">
+                  <a href="{{ route('stocks_pgf.sorties') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Sorties">Sorties de stock</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('stocks_pgf.bordereaux') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Sorties">Bordereau de stock</div>
                   </a>
                 </li>
               </ul>
@@ -221,17 +254,13 @@
                 <div class="text-truncate" data-i18n="Financements">Financements</div>
               </a>
             </li>
-           <!-- <li class="menu-item">
-              <a
-                href="https://demos.themeselection.com/sneat-bootstrap-html-admin-template/html/vertical-menu-template/app-calendar.html"
-                target="_blank"
-                class="menu-link">
-                <i class="menu-icon tf-icons bx bx-calendar"></i>
-                <div class="text-truncate" data-i18n="Calendar">Calendar</div>
-                <div class="badge rounded-pill bg-label-primary text-uppercase fs-tiny ms-auto">Pro</div>
+            <li class="menu-item">
+              <a href="{{ route('usines.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-building"></i>
+                <div class="text-truncate" data-i18n="Usines">Usines</div>
               </a>
             </li>
-            <li class="menu-item">
+            <!--  <li class="menu-item">
               <a
                 href="https://demos.themeselection.com/sneat-bootstrap-html-admin-template/html/vertical-menu-template/app-kanban.html"
                 target="_blank"
@@ -319,6 +348,20 @@
             <!-- Components -->
             <li class="menu-header small text-uppercase"><span class="menu-header-text">Components</span></li>
             <!-- Cards -->
+            <li class="menu-item">
+              <a href="{{ route('groupes.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-group"></i>
+                <div class="text-truncate" data-i18n="Basic">Groupe PGF</div>
+              </a>
+            </li>
+             <li class="menu-item">
+              <a href="{{ route('code_transporteurs.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-code-alt"></i>
+                <div class="text-truncate" data-i18n="Basic">Code Transporteur</div>
+              </a>
+            </li>
+
+
             <li class="menu-item">
               <a href="{{ route('produits.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-collection"></i>
@@ -696,5 +739,7 @@
 
     <!-- Place this tag before closing body tag for github widget button. -->
     <script async defer src="https://buttons.github.io/buttons.js"></script>
+
+    @yield('page-scripts')
   </body>
 </html>

@@ -43,7 +43,7 @@
           <thead>
             <tr>
               <th>Numero</th>
-              <th>Nom complet</th>
+              <th>Nom</th>
               <th>Contact</th>
               <th>Chef d'equipe</th>
               <th>Date ajout</th>
@@ -53,7 +53,11 @@
             @forelse($agents as $agent)
               <tr>
                 <td><strong>{{ $agent['numero_agent'] ?? '' }}</strong></td>
-                <td>{{ $agent['nom_complet'] ?? '' }}</td>
+                <td>
+                  <a href="{{ route('agents.show', ['id_agent' => $agent['id_agent'] ?? 0]) }}" class="text-primary fw-bold text-decoration-none">
+                    {{ $agent['nom_complet'] ?? '' }}
+                  </a>
+                </td>
                 <td>{{ $agent['contact'] ?? '-' }}</td>
                 <td>
                   @if(!empty($agent['chef_equipe']))

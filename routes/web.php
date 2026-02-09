@@ -12,6 +12,10 @@ use App\Http\Controllers\PontController;
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\UtilisateurController;
 use App\Http\Controllers\FinancementController;
+use App\Http\Controllers\UsineController;
+use App\Http\Controllers\CodeTransporteurController;
+use App\Http\Controllers\StockPgfController;
+use App\Http\Controllers\GroupeController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/index.html', function () {
@@ -88,6 +92,8 @@ Route::middleware('auth')->group(function () {
     Route::resource('utilisateurs', UtilisateurController::class)->except(['show']);
 
     Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
+    Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
+    Route::post('/tickets/{id}/confirm-unipalm', [TicketController::class, 'confirmUnipalm'])->name('tickets.confirm_unipalm');
 
     Route::get('/vehicules/{vehicule_id}/depenses', [DepenseController::class, 'index'])->name('vehicules.depenses');
     Route::post('/vehicules/{vehicule_id}/depenses', [DepenseController::class, 'store'])->name('vehicules.depenses.store');
@@ -95,14 +101,58 @@ Route::middleware('auth')->group(function () {
     Route::post('/vehicules/{vehicule_id}/fiche-sortie', [DepenseController::class, 'storeFicheSortie'])->name('vehicules.fiche_sortie.store');
 
     Route::get('/ponts', [PontController::class, 'index'])->name('ponts.index');
+    Route::get('/ponts/sorties', [PontController::class, 'sorties'])->name('ponts.sorties');
+    Route::get('/ponts/{id_pont}/stock', [PontController::class, 'stock'])->name('ponts.stock');
+    Route::post('/ponts/{id_pont}/stock', [PontController::class, 'storeStock'])->name('ponts.stock.store');
+    Route::delete('/ponts/{id_pont}/stock/{stock_id}', [PontController::class, 'deleteStock'])->name('ponts.stock.delete');
 
     Route::get('/agents', [AgentController::class, 'index'])->name('agents.index');
+    Route::get('/agents/{id_agent}', [AgentController::class, 'show'])->name('agents.show');
+    Route::post('/agents/{id_agent}/prix', [AgentController::class, 'storePrix'])->name('agents.prix.store');
+    Route::put('/agents/{id_agent}/prix/{prix_id}', [AgentController::class, 'updatePrix'])->name('agents.prix.update');
+    Route::delete('/agents/{id_agent}/prix/{prix_id}', [AgentController::class, 'deletePrix'])->name('agents.prix.delete');
 
     Route::get('/financements', [FinancementController::class, 'index'])->name('financements.index');
+
+    Route::get('/usines', [UsineController::class, 'index'])->name('usines.index');
+
+    Route::get('/code-transporteurs', [CodeTransporteurController::class, 'index'])->name('code_transporteurs.index');
+    Route::post('/code-transporteurs', [CodeTransporteurController::class, 'store'])->name('code_transporteurs.store');
+    Route::get('/code-transporteurs/{id}', [CodeTransporteurController::class, 'show'])->name('code_transporteurs.show');
+    Route::put('/code-transporteurs/{id}', [CodeTransporteurController::class, 'update'])->name('code_transporteurs.update');
+    Route::delete('/code-transporteurs/{id}', [CodeTransporteurController::class, 'destroy'])->name('code_transporteurs.destroy');
+    Route::post('/code-transporteurs/{id}/vehicules', [CodeTransporteurController::class, 'addVehicule'])->name('code_transporteurs.vehicules.add');
+    Route::delete('/code-transporteurs/{id}/vehicules/{vehicule_id}', [CodeTransporteurController::class, 'removeVehicule'])->name('code_transporteurs.vehicules.remove');
 
     Route::get('/depenses', [DepenseController::class, 'listeDepenses'])->name('depenses.liste');
     Route::get('/fiches-sortie', [DepenseController::class, 'listeFichesSortie'])->name('fiches_sortie.index');
     Route::post('/fiches-sortie', [DepenseController::class, 'storeFicheSortieFromList'])->name('fiches_sortie.store');
     Route::post('/fiches-sortie/{fiche_id}/associer-ticket', [DepenseController::class, 'associerTicket'])->name('fiches_sortie.associer_ticket');
     Route::post('/fiches-sortie/{fiche_id}/prix-transport', [DepenseController::class, 'updatePrixTransport'])->name('fiches_sortie.update_prix_transport');
+
+    // Stocks PGF
+    Route::get('/stocks-pgf', [StockPgfController::class, 'index'])->name('stocks_pgf.index');
+    Route::post('/stocks-pgf', [StockPgfController::class, 'store'])->name('stocks_pgf.store');
+    Route::get('/stocks-pgf/{id}', [StockPgfController::class, 'show'])->name('stocks_pgf.show');
+    Route::put('/stocks-pgf/{id}/cloturer', [StockPgfController::class, 'cloturer'])->name('stocks_pgf.cloturer');
+    Route::delete('/stocks-pgf/{id}', [StockPgfController::class, 'destroy'])->name('stocks_pgf.destroy');
+    Route::post('/stocks-pgf/{id}/entrees', [StockPgfController::class, 'addEntree'])->name('stocks_pgf.entree.add');
+    Route::delete('/stocks-pgf/{id}/entrees/{entree_id}', [StockPgfController::class, 'removeEntree'])->name('stocks_pgf.entree.delete');
+    Route::get('/stocks-pgf-sorties', [StockPgfController::class, 'sorties'])->name('stocks_pgf.sorties');
+
+    // Bordereaux de stock
+    Route::get('/bordereaux-stock', [StockPgfController::class, 'bordereaux'])->name('stocks_pgf.bordereaux');
+    Route::post('/bordereaux-stock', [StockPgfController::class, 'storeBordereau'])->name('stocks_pgf.bordereau.store');
+    Route::get('/bordereaux-stock/{id}', [StockPgfController::class, 'showBordereau'])->name('stocks_pgf.bordereau.show');
+    Route::delete('/bordereaux-stock/{id}', [StockPgfController::class, 'destroyBordereau'])->name('stocks_pgf.bordereau.destroy');
+    Route::post('/bordereaux-stock/{id}/associer-tickets', [StockPgfController::class, 'associerTickets'])->name('stocks_pgf.bordereau.associer_tickets');
+
+    // Groupes PGF
+    Route::get('/groupes', [GroupeController::class, 'index'])->name('groupes.index');
+    Route::post('/groupes', [GroupeController::class, 'store'])->name('groupes.store');
+    Route::get('/groupes/{id}', [GroupeController::class, 'show'])->name('groupes.show');
+    Route::delete('/groupes/{id}', [GroupeController::class, 'destroy'])->name('groupes.destroy');
+    Route::post('/groupes/{id}/agents', [GroupeController::class, 'addAgent'])->name('groupes.agent.add');
+    Route::delete('/groupes/{id}/agents/{agent_id}', [GroupeController::class, 'removeAgent'])->name('groupes.agent.remove');
+    Route::get('/groupes/{id}/tickets', [GroupeController::class, 'tickets'])->name('groupes.tickets');
 });

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\FicheSortie;
+use App\Models\Ticket;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -11,125 +12,92 @@ class TicketController extends Controller
 {
     public function index(Request $request)
     {
-        $authUser = Auth::user();
-
-        if (!$authUser || $authUser->role !== 'proprietaire') {
-            return view('tickets.index', [
-                'tickets' => [],
-                'pagination' => null,
-                'external_error' => "Accès réservé aux propriétaires.",
-            ]);
-        }
-
-        $mesTicketsUrl = (string) config('services.external_auth.mes_tickets_url');
-        $mesCamionsUrl = (string) config('services.external_auth.mes_camions_url');
-        $timeout = (int) config('services.external_auth.timeout', 10);
-        $phpsessid = (string) $request->session()->get('external_auth.phpsessid', '');
-
-        if (trim($phpsessid) === '') {
-            return view('tickets.index', [
-                'tickets' => [],
-                'pagination' => null,
-                'external_error' => "Session API manquante. Reconnectez-vous.",
-            ]);
-        }
-
-        $page = max(1, (int) $request->query('page', 1));
         $vehicule = trim((string) $request->query('vehicule', ''));
         $usine = trim((string) $request->query('usine', ''));
         $agent = trim((string) $request->query('agent', ''));
 
-        $queryParams = ['page' => $page];
+        $query = Ticket::query()->orderBy('date_ticket', 'desc');
+
         if ($vehicule !== '') {
-            $queryParams['vehicule'] = $vehicule;
+            $query->where('matricule_vehicule', 'like', '%' . $vehicule . '%');
         }
         if ($usine !== '') {
-            $queryParams['usine'] = $usine;
+            $query->where('id_usine', $usine);
         }
         if ($agent !== '') {
-            $queryParams['agent'] = $agent;
+            $query->where('id_agent', $agent);
         }
+
+        $ticketsPaginated = $query->paginate(20)->withQueryString();
+
+        // Récupérer les usines et agents depuis l'API pour les noms
+        $timeout = 10;
+        $usinesApi = [];
+        $agentsApi = [];
 
         try {
-            $response = Http::acceptJson()
+            $usinesResponse = Http::acceptJson()
                 ->timeout($timeout)
-                ->withHeaders([
-                    'Cookie' => 'PHPSESSID=' . $phpsessid,
-                ])
-                ->get($mesTicketsUrl, $queryParams);
-        } catch (\Throwable $e) {
-            return view('tickets.index', [
-                'tickets' => [],
-                'pagination' => null,
-                'external_error' => "Impossible de joindre le service tickets.",
-            ]);
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
+            if ($usinesResponse->successful()) {
+                $usinesApi = $usinesResponse->json('usines') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            $agentsResponse = Http::acceptJson()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php');
+            if ($agentsResponse->successful()) {
+                $agentsApi = $agentsResponse->json('agents') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        // Indexer par ID
+        $usinesById = [];
+        foreach ($usinesApi as $u) {
+            $usinesById[$u['id_usine'] ?? 0] = $u['nom_usine'] ?? '';
+        }
+        $agentsById = [];
+        foreach ($agentsApi as $a) {
+            $agentsById[$a['id_agent'] ?? 0] = $a['nom_complet'] ?? '';
         }
 
-        if (!$response->successful()) {
-            $message = (string) ($response->json('error') ?? 'Erreur API.');
-
-            return view('tickets.index', [
-                'tickets' => [],
-                'pagination' => null,
-                'external_error' => $message,
-            ]);
-        }
-
-        $tickets = $response->json('tickets');
-        if (!is_array($tickets)) {
-            $tickets = [];
-        }
-
-        // Filtrage côté Laravel si l'API ne supporte pas encore les filtres
-        if ($vehicule !== '' || $usine !== '' || $agent !== '') {
-            $tickets = array_filter($tickets, function ($t) use ($vehicule, $usine, $agent) {
-                $match = true;
-                if ($vehicule !== '') {
-                    $matricule = strtolower($t['matricule_vehicule'] ?? '');
-                    $match = $match && str_contains($matricule, strtolower($vehicule));
-                }
-                if ($usine !== '') {
-                    $nomUsine = strtolower($t['nom_usine'] ?? '');
-                    $match = $match && str_contains($nomUsine, strtolower($usine));
-                }
-                if ($agent !== '') {
-                    $agentNom = strtolower(($t['agent_nom'] ?? '') . ' ' . ($t['agent_prenom'] ?? ''));
-                    $match = $match && str_contains($agentNom, strtolower($agent));
-                }
-                return $match;
-            });
-            $tickets = array_values($tickets);
-        }
-
-        $pagination = $response->json('pagination');
-        if (!is_array($pagination)) {
-            $pagination = [
-                'current_page' => 1,
-                'per_page' => 20,
-                'total' => count($tickets),
-                'last_page' => 1,
+        // Convertir en tableau pour compatibilité avec la vue existante
+        $tickets = $ticketsPaginated->items();
+        $ticketsArray = [];
+        foreach ($tickets as $ticket) {
+            $ticketsArray[] = [
+                'id_ticket' => $ticket->id_ticket,
+                'numero_ticket' => $ticket->numero_ticket,
+                'date_ticket' => $ticket->date_ticket ? $ticket->date_ticket->format('Y-m-d') : null,
+                'matricule_vehicule' => $ticket->matricule_vehicule,
+                'vehicule_id' => $ticket->vehicule_id,
+                'poids' => $ticket->poids,
+                'id_usine' => $ticket->id_usine,
+                'nom_usine' => $usinesById[$ticket->id_usine] ?? '-',
+                'id_agent' => $ticket->id_agent,
+                'nom_agent' => $agentsById[$ticket->id_agent] ?? '-',
+                'prix_unitaire' => $ticket->prix_unitaire,
+                'montant_paie' => $ticket->montant_paie,
+                'statut_ticket' => $ticket->statut_ticket,
+                'created_at' => $ticket->created_at ? $ticket->created_at->format('Y-m-d H:i:s') : null,
+                'conformite' => $ticket->conformite,
             ];
         }
 
-        // Récupérer la liste des véhicules pour l'autocomplétion
-        $vehicules = [];
-        try {
-            $camionsResponse = Http::acceptJson()
-                ->timeout($timeout)
-                ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                ->get($mesCamionsUrl);
-            if ($camionsResponse->successful()) {
-                $vehiculesData = $camionsResponse->json('vehicules');
-                if (is_array($vehiculesData)) {
-                    $vehicules = array_column($vehiculesData, 'matricule_vehicule');
-                }
-            }
-        } catch (\Throwable $e) {
-            // Ignorer l'erreur, on continue sans autocomplétion
-        }
+        $pagination = [
+            'current_page' => $ticketsPaginated->currentPage(),
+            'per_page' => $ticketsPaginated->perPage(),
+            'total' => $ticketsPaginated->total(),
+            'last_page' => $ticketsPaginated->lastPage(),
+        ];
 
-        // Récupérer les fiches de sortie associées aux tickets (par id_ticket)
-        $ticketIds = array_column($tickets, 'id_ticket');
+        // Récupérer la liste des véhicules pour l'autocomplétion
+        $vehicules = Ticket::distinct()->pluck('matricule_vehicule')->filter()->toArray();
+
+        // Récupérer les fiches de sortie associées aux tickets
+        $ticketIds = array_column($ticketsArray, 'id_ticket');
         $fichesSortie = [];
         if (!empty($ticketIds)) {
             $fiches = FicheSortie::whereIn('id_ticket', $ticketIds)->get()->keyBy('id_ticket');
@@ -146,7 +114,7 @@ class TicketController extends Controller
         }
 
         // Ajouter les infos de fiche de sortie à chaque ticket
-        foreach ($tickets as &$ticket) {
+        foreach ($ticketsArray as &$ticket) {
             $idTicket = $ticket['id_ticket'] ?? null;
             if ($idTicket && isset($fichesSortie[$idTicket])) {
                 $ticket['fiche_id'] = $fichesSortie[$idTicket]['fiche_id'];
@@ -166,11 +134,150 @@ class TicketController extends Controller
         }
         unset($ticket);
 
+        // Récupérer les véhicules depuis l'API pour le modal
+        $vehiculesApi = [];
+        try {
+            $vehiculesResponse = Http::acceptJson()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
+            if ($vehiculesResponse->successful()) {
+                $vehiculesApi = $vehiculesResponse->json('vehicules') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
         return view('tickets.index', [
-            'tickets' => $tickets,
+            'tickets' => $ticketsArray,
             'pagination' => $pagination,
             'vehicules' => $vehicules,
+            'vehiculesApi' => $vehiculesApi,
+            'usines' => $usinesApi,
+            'agents' => $agentsApi,
             'external_error' => null,
         ]);
+    }
+
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'numero_ticket' => ['required', 'string', 'max:255'],
+            'date_ticket' => ['required', 'date'],
+            'vehicule_id' => ['required', 'integer', 'min:1'],
+            'matricule_vehicule' => ['nullable', 'string', 'max:255'],
+            'poids' => ['nullable', 'numeric', 'min:0'],
+            'id_usine' => ['required', 'integer', 'min:1'],
+            'id_agent' => ['required', 'integer', 'min:1'],
+            'prix_unitaire' => ['nullable', 'numeric', 'min:0'],
+            'statut_ticket' => ['nullable', 'in:soldé,non soldé'],
+        ]);
+
+        $ticket = Ticket::create([
+            'numero_ticket' => $validated['numero_ticket'],
+            'date_ticket' => $validated['date_ticket'],
+            'matricule_vehicule' => $validated['matricule_vehicule'] ?? '',
+            'vehicule_id' => $validated['vehicule_id'],
+            'poids' => $validated['poids'] ?? null,
+            'id_usine' => $validated['id_usine'],
+            'id_agent' => $validated['id_agent'],
+            'id_utilisateur' => Auth::id() ?? 1,
+            'prix_unitaire' => $validated['prix_unitaire'] ?? 0,
+            'statut_ticket' => $validated['statut_ticket'] ?? 'non soldé',
+        ]);
+
+        return redirect()->route('tickets.index')
+            ->with('success', 'Ticket créé avec succès.');
+    }
+
+    public function confirmUnipalm(Request $request, int $id)
+    {
+        $ticket = Ticket::findOrFail($id);
+
+        // Récupérer les tickets depuis l'API Unipalm
+        $timeout = 10;
+        $ticketsApi = [];
+
+        try {
+            $response = Http::acceptJson()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_tickets.php');
+            if ($response->successful()) {
+                $ticketsApi = $response->json('tickets') ?? [];
+            }
+        } catch (\Throwable $e) {
+            return redirect()->route('tickets.index')
+                ->with('error', 'Impossible de joindre l\'API Unipalm.');
+        }
+
+        // Récupérer les noms d'usine et agent depuis l'API pour la comparaison
+        $usinesApi = [];
+        $agentsApi = [];
+        try {
+            $usinesResponse = Http::acceptJson()->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
+            if ($usinesResponse->successful()) {
+                $usinesApi = $usinesResponse->json('usines') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            $agentsResponse = Http::acceptJson()->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php');
+            if ($agentsResponse->successful()) {
+                $agentsApi = $agentsResponse->json('agents') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        // Indexer par ID
+        $usinesById = [];
+        foreach ($usinesApi as $u) {
+            $usinesById[$u['id_usine'] ?? 0] = $u['nom_usine'] ?? '';
+        }
+        $agentsById = [];
+        foreach ($agentsApi as $a) {
+            $agentsById[$a['id_agent'] ?? 0] = $a['nom_complet'] ?? '';
+        }
+
+        // Préparer les données du ticket local pour comparaison
+        $ticketDate = $ticket->date_ticket ? $ticket->date_ticket->format('Y-m-d') : '';
+        $ticketNumero = $ticket->numero_ticket;
+        $ticketUsine = $usinesById[$ticket->id_usine] ?? '';
+        $ticketAgent = $agentsById[$ticket->id_agent] ?? '';
+        $ticketPoids = (float) $ticket->poids;
+
+        // Chercher un ticket correspondant dans l'API
+        $ticketTrouve = null;
+        foreach ($ticketsApi as $apiTicket) {
+            $apiDate = $apiTicket['date_ticket'] ?? '';
+            $apiNumero = $apiTicket['numero_ticket'] ?? ($apiTicket['num_ticket'] ?? '');
+            $apiUsine = $apiTicket['nom_usine'] ?? ($apiTicket['usine'] ?? '');
+            $apiPoids = (float) ($apiTicket['poids'] ?? ($apiTicket['poids_usine'] ?? 0));
+
+            // Comparaison - Date, N°Ticket, Usine, Poids
+            $matchDate = ($ticketDate === $apiDate);
+            $matchNumero = (strtolower(trim($ticketNumero)) === strtolower(trim($apiNumero)));
+            $matchUsine = (strtolower(trim($ticketUsine)) === strtolower(trim($apiUsine)));
+            $matchPoids = (abs($ticketPoids - $apiPoids) < 10); // Tolérance de 10 kg
+
+            if ($matchDate && $matchNumero && $matchUsine && $matchPoids) {
+                $ticketTrouve = $apiTicket;
+                break;
+            }
+        }
+
+        if ($ticketTrouve) {
+            $ticket->update([
+                'conformite' => 'conforme',
+                'poids_unipalm' => $ticketTrouve['poids'] ?? null,
+                'date_confirmation_unipalm' => now(),
+            ]);
+            return redirect()->route('tickets.index')
+                ->with('success', 'Ticket confirmé avec Unipalm ! Correspondance trouvée: N°' . ($ticketTrouve['numero_ticket'] ?? '') . ', Poids: ' . number_format((float)($ticketTrouve['poids'] ?? 0), 0, ',', ' ') . ' kg');
+        } else {
+            $ticket->update([
+                'conformite' => 'non conforme',
+                'date_confirmation_unipalm' => now(),
+            ]);
+            return redirect()->route('tickets.index')
+                ->with('error', 'Aucun ticket correspondant trouvé dans Unipalm. Vérifiez les données (Date, N°Ticket, Usine, Poids).');
+        }
     }
 }

@@ -141,11 +141,6 @@
             <input type="date" name="date_chargement" class="form-control" value="{{ date('Y-m-d') }}" required />
           </div>
 
-          <div class="mb-3">
-            <label class="form-label">Poids sur le pont (kg) <span class="text-danger">*</span></label>
-            <input type="number" name="poids_pont" class="form-control" placeholder="Ex: 25000" min="0" step="0.01" required />
-          </div>
-
           <div class="d-flex justify-content-end gap-2">
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
             <button type="submit" class="btn btn-primary">

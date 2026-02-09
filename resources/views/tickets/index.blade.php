@@ -1,9 +1,24 @@
 @extends('layout.main')
+@section('title', 'Tickets')
+
+@section('page-styles')
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<style>
+  .select2-container--bootstrap-5 .select2-selection {
+    min-height: 38px;
+  }
+</style>
+@endsection
+
 @section('content')
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h4 class="mb-0">Mes Tickets</h4>
+      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAddTicket">
+        <i class="bx bx-plus me-1"></i>Ajouter un ticket
+      </button>
     </div>
 
     <div class="card mb-4">
@@ -43,24 +58,21 @@
         <table class="table">
           <thead>
             <tr>
+              <th>Date ticket</th>
               <th>N°Ticket</th>
-              <th>Date chargement</th>
-              <th>Date de dechargement</th>
+              <th>Usine</th>
+              <th>Agent</th>
               <th>Vehicule</th>
               <th>Poids Usine</th>
-              <th>Montant</th>
+              <th>Date d'ajout</th>
+              <th>Prix Unitaire</th>
+              <th>Conformité</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody class="table-border-bottom-0">
             @forelse($tickets as $t)
               <tr>
-                <td>
-                  <a href="#" class="text-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#modalTicketDetail{{ $loop->index }}">
-                    {{ $t['numero_ticket'] ?? '' }}
-                  </a>
-                </td>
-                <td>{{ $t['date_chargement_fiche'] ?? '-' }}</td>
                 <td>
                   @php
                     $dateTicket = $t['date_ticket'] ?? '';
@@ -73,25 +85,51 @@
                   {{ $dateTicket }}
                 </td>
                 <td>
+                  <a href="#" class="text-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#modalTicketDetail{{ $loop->index }}">
+                    {{ $t['numero_ticket'] ?? '' }}
+                  </a>
+                </td>
+                <td>{{ $t['nom_usine'] ?? '-' }}</td>
+                <td>{{ $t['nom_agent'] ?? '-' }}</td>
+                <td>
                   <a href="{{ route('vehicules.depenses', ['vehicule_id' => $t['vehicule_id'] ?? 0, 'matricule' => $t['matricule_vehicule'] ?? '']) }}">
                     {{ $t['matricule_vehicule'] ?? '' }}
                   </a>
                 </td>
                 <td>{{ number_format((float)($t['poids'] ?? 0), 0, ',', ' ') }}</td>
-                <td>{{ number_format((float)($t['montant_paie'] ?? 0), 0, ',', ' ') }}</td>
                 <td>
-                  @if($t['fiche_id'])
-                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalPrixTransport{{ $t['id_ticket'] }}">
-                      <i class="bx bx-edit"></i>
-                    </button>
+                  @php
+                    $dateAjout = $t['created_at'] ?? '';
+                    if ($dateAjout) {
+                      try {
+                        $dateAjout = \Carbon\Carbon::parse($dateAjout)->format('d-m-Y');
+                      } catch (\Exception $e) {}
+                    }
+                  @endphp
+                  {{ $dateAjout ?: '-' }}
+                </td>
+                <td>{{ number_format((float)($t['prix_unitaire'] ?? 0), 0, ',', ' ') }}</td>
+                <td>
+                  @if($t['conformite'] === 'conforme')
+                    <span class="badge bg-success">Conforme</span>
+                  @elseif($t['conformite'] === 'non conforme')
+                    <span class="badge bg-danger">Non conforme</span>
                   @else
-                    <span class="text-muted">-</span>
+                    <span class="badge bg-secondary">Non vérifié</span>
                   @endif
+                </td>
+                <td>
+                  <button type="button" class="btn btn-sm btn-outline-primary me-1" data-bs-toggle="modal" data-bs-target="#modalTicketDetail{{ $loop->index }}" title="Voir détails">
+                    <i class="bx bx-show"></i>
+                  </button>
+                  <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalConfirmUnipalm{{ $loop->index }}" title="Confirmer avec Unipalm">
+                    <i class="bx bx-check"></i> Verification
+                  </button>
                 </td>
               </tr>
             @empty
               <tr>
-                <td colspan="7" class="text-center">Aucun ticket</td>
+                <td colspan="10" class="text-center">Aucun ticket</td>
               </tr>
             @endforelse
           </tbody>
@@ -104,30 +142,7 @@
       $ticketCount = count($ticketsArray);
     @endphp
 
-    @if($ticketCount > 0)
-      <div class="card mt-4">
-        <div class="card-body">
-          <h5 class="card-title">Resume</h5>
-          @php
-            $totalMontant = array_sum(array_column($ticketsArray, 'montant_paie'));
-            $totalPaye = array_sum(array_column($ticketsArray, 'montant_payer'));
-            $totalReste = array_sum(array_column($ticketsArray, 'montant_reste'));
-          @endphp
-          <div class="row">
-            <div class="col-md-4">
-              <p><strong>Total montant:</strong> {{ number_format($totalMontant, 0, ',', ' ') }} FCFA</p>
-            </div>
-            <div class="col-md-4">
-              <p><strong>Total paye:</strong> <span class="text-success">{{ number_format($totalPaye, 0, ',', ' ') }} FCFA</span></p>
-            </div>
-            <div class="col-md-4">
-              <p><strong>Total reste:</strong> <span class="text-danger">{{ number_format($totalReste, 0, ',', ' ') }} FCFA</span></p>
-            </div>
-          </div>
-        </div>
-      </div>
-    @endif
-
+    
     @if(isset($pagination) && is_array($pagination) && $pagination['last_page'] > 1)
       <nav class="mt-4">
         <ul class="pagination justify-content-center">
@@ -195,6 +210,17 @@
                   <h6 class="card-title text-primary mb-3"><i class="bx bx-info-circle me-1"></i>Informations générales</h6>
                   <div class="mb-2"><strong>N° Ticket:</strong> {{ $t['numero_ticket'] ?? '-' }}</div>
                   <div class="mb-2"><strong>Véhicule:</strong> {{ $t['matricule_vehicule'] ?? '-' }}</div>
+                  @php
+                    $matriculeVehicule = $t['matricule_vehicule'] ?? '';
+                    $codeTransporteurVehicule = \App\Models\CodeTransporteurVehicule::with('codeTransporteur')
+                        ->where('matricule_vehicule', $matriculeVehicule)
+                        ->first();
+                    $transporteurNom = 'Autre';
+                    if ($codeTransporteurVehicule && $codeTransporteurVehicule->codeTransporteur) {
+                        $transporteurNom = $codeTransporteurVehicule->codeTransporteur->nom;
+                    }
+                  @endphp
+                  <div class="mb-2"><strong>Transporteur:</strong> <span class="badge bg-info">{{ $transporteurNom }}</span></div>
                   <div class="mb-2"><strong>Usine:</strong> {{ $t['nom_usine'] ?? '-' }}</div>
                   <div class="mb-2"><strong>Agent:</strong> {{ ($t['agent_nom'] ?? '') . ' ' . ($t['agent_prenom'] ?? '') }}</div>
                   <div class="mb-2"><strong>Origine:</strong> {{ $t['origine'] ?? '-' }}</div>
@@ -232,10 +258,54 @@
                   <h6 class="card-title text-warning mb-3"><i class="bx bx-money me-1"></i>Montants</h6>
                   <div class="mb-2"><strong>Prix unitaire:</strong> {{ number_format((float)($t['prix_unitaire'] ?? 0), 0, ',', ' ') }} FCFA</div>
                   <div class="mb-2"><strong>Montant payé:</strong> {{ number_format((float)($t['montant_paie'] ?? 0), 0, ',', ' ') }} FCFA</div>
-                  <div class="mb-2"><strong>Prix unitaire transport:</strong> {{ $prixTransportModal > 0 ? number_format($prixTransportModal, 0, ',', ' ') : '-' }}</div>
-                  <div class="mb-2"><strong>Poids unitaire régime:</strong> {{ $poidsRegimeModal > 0 ? number_format($poidsRegimeModal, 0, ',', ' ') : '-' }}</div>
-                  <div class="mb-2"><strong>Montant transport:</strong> {{ $montantTransportModal !== null ? number_format($montantTransportModal, 0, ',', ' ') . ' FCFA' : '-' }}</div>
-                  <div class="mb-2"><strong>Montant régime:</strong> {{ $montantRegimeModal !== null ? number_format($montantRegimeModal, 0, ',', ' ') . ' FCFA' : '-' }}</div>
+                  @php
+                    // Déterminer le type de transporteur basé sur le code transporteur du véhicule
+                    $prixAgentAuto = null;
+                    $idAgent = $t['id_agent'] ?? 0;
+                    $idUsine = $t['id_usine'] ?? 0;
+                    $dateTicket = $t['date_ticket'] ?? $t['date_chargement_fiche'] ?? null;
+                    
+                    if ($idAgent && $idUsine) {
+                        // Déterminer le type basé sur le transporteur
+                        $typeTransporteur = 'transporteur'; // par défaut: Camion Agent
+                        if ($transporteurNom === 'Camion PGF') {
+                            $typeTransporteur = 'pgf';
+                        }
+                        
+                        // Chercher le prix correspondant
+                        $queryPrix = \App\Models\PrixAgent::where('id_agent', $idAgent)
+                            ->where('id_usine', $idUsine)
+                            ->where('type', $typeTransporteur);
+                        
+                        // Filtrer par date si disponible
+                        if ($dateTicket) {
+                            $dateTicketParsed = \Carbon\Carbon::parse($dateTicket)->format('Y-m-d');
+                            $queryPrix->where(function($q) use ($dateTicketParsed) {
+                                $q->where(function($q2) use ($dateTicketParsed) {
+                                    $q2->whereNull('date_debut')
+                                       ->orWhere('date_debut', '<=', $dateTicketParsed);
+                                })->where(function($q3) use ($dateTicketParsed) {
+                                    $q3->whereNull('date_fin')
+                                       ->orWhere('date_fin', '>=', $dateTicketParsed);
+                                });
+                            });
+                        }
+                        
+                        $prixAgentRecord = $queryPrix->first();
+                        if ($prixAgentRecord) {
+                            $prixAgentAuto = $prixAgentRecord->prix;
+                        }
+                    }
+                  @endphp
+                  <div class="mb-2"><strong>Prix unitaire Agent:</strong> {{ $prixAgentAuto !== null ? number_format($prixAgentAuto, 0, ',', ' ') . ' FCFA' : '-' }}</div>
+                  @php
+                    $montantAgentsAuto = null;
+                    if ($prixAgentAuto !== null && $poidsUsineModal > 0) {
+                        // Poids en kg, prix en FCFA/kg
+                        $montantAgentsAuto = $prixAgentAuto * $poidsUsineModal;
+                    }
+                  @endphp
+                  <div class="mb-2"><strong>Montant Agents:</strong> {{ $montantAgentsAuto !== null ? number_format($montantAgentsAuto, 0, ',', ' ') . ' FCFA' : '-' }}</div>
                 </div>
               </div>
             </div>
@@ -282,4 +352,145 @@
   </div>
   @endif
 @endforeach
+
+<!-- Modals Confirmer avec Unipalm -->
+@foreach($tickets as $t)
+<div class="modal fade" id="modalConfirmUnipalm{{ $loop->index }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-check me-2"></i>Confirmer avec Unipalm</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3">Voulez-vous vérifier ce ticket dans l'API Unipalm ?</p>
+        <div class="alert alert-info mb-0">
+          <strong>Date:</strong> {{ isset($t['date_ticket']) ? \Carbon\Carbon::parse($t['date_ticket'])->format('d-m-Y') : '-' }}<br>
+          <strong>N° Ticket:</strong> {{ $t['numero_ticket'] ?? '' }}<br>
+          <strong>Usine:</strong> {{ $t['nom_usine'] ?? '-' }}<br>
+          <strong>Agent:</strong> {{ $t['nom_agent'] ?? '-' }}<br>
+          <strong>Poids:</strong> {{ number_format((float)($t['poids'] ?? 0), 0, ',', ' ') }} kg
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <form method="POST" action="{{ route('tickets.confirm_unipalm', ['id' => $t['id_ticket']]) }}" class="d-inline">
+          @csrf
+          <button type="submit" class="btn btn-success"><i class="bx bx-check me-1"></i>Vérifier avec Unipalm</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+@endforeach
+
+<!-- Modal Ajouter Ticket -->
+<div class="modal fade" id="modalAddTicket" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-plus me-2"></i>Ajouter un ticket</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ route('tickets.store') }}">
+        @csrf
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">N° Ticket <span class="text-danger">*</span></label>
+              <input type="text" name="numero_ticket" class="form-control" required placeholder="Ex: TKT-001" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Date Ticket <span class="text-danger">*</span></label>
+              <input type="date" name="date_ticket" class="form-control" required value="{{ date('Y-m-d') }}" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Véhicule <span class="text-danger">*</span></label>
+              <select name="vehicule_id" class="form-select" required>
+                <option value="">-- Sélectionner un véhicule --</option>
+                @foreach($vehiculesApi ?? [] as $vehiculeItem)
+                  <option value="{{ $vehiculeItem['vehicules_id'] ?? '' }}" data-matricule="{{ $vehiculeItem['matricule_vehicule'] ?? '' }}">{{ $vehiculeItem['matricule_vehicule'] ?? '' }}</option>
+                @endforeach
+              </select>
+              <input type="hidden" name="matricule_vehicule" id="matricule_vehicule_hidden" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Poids (kg)</label>
+              <input type="number" name="poids" class="form-control" step="0.01" min="0" placeholder="Ex: 15000" />
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Usine <span class="text-danger">*</span></label>
+              <select name="id_usine" class="form-select" required>
+                <option value="">-- Sélectionner une usine --</option>
+                @foreach($usines ?? [] as $usineItem)
+                  <option value="{{ $usineItem['id_usine'] ?? '' }}">{{ $usineItem['nom_usine'] ?? '' }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Agent <span class="text-danger">*</span></label>
+              <select name="id_agent" class="form-select" required>
+                <option value="">-- Sélectionner un agent --</option>
+                @foreach($agents ?? [] as $agentItem)
+                  <option value="{{ $agentItem['id_agent'] ?? '' }}">{{ $agentItem['nom_complet'] ?? '' }} ({{ $agentItem['numero_agent'] ?? '' }})</option>
+                @endforeach
+              </select>
+            </div>
+          </div>
+                  </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary"><i class="bx bx-check me-1"></i>Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const vehiculeSelect = document.querySelector('select[name="vehicule_id"]');
+  const matriculeHidden = document.getElementById('matricule_vehicule_hidden');
+  
+  if (vehiculeSelect && matriculeHidden) {
+    vehiculeSelect.addEventListener('change', function() {
+      const selectedOption = this.options[this.selectedIndex];
+      matriculeHidden.value = selectedOption.dataset.matricule || '';
+    });
+  }
+
+  // Initialiser Select2 pour les selects du modal
+  $('#modalAddTicket').on('shown.bs.modal', function() {
+    $('#modalAddTicket select[name="vehicule_id"]').select2({
+      theme: 'bootstrap-5',
+      dropdownParent: $('#modalAddTicket'),
+      placeholder: '-- Sélectionner un véhicule --',
+      allowClear: true
+    });
+    $('#modalAddTicket select[name="id_usine"]').select2({
+      theme: 'bootstrap-5',
+      dropdownParent: $('#modalAddTicket'),
+      placeholder: '-- Sélectionner une usine --',
+      allowClear: true
+    });
+    $('#modalAddTicket select[name="id_agent"]').select2({
+      theme: 'bootstrap-5',
+      dropdownParent: $('#modalAddTicket'),
+      placeholder: '-- Sélectionner un agent --',
+      allowClear: true
+    });
+  });
+
+  // Mettre à jour le champ caché matricule quand on change de véhicule via Select2
+  $(document).on('select2:select', 'select[name="vehicule_id"]', function(e) {
+    var selectedOption = $(this).find(':selected');
+    $('#matricule_vehicule_hidden').val(selectedOption.data('matricule') || '');
+  });
+});
+</script>
 @endsection

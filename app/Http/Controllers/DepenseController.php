@@ -327,7 +327,7 @@ class DepenseController extends Controller
             'id_pont' => ['required', 'integer'],
             'id_agent' => ['required', 'integer'],
             'date_chargement' => ['required', 'date'],
-            'poids_pont' => ['required', 'numeric', 'min:0'],
+            'poids_pont' => ['nullable', 'numeric', 'min:0'],
             'pont_display' => ['nullable', 'string'],
             'agent_display' => ['nullable', 'string'],
             'matricule_vehicule' => ['required', 'string', 'max:50'],
@@ -366,7 +366,7 @@ class DepenseController extends Controller
             'nom_agent' => $nomAgent,
             'numero_agent' => $numeroAgent,
             'date_chargement' => $validated['date_chargement'],
-            'poids_pont' => $validated['poids_pont'],
+            'poids_pont' => $validated['poids_pont'] ?? 0,
         ]);
 
         return redirect()->route('vehicules.fiche_sortie', [
@@ -375,7 +375,7 @@ class DepenseController extends Controller
             'id_pont' => $validated['id_pont'],
             'id_agent' => $validated['id_agent'],
             'date_chargement' => $validated['date_chargement'],
-            'poids_pont' => $validated['poids_pont'],
+            'poids_pont' => $validated['poids_pont'] ?? 0,
         ])->with('success', 'Fiche de sortie enregistrée avec succès.');
     }
 
@@ -453,7 +453,7 @@ class DepenseController extends Controller
             'id_pont' => ['required', 'integer'],
             'id_agent' => ['required', 'integer'],
             'date_chargement' => ['required', 'date'],
-            'poids_pont' => ['required', 'numeric', 'min:0'],
+            'poids_pont' => ['nullable', 'numeric', 'min:0'],
             'pont_display' => ['nullable', 'string'],
             'agent_display' => ['nullable', 'string'],
         ]);
@@ -557,7 +557,7 @@ class DepenseController extends Controller
             'nom_agent' => $nomAgent,
             'numero_agent' => $numeroAgent,
             'date_chargement' => $validated['date_chargement'],
-            'poids_pont' => $validated['poids_pont'],
+            'poids_pont' => $validated['poids_pont'] ?? 0,
             'id_ticket' => 0,
             'numero_ticket' => '',
             'prix_unitaire_transport' => 0,
