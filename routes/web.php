@@ -98,6 +98,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
     Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
+    Route::put('/tickets/{id}', [TicketController::class, 'update'])->name('tickets.update');
+    Route::delete('/tickets/{id}', [TicketController::class, 'destroy'])->name('tickets.destroy');
     Route::post('/tickets/{id}/confirm-unipalm', [TicketController::class, 'confirmUnipalm'])->name('tickets.confirm_unipalm');
 
     Route::get('/vehicules/{vehicule_id}/depenses', [DepenseController::class, 'index'])->name('vehicules.depenses');
@@ -135,6 +137,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/code-transporteurs/{id}/vehicules/{vehicule_id}', [CodeTransporteurController::class, 'removeVehicule'])->name('code_transporteurs.vehicules.remove');
 
     Route::get('/depenses', [DepenseController::class, 'listeDepenses'])->name('depenses.liste');
+    Route::post('/depenses', [DepenseController::class, 'storeFromList'])->name('depenses.store');
     Route::get('/fiches-sortie', [DepenseController::class, 'listeFichesSortie'])->name('fiches_sortie.index');
     Route::post('/fiches-sortie', [DepenseController::class, 'storeFicheSortieFromList'])->name('fiches_sortie.store');
     Route::post('/fiches-sortie/{fiche_id}/associer-ticket', [DepenseController::class, 'associerTicket'])->name('fiches_sortie.associer_ticket');

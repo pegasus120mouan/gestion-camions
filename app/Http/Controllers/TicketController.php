@@ -280,4 +280,36 @@ class TicketController extends Controller
                 ->with('error', 'Aucun ticket correspondant trouvé dans Unipalm. Vérifiez les données (Date, N°Ticket, Usine, Poids).');
         }
     }
+
+    /**
+     * Mettre à jour un ticket
+     */
+    public function update(Request $request, $id)
+    {
+        $ticket = Ticket::findOrFail($id);
+
+        $ticket->update([
+            'numero_ticket' => $request->input('numero_ticket'),
+            'date_ticket' => $request->input('date_ticket'),
+            'matricule_vehicule' => $request->input('matricule_vehicule'),
+            'poids' => $request->input('poids'),
+            'poids_parc' => $request->input('poids_parc'),
+            'prix_unitaire_transport' => $request->input('prix_unitaire_transport'),
+        ]);
+
+        return redirect()->route('tickets.index')
+            ->with('success', 'Ticket modifié avec succès.');
+    }
+
+    /**
+     * Supprimer un ticket
+     */
+    public function destroy($id)
+    {
+        $ticket = Ticket::findOrFail($id);
+        $ticket->delete();
+
+        return redirect()->route('tickets.index')
+            ->with('success', 'Ticket supprimé avec succès.');
+    }
 }

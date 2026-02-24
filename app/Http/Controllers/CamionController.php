@@ -15,94 +15,52 @@ class CamionController extends Controller
 {
     public function index(Request $request)
     {
-        $authUser = Auth::user();
-        if ($authUser && $authUser->role === 'proprietaire') {
-            $mesCamionsUrl = (string) config('services.external_auth.mes_camions_url');
-            $timeout = (int) config('services.external_auth.timeout', 10);
-            $phpsessid = (string) $request->session()->get('external_auth.phpsessid', '');
+        $timeout = 10;
 
-            if (trim($phpsessid) === '') {
-                return view('camions.index', [
-                    'camions' => new LengthAwarePaginator([], 0, 20),
-                    'chauffeurs' => collect(),
-                    'external_camions' => [],
-                    'external_error' => "Session API manquante. Reconnectez-vous.",
-                ]);
-            }
+        try {
+            $response = Http::acceptJson()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
+        } catch (\Throwable $e) {
+            return view('camions.index', [
+                'camions' => new LengthAwarePaginator([], 0, 20),
+                'chauffeurs' => collect(),
+                'external_camions' => [],
+                'external_error' => "Impossible de joindre le service camions.",
+            ]);
+        }
 
-            try {
-                $response = Http::acceptJson()
-                    ->timeout($timeout)
-                    ->withHeaders([
-                        'Cookie' => 'PHPSESSID=' . $phpsessid,
-                    ])
-                    ->get($mesCamionsUrl);
-            } catch (\Throwable $e) {
-                return view('camions.index', [
-                    'camions' => new LengthAwarePaginator([], 0, 20),
-                    'chauffeurs' => collect(),
-                    'external_camions' => [],
-                    'external_error' => "Impossible de joindre le service camions.",
-                ]);
-            }
-
-            if (! $response->successful()) {
-                $message = (string) ($response->json('error') ?? 'Erreur API.');
-
-                return view('camions.index', [
-                    'camions' => new LengthAwarePaginator([], 0, 20),
-                    'chauffeurs' => collect(),
-                    'external_camions' => [],
-                    'external_error' => $message,
-                ]);
-            }
-
-            $vehicules = $response->json('vehicules');
-            if (! is_array($vehicules)) {
-                $vehicules = [];
-            }
-
-            // Filtrer par recherche si présente
-            if ($request->filled('q')) {
-                $q = strtolower($request->string('q')->toString());
-                $vehicules = array_filter($vehicules, function ($v) use ($q) {
-                    $matricule = strtolower($v['matricule_vehicule'] ?? '');
-                    return str_contains($matricule, $q);
-                });
-                $vehicules = array_values($vehicules);
-            }
+        if (! $response->successful()) {
+            $message = (string) ($response->json('error') ?? 'Erreur API.');
 
             return view('camions.index', [
                 'camions' => new LengthAwarePaginator([], 0, 20),
                 'chauffeurs' => collect(),
-                'external_camions' => $vehicules,
-                'external_error' => null,
+                'external_camions' => [],
+                'external_error' => $message,
             ]);
         }
 
-        $query = Camion::query()->with('chauffeur')->latest();
+        $vehicules = $response->json('vehicules');
+        if (! is_array($vehicules)) {
+            $vehicules = [];
+        }
 
+        // Filtrer par recherche si présente
         if ($request->filled('q')) {
-            $q = $request->string('q')->toString();
-            $query->where(function ($q2) use ($q) {
-                $q2->where('immatriculation', 'like', "%{$q}%")
-                    ->orWhere('marque', 'like', "%{$q}%")
-                    ->orWhere('modele', 'like', "%{$q}%");
+            $q = strtolower($request->string('q')->toString());
+            $vehicules = array_filter($vehicules, function ($v) use ($q) {
+                $matricule = strtolower($v['matricule_vehicule'] ?? '');
+                $type = strtolower($v['type_vehicule'] ?? '');
+                return str_contains($matricule, $q) || str_contains($type, $q);
             });
+            $vehicules = array_values($vehicules);
         }
-
-        $camions = $query->paginate(20)->withQueryString();
-
-        if ($request->wantsJson()) {
-            return response()->json(['data' => $camions]);
-        }
-
-        $chauffeurs = User::query()->where('role', 'driver')->orderBy('name')->get();
 
         return view('camions.index', [
-            'camions' => $camions,
-            'chauffeurs' => $chauffeurs,
-            'external_camions' => null,
+            'camions' => new LengthAwarePaginator([], 0, 20),
+            'chauffeurs' => collect(),
+            'external_camions' => $vehicules,
             'external_error' => null,
         ]);
     }

@@ -64,8 +64,7 @@
               <th>Agent</th>
               <th>Vehicule</th>
               <th>Poids Usine</th>
-              <th>Date d'ajout</th>
-              <th>Prix Unitaire</th>
+              <th>Prix U</th>
               <th>Conformité</th>
               <th>Actions</th>
             </tr>
@@ -97,18 +96,7 @@
                   </a>
                 </td>
                 <td>{{ number_format((float)($t['poids'] ?? 0), 0, ',', ' ') }}</td>
-                <td>
-                  @php
-                    $dateAjout = $t['created_at'] ?? '';
-                    if ($dateAjout) {
-                      try {
-                        $dateAjout = \Carbon\Carbon::parse($dateAjout)->format('d-m-Y');
-                      } catch (\Exception $e) {}
-                    }
-                  @endphp
-                  {{ $dateAjout ?: '-' }}
-                </td>
-                <td>{{ number_format((float)($t['prix_unitaire'] ?? 0), 0, ',', ' ') }}</td>
+                <td>{{ number_format((float)($t['prix_unitaire_transport'] ?? 0), 0, ',', ' ') }}</td>
                 <td>
                   @if($t['conformite'] === 'conforme')
                     <span class="badge bg-success">Conforme</span>
@@ -122,8 +110,13 @@
                   <button type="button" class="btn btn-sm btn-outline-primary me-1" data-bs-toggle="modal" data-bs-target="#modalTicketDetail{{ $loop->index }}" title="Voir détails">
                     <i class="bx bx-show"></i>
                   </button>
-                  <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalConfirmUnipalm{{ $loop->index }}" title="Confirmer avec Unipalm">
-                    <i class="bx bx-check"></i> Verification
+                  @if($t['conformite'] !== 'conforme')
+                  <button type="button" class="btn btn-sm btn-outline-warning me-1" data-bs-toggle="modal" data-bs-target="#modalEditTicket{{ $loop->index }}" title="Modifier">
+                    <i class="bx bx-edit"></i>
+                  </button>
+                  @endif
+                  <button type="button" class="btn btn-sm btn-outline-danger me-1" data-bs-toggle="modal" data-bs-target="#modalDeleteTicket{{ $loop->index }}" title="Supprimer">
+                    <i class="bx bx-trash"></i>
                   </button>
                 </td>
               </tr>
@@ -233,6 +226,15 @@
                   <h6 class="card-title text-primary mb-3"><i class="bx bx-calendar me-1"></i>Dates</h6>
                   <div class="mb-2"><strong>Date chargement:</strong> {{ $t['date_chargement_fiche'] ?? '-' }}</div>
                   <div class="mb-2"><strong>Date déchargement:</strong> {{ $dateTicketModal ?: '-' }}</div>
+                  @php
+                    $dateAjoutModal = $t['created_at'] ?? '';
+                    if ($dateAjoutModal) {
+                      try {
+                        $dateAjoutModal = \Carbon\Carbon::parse($dateAjoutModal)->format('d-m-Y H:i');
+                      } catch (\Exception $e) {}
+                    }
+                  @endphp
+                  <div class="mb-2"><strong>Date d'ajout:</strong> {{ $dateAjoutModal ?: '-' }}</div>
                 </div>
               </div>
             </div>
@@ -312,6 +314,10 @@
           </div>
         </div>
         <div class="modal-footer">
+          <form method="POST" action="{{ route('tickets.confirm_unipalm', ['id' => $t['id_ticket']]) }}" class="d-inline me-2">
+            @csrf
+            <button type="submit" class="btn btn-success"><i class="bx bx-check me-1"></i>Vérifier avec Unipalm</button>
+          </form>
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
         </div>
       </div>
@@ -377,6 +383,82 @@
         <form method="POST" action="{{ route('tickets.confirm_unipalm', ['id' => $t['id_ticket']]) }}" class="d-inline">
           @csrf
           <button type="submit" class="btn btn-success"><i class="bx bx-check me-1"></i>Vérifier avec Unipalm</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+@endforeach
+
+<!-- Modals pour modifier les tickets -->
+@foreach($tickets as $index => $t)
+<div class="modal fade" id="modalEditTicket{{ $index }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title"><i class="bx bx-edit me-2"></i>Modifier le ticket #{{ $t['numero_ticket'] ?? '' }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form action="{{ route('tickets.update', $t['id_ticket'] ?? 0) }}" method="POST">
+        @csrf
+        @method('PUT')
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Numéro Ticket</label>
+              <input type="text" class="form-control" name="numero_ticket" value="{{ $t['numero_ticket'] ?? '' }}" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Date Ticket</label>
+              <input type="date" class="form-control" name="date_ticket" value="{{ $t['date_ticket'] ?? '' }}" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Matricule Véhicule</label>
+              <input type="text" class="form-control" name="matricule_vehicule" value="{{ $t['matricule_vehicule'] ?? '' }}">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Poids (kg)</label>
+              <input type="number" step="0.01" class="form-control" name="poids" value="{{ $t['poids'] ?? '' }}">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Poids Parc (kg)</label>
+              <input type="number" step="0.01" class="form-control" name="poids_parc" value="{{ $t['poids_parc'] ?? '' }}">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Prix Unitaire Transport</label>
+              <input type="number" step="0.01" class="form-control" name="prix_unitaire_transport" value="{{ $t['prix_unitaire_transport'] ?? '' }}">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-warning"><i class="bx bx-save me-1"></i>Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endforeach
+
+<!-- Modals pour supprimer les tickets -->
+@foreach($tickets as $index => $t)
+<div class="modal fade" id="modalDeleteTicket{{ $index }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-trash me-2"></i>Supprimer le ticket</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Êtes-vous sûr de vouloir supprimer le ticket <strong>#{{ $t['numero_ticket'] ?? '' }}</strong> ?</p>
+        <p class="text-muted mb-0">Cette action est irréversible.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <form action="{{ route('tickets.destroy', $t['id_ticket'] ?? 0) }}" method="POST" class="d-inline">
+          @csrf
+          @method('DELETE')
+          <button type="submit" class="btn btn-danger"><i class="bx bx-trash me-1"></i>Supprimer</button>
         </form>
       </div>
     </div>

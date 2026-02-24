@@ -87,7 +87,7 @@
       </div>
     @endif
 
-    @if($depenses->hasPages())
+    @if(method_exists($depenses, 'hasPages') && $depenses->hasPages())
       <div class="mt-4 d-flex justify-content-center">
         {{ $depenses->appends(['matricule' => $vehicule['matricule_vehicule'] ?? ''])->links() }}
       </div>

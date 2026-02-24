@@ -12,39 +12,30 @@ class DepenseController extends Controller
 {
     public function listeDepenses(Request $request)
     {
-        $authUser = Auth::user();
-
-        if (!$authUser || $authUser->role !== 'proprietaire') {
-            return view('depenses.liste', [
-                'depenses' => collect(),
-                'external_error' => "Accès réservé aux propriétaires.",
-            ]);
-        }
-
         $depenses = Depense::orderBy('date_depense', 'desc')
             ->orderBy('id', 'desc')
             ->paginate(20);
 
+        // Récupérer les véhicules depuis l'API pour le formulaire d'ajout
+        $vehicules = [];
+        try {
+            $response = Http::acceptJson()
+                ->timeout(10)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
+            if ($response->successful()) {
+                $vehicules = $response->json('vehicules') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
         return view('depenses.liste', [
             'depenses' => $depenses,
+            'vehicules' => $vehicules,
             'external_error' => null,
         ]);
     }
 
     public function listeFichesSortie(Request $request)
     {
-        $authUser = Auth::user();
-
-        if (!$authUser || $authUser->role !== 'proprietaire') {
-            return view('fiches_sortie.index', [
-                'fiches' => collect(),
-                'vehicules' => [],
-                'ponts' => [],
-                'agents' => [],
-                'external_error' => "Accès réservé aux propriétaires.",
-            ]);
-        }
-
         $fiches = FicheSortie::orderBy('date_chargement', 'desc')
             ->orderBy('id', 'desc')
             ->paginate(20);
@@ -101,19 +92,6 @@ class DepenseController extends Controller
 
     public function index(Request $request, int $vehiculeId)
     {
-        $authUser = Auth::user();
-
-        if (!$authUser || $authUser->role !== 'proprietaire') {
-            return view('depenses.index', [
-                'depenses' => collect(),
-                'vehicule' => null,
-                'vehicule_id' => $vehiculeId,
-                'ponts' => [],
-                'agents' => [],
-                'external_error' => "Accès réservé aux propriétaires.",
-            ]);
-        }
-
         $matricule = (string) $request->query('matricule', '');
 
         $depenses = Depense::where('vehicule_id', $vehiculeId)
@@ -169,12 +147,6 @@ class DepenseController extends Controller
 
     public function store(Request $request, int $vehiculeId)
     {
-        $authUser = Auth::user();
-
-        if (!$authUser || $authUser->role !== 'proprietaire') {
-            return back()->withErrors(['error' => "Accès réservé aux propriétaires."]);
-        }
-
         $validated = $request->validate([
             'type_depense' => ['required', 'string', 'max:100'],
             'matricule_vehicule' => ['required', 'string', 'max:50'],
@@ -565,5 +537,28 @@ class DepenseController extends Controller
         ]);
 
         return redirect()->route('fiches_sortie.index')->with('success', 'Fiche de sortie créée avec succès.');
+    }
+
+    public function storeFromList(Request $request)
+    {
+        $validated = $request->validate([
+            'vehicule_id' => ['required', 'integer'],
+            'matricule_vehicule' => ['required', 'string', 'max:50'],
+            'type_depense' => ['required', 'string', 'max:100'],
+            'description' => ['nullable', 'string', 'max:500'],
+            'montant' => ['required', 'numeric', 'min:0'],
+            'date_depense' => ['required', 'date'],
+        ]);
+
+        Depense::create([
+            'vehicule_id' => $validated['vehicule_id'],
+            'matricule_vehicule' => $validated['matricule_vehicule'],
+            'type_depense' => $validated['type_depense'],
+            'description' => $validated['description'] ?? '',
+            'montant' => $validated['montant'],
+            'date_depense' => $validated['date_depense'],
+        ]);
+
+        return redirect()->route('depenses.liste')->with('success', 'Dépense enregistrée avec succès.');
     }
 }
