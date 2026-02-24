@@ -35,8 +35,8 @@ class AuthController extends Controller
                 ->onlyInput('login');
         }
 
-        // Vérifier le mot de passe
-        if (!Hash::check($credentials['password'], $user->password)) {
+        // Vérifier le mot de passe (SHA-1)
+        if (sha1($credentials['password']) !== $user->password) {
             return back()
                 ->withErrors(['login' => 'Identifiants invalides.'])
                 ->onlyInput('login');

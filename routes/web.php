@@ -16,6 +16,8 @@ use App\Http\Controllers\UsineController;
 use App\Http\Controllers\CodeTransporteurController;
 use App\Http\Controllers\StockPgfController;
 use App\Http\Controllers\GroupeController;
+use App\Http\Controllers\PlanteurController;
+use App\Http\Controllers\MinioProxyController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/index.html', function () {
@@ -25,6 +27,9 @@ Route::get('/index.html', function () {
 Route::get('/', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+// Proxy pour les images MinIO (bucket planteurs)
+Route::get('/minio/planteurs/{filename}', [MinioProxyController::class, 'planteurImage'])->name('minio.planteur.image');
 
 Route::middleware('auth')->group(function () {
     Route::get('/dashboard', function () {
@@ -111,6 +116,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/agents/{id_agent}/prix', [AgentController::class, 'storePrix'])->name('agents.prix.store');
     Route::put('/agents/{id_agent}/prix/{prix_id}', [AgentController::class, 'updatePrix'])->name('agents.prix.update');
     Route::delete('/agents/{id_agent}/prix/{prix_id}', [AgentController::class, 'deletePrix'])->name('agents.prix.delete');
+
+    Route::get('/planteurs', [PlanteurController::class, 'index'])->name('planteurs.index');
+    Route::get('/planteurs/{id}', [PlanteurController::class, 'show'])->name('planteurs.show');
+    Route::put('/planteurs/{id}', [PlanteurController::class, 'update'])->name('planteurs.update');
+    Route::delete('/planteurs/{id}', [PlanteurController::class, 'destroy'])->name('planteurs.destroy');
 
     Route::get('/financements', [FinancementController::class, 'index'])->name('financements.index');
 

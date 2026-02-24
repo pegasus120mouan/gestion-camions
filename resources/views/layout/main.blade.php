@@ -248,6 +248,14 @@
                 <div class="text-truncate" data-i18n="Agents">Agents</div>
               </a>
             </li>
+            <li class="menu-item">
+              <a href="{{ route('planteurs.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-leaf"></i>
+                <div class="text-truncate" data-i18n="Planteurs">Planteurs</div>
+              </a>
+            </li>
+
+
            <li class="menu-item">
               <a href="{{ route('financements.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-money"></i>
@@ -501,8 +509,8 @@
             </li>-->
 
             <!-- Forms & Tables -->
-            <li class="menu-header small text-uppercase"><span class="menu-header-text">Forms &amp; Tables</span></li>
-            <!-- Forms 
+            <li class="menu-header small text-uppercase"><span class="menu-header-text">Planteurs</span></li>
+            <!-- Forms
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-detail"></i>
@@ -521,7 +529,7 @@
                 </li>
               </ul>
             </li>
-            <li class="menu-item">
+           <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-detail"></i>
                 <div class="text-truncate" data-i18n="Form Layouts">Form Layouts</div>
