@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Camion;
+use App\Models\Groupe;
+use App\Models\GroupeVehicule;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -257,5 +259,86 @@ class CamionController extends Controller
         }
 
         return redirect()->back();
+    }
+
+    public function camionsPgf(Request $request)
+    {
+        $timeout = 10;
+
+        // Récupérer tous les véhicules depuis l'API
+        $vehicules = [];
+        try {
+            $response = Http::acceptJson()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
+            if ($response->successful()) {
+                $vehicules = $response->json('vehicules') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        // Récupérer le groupe PGF (ou le créer s'il n'existe pas)
+        $groupePgf = Groupe::firstOrCreate(['nom_groupe' => 'PGF']);
+
+        // Récupérer les véhicules assignés au groupe PGF
+        $vehiculesGroupePgf = GroupeVehicule::where('groupe_id', $groupePgf->id)->pluck('vehicule_id')->toArray();
+
+        // Filtrer les véhicules qui appartiennent au groupe PGF
+        $camionsPgf = array_filter($vehicules, function ($v) use ($vehiculesGroupePgf) {
+            return in_array($v['vehicules_id'] ?? 0, $vehiculesGroupePgf);
+        });
+        $camionsPgf = array_values($camionsPgf);
+
+        // Filtrer par recherche si présente
+        if ($request->filled('q')) {
+            $q = strtolower($request->string('q')->toString());
+            $camionsPgf = array_filter($camionsPgf, function ($v) use ($q) {
+                $matricule = strtolower($v['matricule_vehicule'] ?? '');
+                $type = strtolower($v['type_vehicule'] ?? '');
+                return str_contains($matricule, $q) || str_contains($type, $q);
+            });
+            $camionsPgf = array_values($camionsPgf);
+        }
+
+        // Récupérer tous les groupes pour le modal d'assignation
+        $groupes = Groupe::all();
+
+        return view('camions.camions_pgf', [
+            'camions_pgf' => $camionsPgf,
+            'all_vehicules' => $vehicules,
+            'groupes' => $groupes,
+            'groupe_pgf' => $groupePgf,
+        ]);
+    }
+
+    public function assignerGroupe(Request $request)
+    {
+        $validated = $request->validate([
+            'vehicule_id' => ['required', 'integer'],
+            'matricule_vehicule' => ['required', 'string', 'max:50'],
+            'groupe_id' => ['required', 'integer', 'exists:groupes,id'],
+        ]);
+
+        GroupeVehicule::updateOrCreate(
+            [
+                'vehicule_id' => $validated['vehicule_id'],
+                'groupe_id' => $validated['groupe_id'],
+            ],
+            [
+                'matricule_vehicule' => $validated['matricule_vehicule'],
+            ]
+        );
+
+        return back()->with('success', 'Véhicule assigné au groupe avec succès.');
+    }
+
+    public function retirerGroupe(Request $request, int $vehiculeId)
+    {
+        $groupeId = $request->input('groupe_id');
+
+        GroupeVehicule::where('vehicule_id', $vehiculeId)
+            ->where('groupe_id', $groupeId)
+            ->delete();
+
+        return back()->with('success', 'Véhicule retiré du groupe avec succès.');
     }
 }
