@@ -50,6 +50,7 @@ class DepenseController extends Controller
         $vehicules = [];
         $ponts = [];
         $agents = [];
+        $usines = [];
 
         try {
             $camionsResponse = Http::acceptJson()
@@ -81,11 +82,21 @@ class DepenseController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        try {
+            $usinesResponse = Http::acceptJson()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
+            if ($usinesResponse->successful()) {
+                $usines = $usinesResponse->json('usines') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
         return view('fiches_sortie.index', [
             'fiches' => $fiches,
             'vehicules' => $vehicules,
             'ponts' => $ponts,
             'agents' => $agents,
+            'usines' => $usines,
             'external_error' => null,
         ]);
     }
@@ -105,10 +116,11 @@ class DepenseController extends Controller
             $displayMatricule = $existingDepense?->matricule_vehicule ?: '';
         }
 
-        // Charger les ponts et agents pour le modal fiche de sortie
+        // Charger les ponts, agents et usines pour le modal fiche de sortie
         $timeout = 10;
         $ponts = [];
         $agents = [];
+        $usines = [];
 
         try {
             $pontsResponse = Http::acceptJson()
@@ -132,6 +144,17 @@ class DepenseController extends Controller
             // Ignorer l'erreur
         }
 
+        try {
+            $usinesResponse = Http::acceptJson()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
+            if ($usinesResponse->successful()) {
+                $usines = $usinesResponse->json('usines') ?? [];
+            }
+        } catch (\Throwable $e) {
+            // Ignorer l'erreur
+        }
+
         return view('depenses.index', [
             'depenses' => $depenses,
             'vehicule' => [
@@ -141,6 +164,7 @@ class DepenseController extends Controller
             'vehicule_id' => $vehiculeId,
             'ponts' => $ponts,
             'agents' => $agents,
+            'usines' => $usines,
             'external_error' => null,
         ]);
     }
@@ -293,7 +317,9 @@ class DepenseController extends Controller
             'id_pont' => ['required', 'integer'],
             'id_agent' => ['required', 'integer'],
             'date_chargement' => ['required', 'date'],
+            'date_dechargement' => ['nullable', 'date'],
             'poids_pont' => ['nullable', 'numeric', 'min:0'],
+            'usine' => ['nullable', 'string', 'max:255'],
             'pont_display' => ['nullable', 'string'],
             'agent_display' => ['nullable', 'string'],
             'matricule_vehicule' => ['required', 'string', 'max:50'],
@@ -328,11 +354,13 @@ class DepenseController extends Controller
             'id_pont' => $validated['id_pont'],
             'nom_pont' => $nomPont,
             'code_pont' => $codePont,
+            'usine' => $validated['usine'] ?? null,
             'id_agent' => $validated['id_agent'],
             'nom_agent' => $nomAgent,
             'numero_agent' => $numeroAgent,
             'date_chargement' => $validated['date_chargement'],
-            'poids_pont' => $validated['poids_pont'] ?? 0,
+            'date_dechargement' => $validated['date_dechargement'] ?? null,
+            'poids_pont' => $validated['poids_pont'] ?? null,
         ]);
 
         return redirect()->route('vehicules.fiche_sortie', [
@@ -407,7 +435,9 @@ class DepenseController extends Controller
             'id_pont' => ['required', 'integer'],
             'id_agent' => ['required', 'integer'],
             'date_chargement' => ['required', 'date'],
+            'date_dechargement' => ['nullable', 'date'],
             'poids_pont' => ['nullable', 'numeric', 'min:0'],
+            'usine' => ['nullable', 'string', 'max:255'],
             'pont_display' => ['nullable', 'string'],
             'agent_display' => ['nullable', 'string'],
         ]);
@@ -507,13 +537,15 @@ class DepenseController extends Controller
             'id_pont' => $validated['id_pont'],
             'nom_pont' => $nomPont,
             'code_pont' => $codePont,
+            'usine' => $validated['usine'] ?? null,
             'id_agent' => $validated['id_agent'],
             'nom_agent' => $nomAgent,
             'numero_agent' => $numeroAgent,
             'date_chargement' => $validated['date_chargement'],
-            'poids_pont' => $validated['poids_pont'] ?? 0,
-            'id_ticket' => 0,
-            'numero_ticket' => '',
+            'date_dechargement' => $validated['date_dechargement'] ?? null,
+            'poids_pont' => $validated['poids_pont'] ?? null,
+            'id_ticket' => null,
+            'numero_ticket' => null,
             'prix_unitaire_transport' => 0,
             'poids_unitaire_regime' => 0,
         ]);

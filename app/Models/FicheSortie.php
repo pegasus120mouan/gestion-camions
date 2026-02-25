@@ -14,10 +14,12 @@ class FicheSortie extends Model
         'id_pont',
         'nom_pont',
         'code_pont',
+        'usine',
         'id_agent',
         'nom_agent',
         'numero_agent',
         'date_chargement',
+        'date_dechargement',
         'poids_pont',
         'id_ticket',
         'numero_ticket',
@@ -27,6 +29,7 @@ class FicheSortie extends Model
 
     protected $casts = [
         'date_chargement' => 'date',
+        'date_dechargement' => 'date',
         'poids_pont' => 'decimal:2',
     ];
 }

@@ -137,8 +137,23 @@
           </div>
 
           <div class="mb-3">
+            <label class="form-label">Usine</label>
+            <select name="usine" class="form-select">
+              <option value="">-- Sélectionner une usine --</option>
+              @foreach($usines ?? [] as $u)
+                <option value="{{ $u['nom_usine'] ?? '' }}">{{ $u['nom_usine'] ?? '' }}</option>
+              @endforeach
+            </select>
+          </div>
+
+          <div class="mb-3">
             <label class="form-label">Date de chargement <span class="text-danger">*</span></label>
             <input type="date" name="date_chargement" class="form-control" value="{{ date('Y-m-d') }}" required />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Date de déchargement</label>
+            <input type="date" name="date_dechargement" class="form-control" />
           </div>
 
           <div class="d-flex justify-content-end gap-2">

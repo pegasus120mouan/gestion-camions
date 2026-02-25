@@ -18,7 +18,9 @@
               <th>Vehicule</th>
               <th>Pont</th>
               <th>Agent</th>
+              <th>Usine</th>
               <th>Date chargement</th>
+              <th>Date déchargement</th>
               <th>Poids (kg)</th>
               <th>Actions</th>
             </tr>
@@ -33,8 +35,10 @@
                 </td>
                 <td>{{ $f->nom_pont }} <small class="text-muted">({{ $f->code_pont }})</small></td>
                 <td>{{ $f->nom_agent }}</td>
-                <td>{{ $f->date_chargement->format('d-m-Y') }}</td>
-                <td>{{ number_format((float)$f->poids_pont, 0, ',', ' ') }}</td>
+                <td>{{ $f->usine ?? '-' }}</td>
+                <td>{{ $f->date_chargement ? $f->date_chargement->format('d-m-Y') : '-' }}</td>
+                <td>{{ $f->date_dechargement ? $f->date_dechargement->format('d-m-Y') : '-' }}</td>
+                <td>{{ $f->poids_pont ? number_format((float)$f->poids_pont, 0, ',', ' ') : '-' }}</td>
                 <td>
                   <div class="d-flex gap-1">
                     <a href="{{ route('fiches_sortie.show', ['fiche_id' => $f->id]) }}" class="btn btn-sm btn-outline-primary">
@@ -48,7 +52,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="6" class="text-center">Aucune fiche de sortie</td>
+                <td colspan="8" class="text-center">Aucune fiche de sortie</td>
               </tr>
             @endforelse
           </tbody>
@@ -126,10 +130,23 @@
               <input type="hidden" name="agent_display" id="hiddenAgentDisplay" value="" />
             </div>
             <div class="col-md-6">
+              <label class="form-label">Usine</label>
+              <select name="usine" class="form-select">
+                <option value="">-- Sélectionner une usine --</option>
+                @foreach($usines ?? [] as $u)
+                  <option value="{{ $u['nom_usine'] ?? '' }}">{{ $u['nom_usine'] ?? '' }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-6">
               <label class="form-label">Date de chargement <span class="text-danger">*</span></label>
               <input type="date" name="date_chargement" class="form-control" value="{{ date('Y-m-d') }}" required />
             </div>
+            <div class="col-md-6">
+              <label class="form-label">Date de déchargement</label>
+              <input type="date" name="date_dechargement" class="form-control" />
             </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
