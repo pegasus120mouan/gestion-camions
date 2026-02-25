@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\FicheSortie;
 use App\Models\Groupe;
+use App\Models\GroupeAgent;
 use App\Models\GroupeVehicule;
 use App\Models\Ticket;
 use Illuminate\Http\Request;
@@ -47,11 +48,30 @@ class TicketController extends Controller
         } catch (\Throwable $e) {}
 
         try {
-            $agentsResponse = Http::acceptJson()
-                ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php');
-            if ($agentsResponse->successful()) {
-                $agentsApi = $agentsResponse->json('agents') ?? [];
+            $page = 1;
+            $hasMore = true;
+            while ($hasMore) {
+                $agentsResponse = Http::acceptJson()
+                    ->timeout($timeout)
+                    ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php', ['page' => $page]);
+                if ($agentsResponse->successful()) {
+                    $pageAgents = $agentsResponse->json('agents') ?? [];
+                    if (empty($pageAgents)) {
+                        $hasMore = false;
+                    } else {
+                        $agentsApi = array_merge($agentsApi, $pageAgents);
+                        $pagination = $agentsResponse->json('pagination');
+                        $currentPage = $pagination['current_page'] ?? $page;
+                        $lastPage = $pagination['last_page'] ?? 1;
+                        if ($currentPage >= $lastPage) {
+                            $hasMore = false;
+                        } else {
+                            $page++;
+                        }
+                    }
+                } else {
+                    $hasMore = false;
+                }
             }
         } catch (\Throwable $e) {}
 
@@ -147,6 +167,29 @@ class TicketController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        // Récupérer les agents du groupe PGF depuis la base locale
+        $groupePgf = Groupe::where('nom_groupe', 'Groupe PGF')->first();
+        $agentsPgf = [];
+        if ($groupePgf) {
+            $groupeAgents = GroupeAgent::where('groupe_id', $groupePgf->id)->get();
+            $agentsById = [];
+            foreach ($agentsApi as $a) {
+                $agentsById[$a['id_agent'] ?? 0] = $a;
+            }
+            foreach ($groupeAgents as $ga) {
+                if (isset($agentsById[$ga->id_agent])) {
+                    $agentsPgf[] = $agentsById[$ga->id_agent];
+                } else {
+                    // Agent non trouvé dans l'API, créer une entrée avec les infos locales
+                    $agentsPgf[] = [
+                        'id_agent' => $ga->id_agent,
+                        'nom_complet' => 'Agent #' . $ga->id_agent,
+                        'numero_agent' => $ga->type_agent ?? '',
+                    ];
+                }
+            }
+        }
+
         return view('tickets.index', [
             'tickets' => $ticketsArray,
             'pagination' => $pagination,
@@ -154,6 +197,7 @@ class TicketController extends Controller
             'vehiculesApi' => $vehiculesApi,
             'usines' => $usinesApi,
             'agents' => $agentsApi,
+            'agentsPgf' => $agentsPgf,
             'external_error' => null,
         ]);
     }

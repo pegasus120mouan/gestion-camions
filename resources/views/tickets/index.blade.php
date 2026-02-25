@@ -517,7 +517,7 @@
               <label class="form-label">Agent <span class="text-danger">*</span></label>
               <select name="id_agent" class="form-select" required>
                 <option value="">-- Sélectionner un agent --</option>
-                @foreach($agents ?? [] as $agentItem)
+                @foreach($agentsPgf ?? [] as $agentItem)
                   <option value="{{ $agentItem['id_agent'] ?? '' }}">{{ $agentItem['nom_complet'] ?? '' }} ({{ $agentItem['numero_agent'] ?? '' }})</option>
                 @endforeach
               </select>

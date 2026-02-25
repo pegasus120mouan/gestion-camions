@@ -83,46 +83,66 @@
       </div>
     </div>
 
-    @if(count($tickets) > 0)
-      <div class="card mt-4">
-        <div class="card-body">
-          <h5 class="card-title">Résumé</h5>
-          @php
-            $totalPoids = array_sum(array_column($tickets, 'poids'));
-            $totalMontant = 0;
-            foreach ($tickets as $t) {
-              $totalMontant += ((float)($t['poids'] ?? 0) * (float)($t['prix_unitaire'] ?? 0));
-            }
-          @endphp
-          <p><strong>Nombre de tickets:</strong> <span class="badge bg-primary">{{ count($tickets) }}</span></p>
-          <p><strong>Poids total:</strong> <span class="text-info">{{ number_format($totalPoids, 0, ',', ' ') }} kg</span></p>
-          <p><strong>Montant total:</strong> <span class="text-success">{{ number_format($totalMontant, 0, ',', ' ') }} FCFA</span></p>
-        </div>
-      </div>
-    @endif
-
     @if($pagination['last_page'] > 1)
+      @php
+        $currentPage = $pagination['current_page'];
+        $lastPage = $pagination['last_page'];
+        $range = 2;
+        $startPage = max(1, $currentPage - $range);
+        $endPage = min($lastPage, $currentPage + $range);
+      @endphp
       <div class="mt-4 d-flex justify-content-center">
         <nav>
           <ul class="pagination">
-            @if($pagination['current_page'] > 1)
+            {{-- Première page --}}
+            @if($currentPage > 1)
               <li class="page-item">
-                <a class="page-link" href="{{ route('tickets.unipalm', ['page' => $pagination['current_page'] - 1]) }}">
+                <a class="page-link" href="{{ route('tickets.unipalm', ['page' => 1]) }}">
+                  <i class="bx bx-chevrons-left"></i>
+                </a>
+              </li>
+              <li class="page-item">
+                <a class="page-link" href="{{ route('tickets.unipalm', ['page' => $currentPage - 1]) }}">
                   <i class="bx bx-chevron-left"></i>
                 </a>
               </li>
             @endif
 
-            @for($i = 1; $i <= $pagination['last_page']; $i++)
-              <li class="page-item {{ $i == $pagination['current_page'] ? 'active' : '' }}">
+            {{-- Pages avec ellipsis --}}
+            @if($startPage > 1)
+              <li class="page-item">
+                <a class="page-link" href="{{ route('tickets.unipalm', ['page' => 1]) }}">1</a>
+              </li>
+              @if($startPage > 2)
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+              @endif
+            @endif
+
+            @for($i = $startPage; $i <= $endPage; $i++)
+              <li class="page-item {{ $i == $currentPage ? 'active' : '' }}">
                 <a class="page-link" href="{{ route('tickets.unipalm', ['page' => $i]) }}">{{ $i }}</a>
               </li>
             @endfor
 
-            @if($pagination['current_page'] < $pagination['last_page'])
+            @if($endPage < $lastPage)
+              @if($endPage < $lastPage - 1)
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+              @endif
               <li class="page-item">
-                <a class="page-link" href="{{ route('tickets.unipalm', ['page' => $pagination['current_page'] + 1]) }}">
+                <a class="page-link" href="{{ route('tickets.unipalm', ['page' => $lastPage]) }}">{{ $lastPage }}</a>
+              </li>
+            @endif
+
+            {{-- Dernière page --}}
+            @if($currentPage < $lastPage)
+              <li class="page-item">
+                <a class="page-link" href="{{ route('tickets.unipalm', ['page' => $currentPage + 1]) }}">
                   <i class="bx bx-chevron-right"></i>
+                </a>
+              </li>
+              <li class="page-item">
+                <a class="page-link" href="{{ route('tickets.unipalm', ['page' => $lastPage]) }}">
+                  <i class="bx bx-chevrons-right"></i>
                 </a>
               </li>
             @endif
