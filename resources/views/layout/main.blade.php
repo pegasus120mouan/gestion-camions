@@ -168,7 +168,7 @@
                   </a>
                 </li>
                 <li class="menu-item">
-                  <a href="#" class="menu-link">
+                  <a href="{{ route('tickets.unipalm') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Weighbridges list">Mes Tickets Unipalm</div>
                   </a>
                 </li>

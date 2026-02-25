@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\FicheSortie;
+use App\Models\Groupe;
+use App\Models\GroupeVehicule;
 use App\Models\Ticket;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -311,5 +313,68 @@ class TicketController extends Controller
 
         return redirect()->route('tickets.index')
             ->with('success', 'Ticket supprimé avec succès.');
+    }
+
+    /**
+     * Afficher les tickets Unipalm (API) filtrés par les camions du groupe PGF
+     */
+    public function unipalm(Request $request)
+    {
+        $timeout = 10;
+        $page = max(1, (int) $request->query('page', 1));
+
+        // Récupérer le groupe PGF
+        $groupePgf = Groupe::where('nom_groupe', 'PGF')->first();
+        $vehiculesPgfIds = [];
+        $vehiculesPgfMatricules = [];
+
+        if ($groupePgf) {
+            $groupeVehicules = GroupeVehicule::where('groupe_id', $groupePgf->id)->get();
+            $vehiculesPgfIds = $groupeVehicules->pluck('vehicule_id')->toArray();
+            $vehiculesPgfMatricules = $groupeVehicules->pluck('matricule_vehicule')->toArray();
+        }
+
+        // Récupérer les tickets depuis l'API
+        $tickets = [];
+        $pagination = [
+            'current_page' => $page,
+            'per_page' => 20,
+            'total' => 0,
+            'last_page' => 1,
+        ];
+
+        try {
+            $response = Http::acceptJson()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_tickets.php', [
+                    'page' => $page,
+                ]);
+
+            if ($response->successful()) {
+                $allTickets = $response->json('tickets') ?? [];
+                $apiPagination = $response->json('pagination') ?? [];
+
+                // Filtrer les tickets par les véhicules du groupe PGF
+                $tickets = array_filter($allTickets, function ($t) use ($vehiculesPgfIds, $vehiculesPgfMatricules) {
+                    $vehiculeId = $t['vehicule_id'] ?? 0;
+                    $matricule = $t['matricule_vehicule'] ?? '';
+                    return in_array($vehiculeId, $vehiculesPgfIds) || in_array($matricule, $vehiculesPgfMatricules);
+                });
+                $tickets = array_values($tickets);
+
+                $pagination = [
+                    'current_page' => $apiPagination['current_page'] ?? $page,
+                    'per_page' => $apiPagination['per_page'] ?? 20,
+                    'total' => count($tickets),
+                    'last_page' => $apiPagination['last_page'] ?? 1,
+                ];
+            }
+        } catch (\Throwable $e) {}
+
+        return view('tickets.unipalm', [
+            'tickets' => $tickets,
+            'pagination' => $pagination,
+            'groupe_pgf' => $groupePgf,
+        ]);
     }
 }

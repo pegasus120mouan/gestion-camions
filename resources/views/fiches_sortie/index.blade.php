@@ -4,9 +4,6 @@
   <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h4 class="mb-0">Liste des fiches de sortie</h4>
-      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAddFicheSortie">
-        <i class="bx bx-plus me-1"></i> Ajouter une fiche de sortie
-      </button>
     </div>
 
     <div class="card">
@@ -39,9 +36,14 @@
                 <td>{{ $f->date_chargement->format('d-m-Y') }}</td>
                 <td>{{ number_format((float)$f->poids_pont, 0, ',', ' ') }}</td>
                 <td>
-                  <a href="{{ route('vehicules.fiche_sortie', ['vehicule_id' => $f->vehicule_id, 'fiche_id' => $f->id, 'id_pont' => $f->id_pont, 'id_agent' => $f->id_agent, 'date_chargement' => $f->date_chargement->format('Y-m-d'), 'poids_pont' => $f->poids_pont]) }}" class="btn btn-sm btn-outline-primary">
-                    <i class="bx bx-show"></i> Voir
-                  </a>
+                  <div class="d-flex gap-1">
+                    <a href="{{ route('fiches_sortie.show', ['fiche_id' => $f->id]) }}" class="btn btn-sm btn-outline-primary">
+                      <i class="bx bx-show"></i>
+                    </a>
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalDeleteFiche{{ $f->id }}">
+                      <i class="bx bx-trash"></i>
+                    </button>
+                  </div>
                 </td>
               </tr>
             @empty
@@ -137,6 +139,45 @@
     </div>
   </div>
 </div>
+
+@foreach($fiches as $f)
+<!-- Modal Confirmation Suppression -->
+<div class="modal fade" id="modalDeleteFiche{{ $f->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-error-circle me-2"></i>Confirmation de suppression</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center py-4">
+        <i class="bx bx-trash text-danger" style="font-size: 4rem;"></i>
+        <h5 class="mt-3">Supprimer cette fiche de sortie ?</h5>
+        <p class="text-muted mb-0">
+          Véhicule: <strong>{{ $f->matricule_vehicule }}</strong><br>
+          Pont: {{ $f->nom_pont }}<br>
+          Date: {{ $f->date_chargement->format('d/m/Y') }}
+        </p>
+        <div class="alert alert-warning mt-3 mb-0">
+          <i class="bx bx-info-circle me-1"></i>
+          Cette action est irréversible.
+        </div>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+          <i class="bx bx-x me-1"></i>Annuler
+        </button>
+        <form action="{{ route('fiches_sortie.destroy', ['fiche_id' => $f->id]) }}" method="POST" class="d-inline">
+          @csrf
+          @method('DELETE')
+          <button type="submit" class="btn btn-danger">
+            <i class="bx bx-trash me-1"></i>Supprimer
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+@endforeach
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

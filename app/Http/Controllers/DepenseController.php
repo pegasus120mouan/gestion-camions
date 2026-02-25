@@ -106,14 +106,14 @@ class DepenseController extends Controller
         }
 
         // Charger les ponts et agents pour le modal fiche de sortie
-        $timeout = (int) config('services.external_auth.timeout', 10);
+        $timeout = 10;
         $ponts = [];
         $agents = [];
 
         try {
             $pontsResponse = Http::acceptJson()
                 ->timeout($timeout)
-                ->get(config('services.external_auth.mes_ponts_url'));
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_ponts.php');
             if ($pontsResponse->successful()) {
                 $ponts = $pontsResponse->json('ponts') ?? [];
             }
@@ -124,7 +124,7 @@ class DepenseController extends Controller
         try {
             $agentsResponse = Http::acceptJson()
                 ->timeout($timeout)
-                ->get(config('services.external_auth.mes_agents_url'));
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php');
             if ($agentsResponse->successful()) {
                 $agents = $agentsResponse->json('agents') ?? [];
             }
@@ -289,12 +289,6 @@ class DepenseController extends Controller
 
     public function storeFicheSortie(Request $request, int $vehiculeId)
     {
-        $authUser = Auth::user();
-
-        if (!$authUser || $authUser->role !== 'proprietaire') {
-            return back()->withErrors(['error' => "Accès réservé aux propriétaires."]);
-        }
-
         $validated = $request->validate([
             'id_pont' => ['required', 'integer'],
             'id_agent' => ['required', 'integer'],
@@ -353,12 +347,6 @@ class DepenseController extends Controller
 
     public function associerTicket(Request $request, int $ficheId)
     {
-        $authUser = Auth::user();
-
-        if (!$authUser || $authUser->role !== 'proprietaire') {
-            return back()->withErrors(['error' => "Accès réservé aux propriétaires."]);
-        }
-
         $ficheSortie = FicheSortie::findOrFail($ficheId);
 
         $validated = $request->validate([
@@ -378,14 +366,8 @@ class DepenseController extends Controller
             'numero_ticket' => $numeroTicket,
         ]);
 
-        return redirect()->route('vehicules.fiche_sortie', [
-            'vehicule_id' => $ficheSortie->vehicule_id,
-            'fiche_id' => $ficheSortie->id,
-            'id_pont' => $ficheSortie->id_pont,
-            'id_agent' => $ficheSortie->id_agent,
-            'date_chargement' => $ficheSortie->date_chargement->format('Y-m-d'),
-            'poids_pont' => $ficheSortie->poids_pont,
-        ])->with('success', 'Ticket associé avec succès.');
+        return redirect()->route('fiches_sortie.show', ['fiche_id' => $ficheSortie->id])
+            ->with('success', 'Ticket associé avec succès.');
     }
 
     public function updatePrixTransport(Request $request, int $ficheId)
@@ -560,5 +542,28 @@ class DepenseController extends Controller
         ]);
 
         return redirect()->route('depenses.liste')->with('success', 'Dépense enregistrée avec succès.');
+    }
+
+    public function showFicheSortie(int $ficheId)
+    {
+        $ficheSortie = FicheSortie::findOrFail($ficheId);
+
+        // Récupérer les tickets conformes depuis la base de données locale
+        $tickets = \App\Models\Ticket::where('conformite', 'Conforme')
+            ->orderBy('date_ticket', 'desc')
+            ->get();
+
+        return view('fiches_sortie.show', [
+            'fiche' => $ficheSortie,
+            'tickets' => $tickets,
+        ]);
+    }
+
+    public function destroyFicheSortie(int $ficheId)
+    {
+        $ficheSortie = FicheSortie::findOrFail($ficheId);
+        $ficheSortie->delete();
+
+        return redirect()->route('fiches_sortie.index')->with('success', 'Fiche de sortie supprimée avec succès.');
     }
 }
