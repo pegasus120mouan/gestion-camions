@@ -28,10 +28,6 @@
                 <th width="40%">Matricule</th>
                 <td><span class="badge bg-primary fs-6">{{ $fiche->matricule_vehicule }}</span></td>
               </tr>
-              <tr>
-                <th>ID Véhicule</th>
-                <td>{{ $fiche->vehicule_id }}</td>
-              </tr>
             </table>
           </div>
         </div>
@@ -51,10 +47,6 @@
               <tr>
                 <th>Code pont</th>
                 <td><code>{{ $fiche->code_pont }}</code></td>
-              </tr>
-              <tr>
-                <th>ID Pont</th>
-                <td>{{ $fiche->id_pont }}</td>
               </tr>
             </table>
           </div>
@@ -78,10 +70,6 @@
                 <th>Numéro agent</th>
                 <td><code>{{ $fiche->numero_agent }}</code></td>
               </tr>
-              <tr>
-                <th>ID Agent</th>
-                <td>{{ $fiche->id_agent }}</td>
-              </tr>
             </table>
           </div>
         </div>
@@ -90,17 +78,99 @@
       <div class="col-md-6">
         <div class="card mb-4">
           <div class="card-header bg-warning">
-            <h5 class="mb-0"><i class="bx bx-calendar me-2"></i>Chargement</h5>
+            <h5 class="mb-0"><i class="bx bx-calendar me-2"></i>Chargement / Déchargement</h5>
           </div>
           <div class="card-body">
             <table class="table table-borderless">
               <tr>
-                <th width="40%">Date de chargement</th>
-                <td><strong>{{ $fiche->date_chargement->format('d/m/Y') }}</strong></td>
+                <th width="40%">Usine</th>
+                <td>{{ $fiche->usine ?? '-' }}</td>
+              </tr>
+              <tr>
+                <th>Date de chargement</th>
+                <td><strong>{{ $fiche->date_chargement ? $fiche->date_chargement->format('d/m/Y') : '-' }}</strong></td>
+              </tr>
+              <tr>
+                <th>Date de déchargement</th>
+                <td>
+                  @if($fiche->date_dechargement)
+                    <strong>{{ $fiche->date_dechargement->format('d/m/Y') }}</strong>
+                  @else
+                    <span class="text-danger">Pas encore déchargé</span>
+                  @endif
+                </td>
               </tr>
               <tr>
                 <th>Poids pont (kg)</th>
-                <td>{{ number_format((float)$fiche->poids_pont, 0, ',', ' ') }} kg</td>
+                <td>
+                  @if($fiche->poids_pont)
+                    {{ number_format((float)$fiche->poids_pont, 0, ',', ' ') }} kg
+                  @else
+                    <span class="text-warning">Poids pas encore renseigné</span>
+                  @endif
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-6">
+        <div class="card mb-4">
+          <div class="card-header bg-dark text-white">
+            <h5 class="mb-0 text-white"><i class="bx bx-user-check me-2"></i>Chef des chargeurs</h5>
+          </div>
+          <div class="card-body">
+            <table class="table table-borderless">
+              <tr>
+                <th width="40%">Chef des chargeurs</th>
+                <td>
+                  @if($fiche->id_chef_chargeur && isset($chefChargeur))
+                    {{ $chefChargeur->nom }} {{ $chefChargeur->prenoms }}
+                  @else
+                    <span class="text-muted">Non assigné</span>
+                  @endif
+                </td>
+              </tr>
+              @if($fiche->id_chef_chargeur && isset($chefChargeur) && $chefChargeur->contact)
+              <tr>
+                <th>Contact</th>
+                <td>{{ $chefChargeur->contact }}</td>
+              </tr>
+              @endif
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-md-6">
+        <div class="card mb-4">
+          <div class="card-header bg-danger text-white">
+            <h5 class="mb-0 text-white"><i class="bx bx-money me-2"></i>Frais</h5>
+          </div>
+          <div class="card-body">
+            <table class="table table-borderless">
+              <tr>
+                <th width="40%">Carburant</th>
+                <td>
+                  @if($fiche->carburant)
+                    {{ number_format((float)$fiche->carburant, 0, ',', ' ') }} FCFA
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
+                </td>
+              </tr>
+              <tr>
+                <th>Frais de route</th>
+                <td>
+                  @if($fiche->frais_route)
+                    {{ number_format((float)$fiche->frais_route, 0, ',', ' ') }} FCFA
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
+                </td>
               </tr>
             </table>
           </div>

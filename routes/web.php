@@ -18,6 +18,7 @@ use App\Http\Controllers\StockPgfController;
 use App\Http\Controllers\GroupeController;
 use App\Http\Controllers\PlanteurController;
 use App\Http\Controllers\MinioProxyController;
+use App\Http\Controllers\ChefChargeurController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/index.html', function () {
@@ -149,6 +150,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/fiches-sortie', [DepenseController::class, 'storeFicheSortieFromList'])->name('fiches_sortie.store');
     Route::post('/fiches-sortie/{fiche_id}/associer-ticket', [DepenseController::class, 'associerTicket'])->name('fiches_sortie.associer_ticket');
     Route::post('/fiches-sortie/{fiche_id}/prix-transport', [DepenseController::class, 'updatePrixTransport'])->name('fiches_sortie.update_prix_transport');
+    Route::put('/fiches-sortie/{fiche_id}', [DepenseController::class, 'updateFicheSortie'])->name('fiches_sortie.update');
     Route::delete('/fiches-sortie/{fiche_id}', [DepenseController::class, 'destroyFicheSortie'])->name('fiches_sortie.destroy');
 
     // Stocks PGF
@@ -176,4 +178,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/groupes/{id}/agents', [GroupeController::class, 'addAgent'])->name('groupes.agent.add');
     Route::delete('/groupes/{id}/agents/{agent_id}', [GroupeController::class, 'removeAgent'])->name('groupes.agent.remove');
     Route::get('/groupes/{id}/tickets', [GroupeController::class, 'tickets'])->name('groupes.tickets');
+
+    // Chef des chargeurs
+    Route::get('/chef-chargeurs', [ChefChargeurController::class, 'index'])->name('chef_chargeurs.index');
+    Route::get('/chef-chargeurs/create', [ChefChargeurController::class, 'create'])->name('chef_chargeurs.create');
+    Route::post('/chef-chargeurs', [ChefChargeurController::class, 'store'])->name('chef_chargeurs.store');
+    Route::get('/chef-chargeurs/{chefChargeur}/edit', [ChefChargeurController::class, 'edit'])->name('chef_chargeurs.edit');
+    Route::put('/chef-chargeurs/{chefChargeur}', [ChefChargeurController::class, 'update'])->name('chef_chargeurs.update');
+    Route::delete('/chef-chargeurs/{chefChargeur}', [ChefChargeurController::class, 'destroy'])->name('chef_chargeurs.destroy');
 });

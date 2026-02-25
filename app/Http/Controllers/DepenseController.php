@@ -91,12 +91,16 @@ class DepenseController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        // Récupérer les chefs des chargeurs
+        $chefChargeurs = \App\Models\ChefChargeur::orderBy('nom')->get();
+
         return view('fiches_sortie.index', [
             'fiches' => $fiches,
             'vehicules' => $vehicules,
             'ponts' => $ponts,
             'agents' => $agents,
             'usines' => $usines,
+            'chefChargeurs' => $chefChargeurs,
             'external_error' => null,
         ]);
     }
@@ -580,8 +584,15 @@ class DepenseController extends Controller
     {
         $ficheSortie = FicheSortie::findOrFail($ficheId);
 
+        // Récupérer le chef des chargeurs si assigné
+        $chefChargeur = null;
+        if ($ficheSortie->id_chef_chargeur) {
+            $chefChargeur = \App\Models\ChefChargeur::find($ficheSortie->id_chef_chargeur);
+        }
+
         return view('fiches_sortie.show', [
             'fiche' => $ficheSortie,
+            'chefChargeur' => $chefChargeur,
         ]);
     }
 
@@ -613,6 +624,82 @@ class DepenseController extends Controller
         } catch (\Throwable $e) {}
 
         return response()->json($tickets);
+    }
+
+    public function updateFicheSortie(Request $request, int $ficheId)
+    {
+        $ficheSortie = FicheSortie::findOrFail($ficheId);
+
+        $validated = $request->validate([
+            'id_pont' => ['required', 'integer'],
+            'id_agent' => ['required', 'integer'],
+            'id_chef_chargeur' => ['nullable', 'integer'],
+            'usine' => ['nullable', 'string', 'max:255'],
+            'date_dechargement' => ['nullable', 'date'],
+            'poids_pont' => ['nullable', 'numeric', 'min:0'],
+            'carburant' => ['nullable', 'integer', 'min:0'],
+            'frais_route' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        // Récupérer les infos du pont depuis l'API
+        $timeout = 10;
+        $nomPont = $ficheSortie->nom_pont;
+        $codePont = $ficheSortie->code_pont;
+        $nomAgent = $ficheSortie->nom_agent;
+        $numeroAgent = $ficheSortie->numero_agent;
+
+        try {
+            $pontsResponse = Http::acceptJson()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_ponts.php');
+            if ($pontsResponse->successful()) {
+                $ponts = $pontsResponse->json('ponts') ?? [];
+                foreach ($ponts as $p) {
+                    if (($p['id_pont'] ?? null) == $validated['id_pont']) {
+                        $nomPont = $p['nom_pont'] ?? '';
+                        $codePont = $p['code_pont'] ?? '';
+                        break;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignorer l'erreur
+        }
+
+        try {
+            $agentsResponse = Http::acceptJson()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php');
+            if ($agentsResponse->successful()) {
+                $agents = $agentsResponse->json('agents') ?? [];
+                foreach ($agents as $a) {
+                    if (($a['id_agent'] ?? null) == $validated['id_agent']) {
+                        $nomAgent = $a['nom_complet'] ?? (($a['nom_agent'] ?? '') . ' ' . ($a['prenom_agent'] ?? ''));
+                        $numeroAgent = $a['numero_agent'] ?? '';
+                        break;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignorer l'erreur
+        }
+
+        $ficheSortie->update([
+            'id_pont' => $validated['id_pont'],
+            'nom_pont' => $nomPont,
+            'code_pont' => $codePont,
+            'id_agent' => $validated['id_agent'],
+            'nom_agent' => $nomAgent,
+            'numero_agent' => $numeroAgent,
+            'id_chef_chargeur' => $validated['id_chef_chargeur'] ?? null,
+            'usine' => $validated['usine'] ?? null,
+            'date_dechargement' => $validated['date_dechargement'] ?? null,
+            'poids_pont' => $validated['poids_pont'] ?? null,
+            'carburant' => $validated['carburant'] ?? null,
+            'frais_route' => $validated['frais_route'] ?? null,
+        ]);
+
+        return redirect()->route('fiches_sortie.index')->with('success', 'Fiche de sortie modifiée avec succès.');
     }
 
     public function destroyFicheSortie(int $ficheId)

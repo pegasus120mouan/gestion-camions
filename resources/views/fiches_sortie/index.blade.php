@@ -33,17 +33,32 @@
                     <strong>{{ $f->matricule_vehicule }}</strong>
                   </a>
                 </td>
-                <td>{{ $f->nom_pont }} <small class="text-muted">({{ $f->code_pont }})</small></td>
+                <td>{{ $f->nom_pont }}</td>
                 <td>{{ $f->nom_agent }}</td>
                 <td>{{ $f->usine ?? '-' }}</td>
                 <td>{{ $f->date_chargement ? $f->date_chargement->format('d-m-Y') : '-' }}</td>
-                <td>{{ $f->date_dechargement ? $f->date_dechargement->format('d-m-Y') : '-' }}</td>
-                <td>{{ $f->poids_pont ? number_format((float)$f->poids_pont, 0, ',', ' ') : '-' }}</td>
+                <td>
+                  @if($f->date_dechargement)
+                    {{ $f->date_dechargement->format('d-m-Y') }}
+                  @else
+                    <span class="text-danger">Pas encore déchargé</span>
+                  @endif
+                </td>
+                <td>
+                  @if($f->poids_pont)
+                    {{ number_format((float)$f->poids_pont, 0, ',', ' ') }}
+                  @else
+                    <span class="text-warning">Poids pas encore renseigné</span>
+                  @endif
+                </td>
                 <td>
                   <div class="d-flex gap-1">
                     <a href="{{ route('fiches_sortie.show', ['fiche_id' => $f->id]) }}" class="btn btn-sm btn-outline-primary">
                       <i class="bx bx-show"></i>
                     </a>
+                    <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalEditFiche{{ $f->id }}">
+                      <i class="bx bx-edit"></i>
+                    </button>
                     <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalDeleteFiche{{ $f->id }}">
                       <i class="bx bx-trash"></i>
                     </button>
@@ -158,6 +173,94 @@
 </div>
 
 @foreach($fiches as $f)
+<!-- Modal Édition Fiche -->
+<div class="modal fade" id="modalEditFiche{{ $f->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title"><i class="bx bx-edit me-2"></i>Modifier la fiche de sortie</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ route('fiches_sortie.update', ['fiche_id' => $f->id]) }}">
+        @csrf
+        @method('PUT')
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Pont de pesage <span class="text-danger">*</span></label>
+              <select name="id_pont" class="form-select" required>
+                <option value="">-- Sélectionner un pont --</option>
+                @foreach($ponts as $p)
+                  <option value="{{ $p['id_pont'] ?? '' }}" {{ ($f->id_pont == ($p['id_pont'] ?? '')) ? 'selected' : '' }}>
+                    {{ $p['nom_pont'] ?? '' }} ({{ $p['code_pont'] ?? '' }})
+                  </option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Agent <span class="text-danger">*</span></label>
+              <select name="id_agent" class="form-select" required>
+                <option value="">-- Sélectionner un agent --</option>
+                @foreach($agents as $a)
+                  @php
+                    $nomComplet = $a['nom_complet'] ?? (($a['nom_agent'] ?? '') . ' ' . ($a['prenom_agent'] ?? ''));
+                    $numeroAgent = $a['numero_agent'] ?? '';
+                  @endphp
+                  <option value="{{ $a['id_agent'] ?? '' }}" {{ ($f->id_agent == ($a['id_agent'] ?? '')) ? 'selected' : '' }}>
+                    {{ $nomComplet }} ({{ $numeroAgent }})
+                  </option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Usine</label>
+              <select name="usine" class="form-select">
+                <option value="">-- Sélectionner une usine --</option>
+                @foreach($usines ?? [] as $u)
+                  <option value="{{ $u['nom_usine'] ?? '' }}" {{ ($f->usine == ($u['nom_usine'] ?? '')) ? 'selected' : '' }}>
+                    {{ $u['nom_usine'] ?? '' }}
+                  </option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Chef des chargeurs</label>
+              <select name="id_chef_chargeur" class="form-select">
+                <option value="">-- Sélectionner un chef --</option>
+                @foreach($chefChargeurs ?? [] as $chef)
+                  <option value="{{ $chef->id }}" {{ ($f->id_chef_chargeur == $chef->id) ? 'selected' : '' }}>
+                    {{ $chef->nom }} {{ $chef->prenoms }}
+                  </option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Date de déchargement</label>
+              <input type="date" name="date_dechargement" class="form-control" value="{{ $f->date_dechargement ? $f->date_dechargement->format('Y-m-d') : '' }}" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Poids (kg)</label>
+              <input type="number" name="poids_pont" class="form-control" value="{{ $f->poids_pont }}" step="0.01" placeholder="Poids en kg" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Carburant (FCFA)</label>
+              <input type="number" name="carburant" class="form-control" value="{{ $f->carburant }}" placeholder="Montant carburant" />
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Frais de route (FCFA)</label>
+              <input type="number" name="frais_route" class="form-control" value="{{ $f->frais_route }}" placeholder="Frais de route" />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-warning"><i class="bx bx-save me-1"></i>Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- Modal Confirmation Suppression -->
 <div class="modal fade" id="modalDeleteFiche{{ $f->id }}" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">

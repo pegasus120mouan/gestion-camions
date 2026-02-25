@@ -254,6 +254,18 @@
               </a>
             </li>
             <li class="menu-item">
+              <a href="{{ route('chef_chargeurs.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-user"></i>
+                <div class="text-truncate" data-i18n="ChefChargeurs">Chef des chargeurs</div>
+              </a>
+            </li>
+            <li class="menu-item">
+              <a href="" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-user"></i>
+                <div class="text-truncate" data-i18n="Chargeurs">Chargeurs</div>
+              </a>
+            </li>
+            <li class="menu-item">
               <a href="{{ route('planteurs.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-leaf"></i>
                 <div class="text-truncate" data-i18n="Planteurs">Planteurs</div>
