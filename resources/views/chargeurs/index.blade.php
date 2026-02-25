@@ -3,7 +3,7 @@
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h4 class="mb-0">Chef des chargeurs</h4>
+      <h4 class="mb-0">Chargeurs</h4>
       <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCreate">
         <i class="bx bx-plus me-1"></i> Ajouter
       </button>
@@ -24,43 +24,29 @@
               <th>Nom</th>
               <th>Prénoms</th>
               <th>Contact</th>
-              <th>Prix unitaire</th>
-              <th>Période</th>
+              <th>Chef des chargeurs</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody class="table-border-bottom-0">
-            @forelse($chefChargeurs as $chef)
+            @forelse($chargeurs as $chargeur)
               <tr>
+                <td><strong>{{ $chargeur->nom }}</strong></td>
+                <td>{{ $chargeur->prenoms }}</td>
+                <td>{{ $chargeur->contact ?? '-' }}</td>
                 <td>
-                  <a href="{{ route('chef_chargeurs.show', $chef) }}" class="text-primary">
-                    <strong>{{ $chef->nom }}</strong>
-                  </a>
-                </td>
-                <td>{{ $chef->prenoms }}</td>
-                <td>{{ $chef->contact ?? '-' }}</td>
-                <td>
-                  @if($chef->prix_unitaire)
-                    {{ number_format($chef->prix_unitaire, 0, ',', ' ') }} FCFA
+                  @if($chargeur->chefChargeur)
+                    {{ $chargeur->chefChargeur->nom }} {{ $chargeur->chefChargeur->prenoms }}
                   @else
-                    <span class="text-muted">-</span>
-                  @endif
-                </td>
-                <td>
-                  @if($chef->date_debut && $chef->date_fin)
-                    {{ $chef->date_debut->format('d/m/Y') }} - {{ $chef->date_fin->format('d/m/Y') }}
-                  @elseif($chef->date_debut)
-                    Depuis {{ $chef->date_debut->format('d/m/Y') }}
-                  @else
-                    <span class="text-muted">-</span>
+                    <span class="text-muted">Non assigné</span>
                   @endif
                 </td>
                 <td>
                   <div class="d-flex gap-1">
-                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEdit{{ $chef->id }}">
+                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEdit{{ $chargeur->id }}">
                       <i class="bx bx-edit"></i>
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalDelete{{ $chef->id }}">
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalDelete{{ $chargeur->id }}">
                       <i class="bx bx-trash"></i>
                     </button>
                   </div>
@@ -68,7 +54,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="6" class="text-center">Aucun chef des chargeurs</td>
+                <td colspan="5" class="text-center">Aucun chargeur</td>
               </tr>
             @endforelse
           </tbody>
@@ -77,7 +63,7 @@
     </div>
 
     <div class="mt-3">
-      {{ $chefChargeurs->links() }}
+      {{ $chargeurs->links() }}
     </div>
   </div>
 </div>
@@ -87,10 +73,10 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Ajouter un chef des chargeurs</h5>
+        <h5 class="modal-title">Ajouter un chargeur</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <form action="{{ route('chef_chargeurs.store') }}" method="POST">
+      <form action="{{ route('chargeurs.store') }}" method="POST">
         @csrf
         <div class="modal-body">
           <div class="mb-3">
@@ -106,18 +92,13 @@
             <input type="text" name="contact" class="form-control" placeholder="Numéro de téléphone" />
           </div>
           <div class="mb-3">
-            <label class="form-label">Prix unitaire (FCFA)</label>
-            <input type="number" name="prix_unitaire" class="form-control" placeholder="Prix unitaire" />
-          </div>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Date début</label>
-              <input type="date" name="date_debut" class="form-control" />
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Date fin</label>
-              <input type="date" name="date_fin" class="form-control" />
-            </div>
+            <label class="form-label">Chef des chargeurs</label>
+            <select name="id_chef_chargeur" class="form-select">
+              <option value="">-- Sélectionner un chef --</option>
+              @foreach($chefChargeurs as $chef)
+                <option value="{{ $chef->id }}">{{ $chef->nom }} {{ $chef->prenoms }}</option>
+              @endforeach
+            </select>
           </div>
         </div>
         <div class="modal-footer">
@@ -131,44 +112,41 @@
   </div>
 </div>
 
-@foreach($chefChargeurs as $chef)
+@foreach($chargeurs as $chargeur)
 <!-- Modal Édition -->
-<div class="modal fade" id="modalEdit{{ $chef->id }}" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="modalEdit{{ $chargeur->id }}" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Modifier le chef des chargeurs</h5>
+        <h5 class="modal-title">Modifier le chargeur</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <form action="{{ route('chef_chargeurs.update', $chef) }}" method="POST">
+      <form action="{{ route('chargeurs.update', $chargeur) }}" method="POST">
         @csrf
         @method('PUT')
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Nom <span class="text-danger">*</span></label>
-            <input type="text" name="nom" class="form-control" value="{{ $chef->nom }}" required />
+            <input type="text" name="nom" class="form-control" value="{{ $chargeur->nom }}" required />
           </div>
           <div class="mb-3">
             <label class="form-label">Prénoms <span class="text-danger">*</span></label>
-            <input type="text" name="prenoms" class="form-control" value="{{ $chef->prenoms }}" required />
+            <input type="text" name="prenoms" class="form-control" value="{{ $chargeur->prenoms }}" required />
           </div>
           <div class="mb-3">
             <label class="form-label">Contact</label>
-            <input type="text" name="contact" class="form-control" value="{{ $chef->contact }}" placeholder="Numéro de téléphone" />
+            <input type="text" name="contact" class="form-control" value="{{ $chargeur->contact }}" placeholder="Numéro de téléphone" />
           </div>
           <div class="mb-3">
-            <label class="form-label">Prix unitaire (FCFA)</label>
-            <input type="number" name="prix_unitaire" class="form-control" value="{{ $chef->prix_unitaire }}" placeholder="Prix unitaire" />
-          </div>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Date début</label>
-              <input type="date" name="date_debut" class="form-control" value="{{ $chef->date_debut ? $chef->date_debut->format('Y-m-d') : '' }}" />
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Date fin</label>
-              <input type="date" name="date_fin" class="form-control" value="{{ $chef->date_fin ? $chef->date_fin->format('Y-m-d') : '' }}" />
-            </div>
+            <label class="form-label">Chef des chargeurs</label>
+            <select name="id_chef_chargeur" class="form-select">
+              <option value="">-- Sélectionner un chef --</option>
+              @foreach($chefChargeurs as $chef)
+                <option value="{{ $chef->id }}" {{ ($chargeur->id_chef_chargeur == $chef->id) ? 'selected' : '' }}>
+                  {{ $chef->nom }} {{ $chef->prenoms }}
+                </option>
+              @endforeach
+            </select>
           </div>
         </div>
         <div class="modal-footer">
@@ -183,7 +161,7 @@
 </div>
 
 <!-- Modal Suppression -->
-<div class="modal fade" id="modalDelete{{ $chef->id }}" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="modalDelete{{ $chargeur->id }}" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
@@ -191,11 +169,11 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        Voulez-vous vraiment supprimer <strong>{{ $chef->nom }} {{ $chef->prenoms }}</strong> ?
+        Voulez-vous vraiment supprimer <strong>{{ $chargeur->nom }} {{ $chargeur->prenoms }}</strong> ?
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-        <form action="{{ route('chef_chargeurs.destroy', $chef) }}" method="POST" class="d-inline">
+        <form action="{{ route('chargeurs.destroy', $chargeur) }}" method="POST" class="d-inline">
           @csrf
           @method('DELETE')
           <button type="submit" class="btn btn-danger">Supprimer</button>

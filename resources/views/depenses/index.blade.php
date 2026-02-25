@@ -117,6 +117,11 @@
           <input type="hidden" name="matricule_vehicule" value="{{ $vehicule['matricule_vehicule'] ?? request('matricule', '') }}" />
 
           <div class="mb-3">
+            <label class="form-label">Date de chargement <span class="text-danger">*</span></label>
+            <input type="date" name="date_chargement" class="form-control" value="{{ date('Y-m-d') }}" required />
+          </div>
+
+          <div class="mb-3">
             <label class="form-label">Pont de pesage <span class="text-danger">*</span></label>
             <input type="text" id="pont_input" class="form-control" placeholder="Tapez pour rechercher un pont..." list="ponts_list" autocomplete="off" required />
             <datalist id="ponts_list">
@@ -147,13 +152,24 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label">Date de chargement <span class="text-danger">*</span></label>
-            <input type="date" name="date_chargement" class="form-control" value="{{ date('Y-m-d') }}" required />
+            <label class="form-label">Chef des chargeurs</label>
+            <select name="id_chef_chargeur" class="form-select">
+              <option value="">-- Sélectionner un chef des chargeurs --</option>
+              @foreach($chefChargeurs ?? [] as $chef)
+                <option value="{{ $chef->id }}">{{ $chef->nom }} {{ $chef->prenoms }}</option>
+              @endforeach
+            </select>
           </div>
 
-          <div class="mb-3">
-            <label class="form-label">Date de déchargement</label>
-            <input type="date" name="date_dechargement" class="form-control" />
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Carburant (FCFA)</label>
+              <input type="number" name="carburant" class="form-control" min="0" />
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Frais de route (FCFA)</label>
+              <input type="number" name="frais_route" class="form-control" min="0" />
+            </div>
           </div>
 
           <div class="d-flex justify-content-end gap-2">

@@ -19,6 +19,8 @@ use App\Http\Controllers\GroupeController;
 use App\Http\Controllers\PlanteurController;
 use App\Http\Controllers\MinioProxyController;
 use App\Http\Controllers\ChefChargeurController;
+use App\Http\Controllers\ChargeurController;
+use App\Http\Controllers\MontantChefChargeurController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/index.html', function () {
@@ -183,7 +185,21 @@ Route::middleware('auth')->group(function () {
     Route::get('/chef-chargeurs', [ChefChargeurController::class, 'index'])->name('chef_chargeurs.index');
     Route::get('/chef-chargeurs/create', [ChefChargeurController::class, 'create'])->name('chef_chargeurs.create');
     Route::post('/chef-chargeurs', [ChefChargeurController::class, 'store'])->name('chef_chargeurs.store');
+    Route::get('/chef-chargeurs/{chefChargeur}', [ChefChargeurController::class, 'show'])->name('chef_chargeurs.show');
     Route::get('/chef-chargeurs/{chefChargeur}/edit', [ChefChargeurController::class, 'edit'])->name('chef_chargeurs.edit');
     Route::put('/chef-chargeurs/{chefChargeur}', [ChefChargeurController::class, 'update'])->name('chef_chargeurs.update');
+    Route::post('/chef-chargeurs/{chefChargeur}/prix', [ChefChargeurController::class, 'storePrix'])->name('chef_chargeurs.prix.store');
+    Route::put('/chef-chargeurs/{chefChargeur}/prix/{prix}', [ChefChargeurController::class, 'updatePrix'])->name('chef_chargeurs.prix.update');
+    Route::delete('/chef-chargeurs/{chefChargeur}/prix/{prix}', [ChefChargeurController::class, 'destroyPrix'])->name('chef_chargeurs.prix.destroy');
     Route::delete('/chef-chargeurs/{chefChargeur}', [ChefChargeurController::class, 'destroy'])->name('chef_chargeurs.destroy');
+
+    // Chargeurs
+    Route::get('/chargeurs', [ChargeurController::class, 'index'])->name('chargeurs.index');
+    Route::post('/chargeurs', [ChargeurController::class, 'store'])->name('chargeurs.store');
+    Route::put('/chargeurs/{chargeur}', [ChargeurController::class, 'update'])->name('chargeurs.update');
+    Route::delete('/chargeurs/{chargeur}', [ChargeurController::class, 'destroy'])->name('chargeurs.destroy');
+
+    // Montant Chef Chargeur
+    Route::get('/gestion-financiere/montant-chef-chargeur', [MontantChefChargeurController::class, 'index'])->name('gestionfinanciere.montant_chef_chargeur');
+    Route::post('/gestion-financiere/montant-chef-chargeur/{chefChargeur}/paiement', [MontantChefChargeurController::class, 'storePaiement'])->name('gestionfinanciere.paiement_chef_chargeur.store');
 });

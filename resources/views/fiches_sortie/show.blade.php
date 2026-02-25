@@ -172,6 +172,19 @@
                   @endif
                 </td>
               </tr>
+              <tr>
+                <th>Paiement chargeur</th>
+                <td>
+                  @if($paiementChargeur)
+                    <strong class="text-success">{{ number_format($paiementChargeur, 0, ',', ' ') }} FCFA</strong>
+                    @if(isset($prixUnitaireChargeur))
+                      <br><small class="text-muted">({{ number_format($prixUnitaireChargeur, 0, ',', ' ') }} × {{ number_format((float)$fiche->poids_pont, 0, ',', ' ') }} kg)</small>
+                    @endif
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
+                </td>
+              </tr>
             </table>
           </div>
         </div>

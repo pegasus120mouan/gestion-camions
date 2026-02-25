@@ -24,6 +24,7 @@ class FicheSortie extends Model
         'poids_pont',
         'carburant',
         'frais_route',
+        'paiement_chargeur',
         'id_ticket',
         'numero_ticket',
         'prix_unitaire_transport',

@@ -159,6 +159,9 @@ class DepenseController extends Controller
             // Ignorer l'erreur
         }
 
+        // Charger les chefs des chargeurs
+        $chefChargeurs = \App\Models\ChefChargeur::orderBy('nom')->get();
+
         return view('depenses.index', [
             'depenses' => $depenses,
             'vehicule' => [
@@ -169,6 +172,7 @@ class DepenseController extends Controller
             'ponts' => $ponts,
             'agents' => $agents,
             'usines' => $usines,
+            'chefChargeurs' => $chefChargeurs,
             'external_error' => null,
         ]);
     }
@@ -321,9 +325,11 @@ class DepenseController extends Controller
             'id_pont' => ['required', 'integer'],
             'id_agent' => ['required', 'integer'],
             'date_chargement' => ['required', 'date'],
-            'date_dechargement' => ['nullable', 'date'],
             'poids_pont' => ['nullable', 'numeric', 'min:0'],
             'usine' => ['nullable', 'string', 'max:255'],
+            'id_chef_chargeur' => ['nullable', 'integer'],
+            'carburant' => ['nullable', 'integer', 'min:0'],
+            'frais_route' => ['nullable', 'integer', 'min:0'],
             'pont_display' => ['nullable', 'string'],
             'agent_display' => ['nullable', 'string'],
             'matricule_vehicule' => ['required', 'string', 'max:50'],
@@ -362,9 +368,11 @@ class DepenseController extends Controller
             'id_agent' => $validated['id_agent'],
             'nom_agent' => $nomAgent,
             'numero_agent' => $numeroAgent,
+            'id_chef_chargeur' => $validated['id_chef_chargeur'] ?? null,
             'date_chargement' => $validated['date_chargement'],
-            'date_dechargement' => $validated['date_dechargement'] ?? null,
             'poids_pont' => $validated['poids_pont'] ?? null,
+            'carburant' => $validated['carburant'] ?? null,
+            'frais_route' => $validated['frais_route'] ?? null,
         ]);
 
         return redirect()->route('vehicules.fiche_sortie', [
@@ -586,13 +594,35 @@ class DepenseController extends Controller
 
         // Récupérer le chef des chargeurs si assigné
         $chefChargeur = null;
+        $paiementChargeur = null;
+        $prixUnitaireChargeur = null;
+
         if ($ficheSortie->id_chef_chargeur) {
             $chefChargeur = \App\Models\ChefChargeur::find($ficheSortie->id_chef_chargeur);
+
+            // Calculer le paiement chargeur si on a le poids et la date de chargement
+            if ($chefChargeur && $ficheSortie->poids_pont && $ficheSortie->date_chargement) {
+                // Trouver le prix unitaire applicable à la date de chargement
+                $prixPeriode = \App\Models\ChefChargeurPrix::where('id_chef_chargeur', $chefChargeur->id)
+                    ->where('date_debut', '<=', $ficheSortie->date_chargement)
+                    ->where(function ($query) use ($ficheSortie) {
+                        $query->whereNull('date_fin')
+                              ->orWhere('date_fin', '>=', $ficheSortie->date_chargement);
+                    })
+                    ->first();
+
+                if ($prixPeriode) {
+                    $prixUnitaireChargeur = $prixPeriode->prix_unitaire;
+                    $paiementChargeur = $prixUnitaireChargeur * (float) $ficheSortie->poids_pont;
+                }
+            }
         }
 
         return view('fiches_sortie.show', [
             'fiche' => $ficheSortie,
             'chefChargeur' => $chefChargeur,
+            'paiementChargeur' => $paiementChargeur,
+            'prixUnitaireChargeur' => $prixUnitaireChargeur,
         ]);
     }
 
