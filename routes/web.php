@@ -101,6 +101,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
     Route::get('/tickets/unipalm', [TicketController::class, 'unipalm'])->name('tickets.unipalm');
+    Route::post('/tickets/associer-fiche', [TicketController::class, 'associerFiche'])->name('tickets.associer_fiche');
     Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
     Route::put('/tickets/{id}', [TicketController::class, 'update'])->name('tickets.update');
     Route::delete('/tickets/{id}', [TicketController::class, 'destroy'])->name('tickets.destroy');
@@ -144,6 +145,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/depenses', [DepenseController::class, 'storeFromList'])->name('depenses.store');
     Route::get('/fiches-sortie', [DepenseController::class, 'listeFichesSortie'])->name('fiches_sortie.index');
     Route::get('/fiches-sortie/{fiche_id}', [DepenseController::class, 'showFicheSortie'])->name('fiches_sortie.show');
+    Route::get('/api/tickets-conformes', [DepenseController::class, 'getTicketsConformesApi'])->name('api.tickets_conformes');
     Route::post('/fiches-sortie', [DepenseController::class, 'storeFicheSortieFromList'])->name('fiches_sortie.store');
     Route::post('/fiches-sortie/{fiche_id}/associer-ticket', [DepenseController::class, 'associerTicket'])->name('fiches_sortie.associer_ticket');
     Route::post('/fiches-sortie/{fiche_id}/prix-transport', [DepenseController::class, 'updatePrixTransport'])->name('fiches_sortie.update_prix_transport');

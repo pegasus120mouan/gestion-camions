@@ -174,12 +174,14 @@
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Sélectionner un ticket</label>
+            <div id="tickets_loading" class="text-center py-3" style="display: none;">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Chargement...</span>
+              </div>
+              <p class="mt-2 mb-0">Chargement des tickets...</p>
+            </div>
             <input type="text" id="ticket_input" class="form-control" placeholder="Tapez pour rechercher un ticket..." list="tickets_list" autocomplete="off" required />
-            <datalist id="tickets_list">
-              @foreach($tickets ?? [] as $t)
-                <option data-id="{{ $t->id_ticket }}" value="{{ $t->numero_ticket }} - {{ $t->matricule_vehicule ?? '' }}">
-              @endforeach
-            </datalist>
+            <datalist id="tickets_list"></datalist>
             <input type="hidden" name="id_ticket" id="id_ticket_hidden" />
             <input type="hidden" name="numero_ticket" id="numero_ticket_hidden" />
           </div>
@@ -199,15 +201,45 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  var ticketsMap = {
-    @foreach($tickets ?? [] as $t)
-      "{{ $t->numero_ticket }} - {{ $t->matricule_vehicule ?? '' }}": {{ $t->id_ticket }},
-    @endforeach
-  };
+  var ticketsMap = {};
+  var ticketsLoaded = false;
 
   var ticketInput = document.getElementById('ticket_input');
   var idTicketHidden = document.getElementById('id_ticket_hidden');
   var numeroTicketHidden = document.getElementById('numero_ticket_hidden');
+  var ticketsList = document.getElementById('tickets_list');
+  var ticketsLoading = document.getElementById('tickets_loading');
+
+  // Charger les tickets quand le modal s'ouvre
+  var modal = document.getElementById('modalAssocierTicket');
+  modal.addEventListener('shown.bs.modal', function() {
+    if (!ticketsLoaded) {
+      ticketInput.style.display = 'none';
+      ticketsLoading.style.display = 'block';
+      
+      fetch('{{ route("api.tickets_conformes") }}')
+        .then(response => response.json())
+        .then(tickets => {
+          ticketsList.innerHTML = '';
+          ticketsMap = {};
+          tickets.forEach(function(t) {
+            var label = (t.numero_ticket || '') + ' - ' + (t.matricule_vehicule || '') + ' - ' + (t.agent_nom || '');
+            ticketsMap[label] = t.id_ticket;
+            var option = document.createElement('option');
+            option.value = label;
+            option.dataset.id = t.id_ticket;
+            ticketsList.appendChild(option);
+          });
+          ticketsLoaded = true;
+          ticketsLoading.style.display = 'none';
+          ticketInput.style.display = 'block';
+          ticketInput.focus();
+        })
+        .catch(function(err) {
+          ticketsLoading.innerHTML = '<p class="text-danger">Erreur lors du chargement des tickets</p>';
+        });
+    }
+  });
 
   if (ticketInput) {
     ticketInput.addEventListener('change', function() {

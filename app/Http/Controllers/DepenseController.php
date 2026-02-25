@@ -548,15 +548,39 @@ class DepenseController extends Controller
     {
         $ficheSortie = FicheSortie::findOrFail($ficheId);
 
-        // Récupérer les tickets conformes depuis la base de données locale
-        $tickets = \App\Models\Ticket::where('conformite', 'Conforme')
-            ->orderBy('date_ticket', 'desc')
-            ->get();
-
         return view('fiches_sortie.show', [
             'fiche' => $ficheSortie,
-            'tickets' => $tickets,
         ]);
+    }
+
+    public function getTicketsConformesApi()
+    {
+        // Récupérer les tickets depuis l'API Unipalm
+        $timeout = (int) config('services.external_auth.timeout', 10);
+        $tickets = [];
+        
+        try {
+            $response = Http::acceptJson()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_tickets.php');
+            
+            if ($response->successful()) {
+                $ticketsApi = $response->json('tickets') ?? [];
+                // Formater les tickets pour le frontend
+                foreach ($ticketsApi as $t) {
+                    $tickets[] = [
+                        'id_ticket' => $t['id_ticket'] ?? 0,
+                        'numero_ticket' => $t['numero_ticket'] ?? '',
+                        'matricule_vehicule' => $t['matricule_vehicule'] ?? '',
+                        'date_ticket' => $t['date_ticket'] ?? '',
+                        'agent_nom' => trim(($t['agent_nom'] ?? '') . ' ' . ($t['agent_prenom'] ?? '')),
+                        'poids' => $t['poids'] ?? 0,
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        return response()->json($tickets);
     }
 
     public function destroyFicheSortie(int $ficheId)

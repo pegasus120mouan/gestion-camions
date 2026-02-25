@@ -28,13 +28,18 @@
               <th>Usine</th>
               <th>Poids (kg)</th>
               <th>Prix unitaire</th>
+              <th>Fiche</th>
               <th>Statut</th>
             </tr>
           </thead>
           <tbody class="table-border-bottom-0">
             @forelse($tickets as $t)
               <tr>
-                <td><strong>{{ $t['numero_ticket'] ?? '-' }}</strong></td>
+                <td>
+                  <a href="#" class="text-primary fw-bold text-decoration-none" data-bs-toggle="modal" data-bs-target="#modalDetailTicket{{ $loop->index }}">
+                    {{ $t['numero_ticket'] ?? '-' }}
+                  </a>
+                </td>
                 <td>
                   @if(!empty($t['date_ticket']))
                     {{ \Carbon\Carbon::parse($t['date_ticket'])->format('d/m/Y') }}
@@ -55,6 +60,13 @@
                 <td>{{ number_format((float)($t['poids'] ?? 0), 0, ',', ' ') }}</td>
                 <td>{{ number_format((float)($t['prix_unitaire'] ?? 0), 0, ',', ' ') }} FCFA</td>
                 <td>
+                  @if($t['has_fiche'] ?? false)
+                    <span class="badge bg-success"><i class="bx bx-check"></i> Associé</span>
+                  @else
+                    <span class="badge bg-secondary">Non associé</span>
+                  @endif
+                </td>
+                <td>
                   @php $statut = $t['statut_ticket'] ?? ''; @endphp
                   @if($statut === 'valide')
                     <span class="badge bg-success">Validé</span>
@@ -69,7 +81,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="8" class="text-center">
+                <td colspan="9" class="text-center">
                   @if($groupe_pgf)
                     Aucun ticket trouvé pour les camions du groupe PGF
                   @else
@@ -152,4 +164,131 @@
     @endif
   </div>
 </div>
+
+<!-- Modals pour afficher les détails du ticket -->
+@foreach($tickets as $index => $t)
+@php
+  $dateTicketModal = $t['date_ticket'] ?? '';
+  if ($dateTicketModal) {
+    try {
+      $dateTicketModal = \Carbon\Carbon::parse($dateTicketModal)->format('d-m-Y');
+    } catch (\Exception $e) {}
+  }
+  $agentNomModal = trim(($t['agent_nom'] ?? '') . ' ' . ($t['agent_prenom'] ?? ''));
+  $poidsUsineModal = (float)($t['poids'] ?? 0);
+  $poidsParc = (float)($t['poids_parc'] ?? 0);
+  $poidsEcartModal = $poidsParc > 0 ? $poidsUsineModal - $poidsParc : null;
+  $prixUnitaire = (float)($t['prix_unitaire'] ?? 0);
+  $montantPaye = (float)($t['montant_paie'] ?? 0);
+  $dateChargement = $t['date_chargement'] ?? '-';
+  $origine = $t['origine'] ?? '-';
+@endphp
+<div class="modal fade" id="modalDetailTicket{{ $index }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-receipt me-2"></i>Ticket {{ $t['numero_ticket'] ?? '' }}</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <!-- Informations générales -->
+          <div class="col-md-6">
+            <div class="card bg-light border-0 h-100">
+              <div class="card-body">
+                <h6 class="card-title text-warning mb-3"><i class="bx bx-info-circle me-1"></i>Informations générales</h6>
+                <div class="mb-2"><strong>N° Ticket:</strong> {{ $t['numero_ticket'] ?? '-' }}</div>
+                <div class="mb-2"><strong>Véhicule:</strong> {{ $t['matricule_vehicule'] ?? '-' }}</div>
+                <div class="mb-2"><strong>Transporteur:</strong> <span class="badge bg-info">Autre</span></div>
+                <div class="mb-2"><strong>Usine:</strong> {{ $t['nom_usine'] ?? '-' }}</div>
+                <div class="mb-2"><strong>Agent:</strong> {{ $agentNomModal ?: '-' }}</div>
+                <div class="mb-2"><strong>Origine:</strong> {{ $origine }}</div>
+              </div>
+            </div>
+          </div>
+          <!-- Dates -->
+          <div class="col-md-6">
+            <div class="card bg-light border-0 h-100">
+              <div class="card-body">
+                <h6 class="card-title text-primary mb-3"><i class="bx bx-calendar me-1"></i>Dates</h6>
+                <div class="mb-2"><strong>Date chargement:</strong> {{ $dateChargement }}</div>
+                <div class="mb-2"><strong>Date déchargement:</strong> {{ $dateTicketModal ?: '-' }}</div>
+                <div class="mb-2"><strong>Date d'ajout:</strong> {{ isset($t['created_at']) ? \Carbon\Carbon::parse($t['created_at'])->format('d-m-Y H:i') : '-' }}</div>
+              </div>
+            </div>
+          </div>
+          <!-- Poids -->
+          <div class="col-md-6">
+            <div class="card bg-light border-0 h-100">
+              <div class="card-body">
+                <h6 class="card-title text-success mb-3"><i class="bx bx-package me-1"></i>Poids</h6>
+                <div class="mb-2"><strong>Poids sur Parc:</strong> {{ $poidsParc > 0 ? number_format($poidsParc, 0, ',', ' ') . ' kg' : '-' }}</div>
+                <div class="mb-2"><strong>Poids Usine:</strong> {{ number_format($poidsUsineModal, 0, ',', ' ') }} kg</div>
+                <div class="mb-2"><strong>Poids Ecart:</strong> {{ $poidsEcartModal !== null ? number_format($poidsEcartModal, 0, ',', ' ') . ' kg' : '-' }}</div>
+              </div>
+            </div>
+          </div>
+          <!-- Montants -->
+          <div class="col-md-6">
+            <div class="card bg-light border-0 h-100">
+              <div class="card-body">
+                <h6 class="card-title text-danger mb-3"><i class="bx bx-money me-1"></i>Montants</h6>
+                <div class="mb-2"><strong>Prix unitaire:</strong> {{ number_format($prixUnitaire, 0, ',', ' ') }} FCFA</div>
+                <div class="mb-2"><strong>Montant payé:</strong> {{ number_format($montantPaye, 0, ',', ' ') }} FCFA</div>
+                <div class="mb-2"><strong>Prix unitaire Agent:</strong> -</div>
+                <div class="mb-2"><strong>Montant Agents:</strong> -</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-success"><i class="bx bx-check me-1"></i>Vérifier avec Unipalm</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+@endforeach
+
+<!-- Modals pour associer une fiche de sortie -->
+@foreach($tickets as $index => $t)
+<div class="modal fade" id="modalAssocierFiche{{ $index }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-link me-2"></i>Associer à une fiche de sortie</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form action="{{ route('tickets.associer_fiche') }}" method="POST">
+        @csrf
+        <input type="hidden" name="id_ticket" value="{{ $t['id_ticket'] ?? '' }}" />
+        <input type="hidden" name="numero_ticket" value="{{ $t['numero_ticket'] ?? '' }}" />
+        <div class="modal-body">
+          <div class="alert alert-info mb-3">
+            <strong>Ticket:</strong> {{ $t['numero_ticket'] ?? '-' }}<br>
+            <strong>Véhicule:</strong> {{ $t['matricule_vehicule'] ?? '-' }}<br>
+            <strong>Agent:</strong> {{ trim(($t['agent_nom'] ?? '') . ' ' . ($t['agent_prenom'] ?? '')) ?: '-' }}
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Sélectionner une fiche de sortie</label>
+            <select name="fiche_id" class="form-select" required>
+              <option value="">-- Sélectionner une fiche --</option>
+              @foreach($fiches_disponibles ?? [] as $fiche)
+                <option value="{{ $fiche->id }}">
+                  {{ $fiche->matricule_vehicule }} - {{ $fiche->nom_pont }} ({{ $fiche->date_chargement ? $fiche->date_chargement->format('d/m/Y') : '-' }})
+                </option>
+              @endforeach
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-success"><i class="bx bx-link me-1"></i>Associer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endforeach
 @endsection

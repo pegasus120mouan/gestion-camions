@@ -115,6 +115,11 @@
                     <i class="bx bx-edit"></i>
                   </button>
                   @endif
+                  @if($t['conformite'] === 'Conforme' && empty($t['fiche_id']))
+                  <button type="button" class="btn btn-sm btn-outline-success me-1" data-bs-toggle="modal" data-bs-target="#modalAssocierFiche{{ $loop->index }}" title="Associer à une fiche">
+                    <i class="bx bx-link"></i>
+                  </button>
+                  @endif
                   <button type="button" class="btn btn-sm btn-outline-danger me-1" data-bs-toggle="modal" data-bs-target="#modalDeleteTicket{{ $loop->index }}" title="Supprimer">
                     <i class="bx bx-trash"></i>
                   </button>
@@ -215,7 +220,7 @@
                   @endphp
                   <div class="mb-2"><strong>Transporteur:</strong> <span class="badge bg-info">{{ $transporteurNom }}</span></div>
                   <div class="mb-2"><strong>Usine:</strong> {{ $t['nom_usine'] ?? '-' }}</div>
-                  <div class="mb-2"><strong>Agent:</strong> {{ ($t['agent_nom'] ?? '') . ' ' . ($t['agent_prenom'] ?? '') }}</div>
+                  <div class="mb-2"><strong>Agent:</strong> {{ $t['nom_agent'] ?? '-' }}</div>
                   <div class="mb-2"><strong>Origine:</strong> {{ $t['origine'] ?? '-' }}</div>
                 </div>
               </div>
@@ -492,7 +497,7 @@
               <label class="form-label">Véhicule <span class="text-danger">*</span></label>
               <select name="vehicule_id" class="form-select" required>
                 <option value="">-- Sélectionner un véhicule --</option>
-                @foreach($vehiculesApi ?? [] as $vehiculeItem)
+                @foreach($vehiculesPgf ?? [] as $vehiculeItem)
                   <option value="{{ $vehiculeItem['vehicules_id'] ?? '' }}" data-matricule="{{ $vehiculeItem['matricule_vehicule'] ?? '' }}">{{ $vehiculeItem['matricule_vehicule'] ?? '' }}</option>
                 @endforeach
               </select>
@@ -533,38 +538,44 @@
   </div>
 </div>
 
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  const vehiculeSelect = document.querySelector('select[name="vehicule_id"]');
-  const matriculeHidden = document.getElementById('matricule_vehicule_hidden');
-  
-  if (vehiculeSelect && matriculeHidden) {
-    vehiculeSelect.addEventListener('change', function() {
-      const selectedOption = this.options[this.selectedIndex];
-      matriculeHidden.value = selectedOption.dataset.matricule || '';
-    });
-  }
-
-  // Initialiser Select2 pour les selects du modal
+$(document).ready(function() {
+  // Initialiser Select2 pour les selects du modal à l'ouverture
   $('#modalAddTicket').on('shown.bs.modal', function() {
+    // Détruire les instances existantes si elles existent
+    if ($('#modalAddTicket select[name="vehicule_id"]').hasClass('select2-hidden-accessible')) {
+      $('#modalAddTicket select[name="vehicule_id"]').select2('destroy');
+    }
+    if ($('#modalAddTicket select[name="id_usine"]').hasClass('select2-hidden-accessible')) {
+      $('#modalAddTicket select[name="id_usine"]').select2('destroy');
+    }
+    if ($('#modalAddTicket select[name="id_agent"]').hasClass('select2-hidden-accessible')) {
+      $('#modalAddTicket select[name="id_agent"]').select2('destroy');
+    }
+
+    // Réinitialiser Select2
     $('#modalAddTicket select[name="vehicule_id"]').select2({
       theme: 'bootstrap-5',
-      dropdownParent: $('#modalAddTicket'),
+      dropdownParent: $('#modalAddTicket .modal-body'),
       placeholder: '-- Sélectionner un véhicule --',
-      allowClear: true
+      allowClear: true,
+      width: '100%'
     });
     $('#modalAddTicket select[name="id_usine"]').select2({
       theme: 'bootstrap-5',
-      dropdownParent: $('#modalAddTicket'),
+      dropdownParent: $('#modalAddTicket .modal-body'),
       placeholder: '-- Sélectionner une usine --',
-      allowClear: true
+      allowClear: true,
+      width: '100%'
     });
     $('#modalAddTicket select[name="id_agent"]').select2({
       theme: 'bootstrap-5',
-      dropdownParent: $('#modalAddTicket'),
+      dropdownParent: $('#modalAddTicket .modal-body'),
       placeholder: '-- Sélectionner un agent --',
-      allowClear: true
+      allowClear: true,
+      width: '100%'
     });
   });
 

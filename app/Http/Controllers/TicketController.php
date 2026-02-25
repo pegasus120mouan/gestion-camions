@@ -170,7 +170,9 @@ class TicketController extends Controller
         // Récupérer les agents du groupe PGF depuis la base locale
         $groupePgf = Groupe::where('nom_groupe', 'Groupe PGF')->first();
         $agentsPgf = [];
+        $vehiculesPgf = [];
         if ($groupePgf) {
+            // Agents PGF
             $groupeAgents = GroupeAgent::where('groupe_id', $groupePgf->id)->get();
             $agentsById = [];
             foreach ($agentsApi as $a) {
@@ -180,7 +182,6 @@ class TicketController extends Controller
                 if (isset($agentsById[$ga->id_agent])) {
                     $agentsPgf[] = $agentsById[$ga->id_agent];
                 } else {
-                    // Agent non trouvé dans l'API, créer une entrée avec les infos locales
                     $agentsPgf[] = [
                         'id_agent' => $ga->id_agent,
                         'nom_complet' => 'Agent #' . $ga->id_agent,
@@ -190,11 +191,22 @@ class TicketController extends Controller
             }
         }
 
+        // Véhicules PGF - chercher dans tous les groupes contenant "PGF"
+        $groupesPgf = Groupe::where('nom_groupe', 'like', '%PGF%')->pluck('id')->toArray();
+        if (!empty($groupesPgf)) {
+            $vehiculesPgfIds = GroupeVehicule::whereIn('groupe_id', $groupesPgf)->pluck('vehicule_id')->toArray();
+            $vehiculesPgf = array_filter($vehiculesApi, function ($v) use ($vehiculesPgfIds) {
+                return in_array($v['vehicules_id'] ?? 0, $vehiculesPgfIds);
+            });
+            $vehiculesPgf = array_values($vehiculesPgf);
+        }
+
         return view('tickets.index', [
             'tickets' => $ticketsArray,
             'pagination' => $pagination,
             'vehicules' => $vehicules,
             'vehiculesApi' => $vehiculesApi,
+            'vehiculesPgf' => $vehiculesPgf,
             'usines' => $usinesApi,
             'agents' => $agentsApi,
             'agentsPgf' => $agentsPgf,
@@ -406,6 +418,34 @@ class TicketController extends Controller
                 });
                 $tickets = array_values($tickets);
 
+                // Récupérer les fiches de sortie associées aux tickets
+                $ticketIds = array_column($tickets, 'id_ticket');
+                $fichesAssociees = [];
+                if (!empty($ticketIds)) {
+                    $fiches = FicheSortie::whereIn('id_ticket', $ticketIds)->get()->keyBy('id_ticket');
+                    foreach ($fiches as $idTicket => $fiche) {
+                        $fichesAssociees[$idTicket] = [
+                            'origine' => $fiche->nom_pont,
+                            'date_chargement' => $fiche->date_chargement ? $fiche->date_chargement->format('d-m-Y') : '-',
+                            'poids_parc' => $fiche->poids_pont,
+                        ];
+                    }
+                }
+
+                // Enrichir les tickets avec les données de fiche de sortie
+                foreach ($tickets as &$ticket) {
+                    $idTicket = $ticket['id_ticket'] ?? 0;
+                    if (isset($fichesAssociees[$idTicket])) {
+                        $ticket['origine'] = $fichesAssociees[$idTicket]['origine'];
+                        $ticket['date_chargement'] = $fichesAssociees[$idTicket]['date_chargement'];
+                        $ticket['poids_parc'] = $fichesAssociees[$idTicket]['poids_parc'];
+                        $ticket['has_fiche'] = true;
+                    } else {
+                        $ticket['has_fiche'] = false;
+                    }
+                }
+                unset($ticket);
+
                 $pagination = [
                     'current_page' => $apiPagination['current_page'] ?? $page,
                     'per_page' => $apiPagination['per_page'] ?? 20,
@@ -415,10 +455,34 @@ class TicketController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        // Récupérer les fiches de sortie disponibles (non associées à un ticket)
+        $fichesDisponibles = FicheSortie::whereNull('id_ticket')
+            ->orderBy('date_chargement', 'desc')
+            ->get();
+
         return view('tickets.unipalm', [
             'tickets' => $tickets,
             'pagination' => $pagination,
             'groupe_pgf' => $groupePgf,
+            'fiches_disponibles' => $fichesDisponibles,
         ]);
+    }
+
+    public function associerFiche(Request $request)
+    {
+        $validated = $request->validate([
+            'id_ticket' => ['required', 'integer'],
+            'numero_ticket' => ['required', 'string'],
+            'fiche_id' => ['required', 'integer', 'exists:fiches_sortie,id'],
+        ]);
+
+        $fiche = FicheSortie::findOrFail($validated['fiche_id']);
+        $fiche->update([
+            'id_ticket' => $validated['id_ticket'],
+            'numero_ticket' => $validated['numero_ticket'],
+        ]);
+
+        return redirect()->route('tickets.unipalm')
+            ->with('success', 'Fiche de sortie associée au ticket avec succès.');
     }
 }

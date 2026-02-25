@@ -31,7 +31,7 @@
           <div class="card-body">
             <div class="d-flex justify-content-between align-items-center">
               <div>
-                <h6 class="text-white mb-1">Stock Initial</h6>
+                <h6 class="text-white mb-1">Cumul des Entrées</h6>
                 <h3 class="mb-0">{{ number_format($stockTotal ?? 0, 0, ',', ' ') }} kg</h3>
               </div>
               <i class="bx bx-package" style="font-size: 3rem; opacity: 0.5;"></i>
@@ -44,7 +44,7 @@
           <div class="card-body">
             <div class="d-flex justify-content-between align-items-center">
               <div>
-                <h6 class="text-white mb-1">Sorties du stock</h6>
+                <h6 class="text-white mb-1">Cumul des sorties</h6>
                 <h3 class="mb-0">{{ number_format($totalEntrees ?? 0, 0, ',', ' ') }} kg</h3>
               </div>
               <i class="bx bx-down-arrow-circle" style="font-size: 3rem; opacity: 0.5;"></i>
