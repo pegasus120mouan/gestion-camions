@@ -149,7 +149,7 @@
                 </li>
                 <li class="menu-item">
                   <a href="{{ route('fiches_sortie.index') }}" class="menu-link">
-                    <div class="text-truncate" data-i18n="Without menu">Fiche de Sortie</div>
+                    <div class="text-truncate" data-i18n="Without menu">Historique des Sorties</div>
                   </a>
                 </li>
               </ul>
