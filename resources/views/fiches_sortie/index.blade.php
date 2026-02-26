@@ -15,11 +15,11 @@
         <table class="table">
           <thead>
             <tr>
+              <th>Date chargement</th>
               <th>Vehicule</th>
               <th>Pont</th>
               <th>Agent</th>
               <th>Usine</th>
-              <th>Date chargement</th>
               <th>Date déchargement</th>
               <th>Poids (kg)</th>
               <th>Actions</th>
@@ -28,6 +28,7 @@
           <tbody class="table-border-bottom-0">
             @forelse($fiches as $f)
               <tr>
+                <td>{{ $f->date_chargement ? $f->date_chargement->format('d-m-Y') : '-' }}</td>
                 <td>
                   <a href="{{ route('vehicules.depenses', ['vehicule_id' => $f->vehicule_id, 'matricule' => $f->matricule_vehicule]) }}">
                     <strong>{{ $f->matricule_vehicule }}</strong>
@@ -36,7 +37,6 @@
                 <td>{{ $f->nom_pont }}</td>
                 <td>{{ $f->nom_agent }}</td>
                 <td>{{ $f->usine ?? '-' }}</td>
-                <td>{{ $f->date_chargement ? $f->date_chargement->format('d-m-Y') : '-' }}</td>
                 <td>
                   @if($f->date_dechargement)
                     {{ $f->date_dechargement->format('d-m-Y') }}
