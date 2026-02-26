@@ -33,7 +33,7 @@
           <thead>
             <tr>
               <th>Type</th>
-              <th>Description</th>
+              <th>Fournisseur</th>
               <th>Montant</th>
               <th>Date</th>
             </tr>
@@ -328,22 +328,21 @@ document.addEventListener('DOMContentLoaded', function() {
           <input type="hidden" name="matricule_vehicule" value="{{ $vehicule['matricule_vehicule'] ?? '' }}" />
 
           <div class="mb-3">
-            <label class="form-label">Type de depense</label>
-            <select name="type_depense" class="form-select" required>
-              <option value="">-- Choisir --</option>
-              <option value="carburant">Carburant</option>
-              <option value="pieces">Achat de pieces</option>
-              <option value="entretien">Entretien</option>
-              <option value="reparation">Reparation</option>
-              <option value="autre">Autre</option>
+            <label class="form-label">Type de depense (Service)</label>
+            <select name="type_depense" id="service_select" class="form-select" required>
+              <option value="">-- Choisir un service --</option>
+              @foreach($services ?? [] as $service)
+                <option value="{{ $service->nom_service }}" data-service-id="{{ $service->id }}">{{ $service->nom_service }}</option>
+              @endforeach
             </select>
             @error('type_depense')<div class="text-danger mt-1">{{ $message }}</div>@enderror
           </div>
 
-          <div class="mb-3">
-            <label class="form-label">Description</label>
-            <textarea name="description" class="form-control" rows="2" placeholder="Details de la depense..."></textarea>
-            @error('description')<div class="text-danger mt-1">{{ $message }}</div>@enderror
+          <div class="mb-3" id="fournisseur_container" style="display: none;">
+            <label class="form-label">Fournisseur</label>
+            <select name="description" id="fournisseur_select" class="form-select">
+              <option value="">-- Choisir un fournisseur --</option>
+            </select>
           </div>
 
           <div class="mb-3">
@@ -392,6 +391,45 @@ document.addEventListener('DOMContentLoaded', function() {
 
       montantInput.form.addEventListener('submit', function () {
         montantInput.value = montantInput.value.replace(/\s/g, '');
+      });
+    }
+
+    // Gestion des fournisseurs par service
+    var fournisseursData = {
+      @foreach($services ?? [] as $service)
+        "{{ $service->id }}": [
+          @foreach($fournisseurs ?? [] as $fournisseur)
+            @if($fournisseur->service_id == $service->id)
+              { id: {{ $fournisseur->id }}, nom: "{{ $fournisseur->nom }}" },
+            @endif
+          @endforeach
+        ],
+      @endforeach
+    };
+
+    var serviceSelect = document.getElementById('service_select');
+    var fournisseurContainer = document.getElementById('fournisseur_container');
+    var fournisseurSelect = document.getElementById('fournisseur_select');
+
+    if (serviceSelect && fournisseurSelect) {
+      serviceSelect.addEventListener('change', function() {
+        var selectedOption = this.options[this.selectedIndex];
+        var serviceId = selectedOption.getAttribute('data-service-id');
+        
+        // Vider le select des fournisseurs
+        fournisseurSelect.innerHTML = '<option value="">-- Choisir un fournisseur --</option>';
+        
+        if (serviceId && fournisseursData[serviceId] && fournisseursData[serviceId].length > 0) {
+          fournisseursData[serviceId].forEach(function(f) {
+            var option = document.createElement('option');
+            option.value = f.nom;
+            option.textContent = f.nom;
+            fournisseurSelect.appendChild(option);
+          });
+          fournisseurContainer.style.display = 'block';
+        } else {
+          fournisseurContainer.style.display = 'none';
+        }
       });
     }
   });

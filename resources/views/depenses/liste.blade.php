@@ -19,8 +19,8 @@
           <thead>
             <tr>
               <th>Vehicule</th>
-              <th>Type</th>
-              <th>Description</th>
+              <th>Service</th>
+              <th>Fournisseur</th>
               <th>Montant</th>
               <th>Date</th>
             </tr>
@@ -34,22 +34,15 @@
                   </a>
                 </td>
                 <td>
-                  @php
-                    $type = $d->type_depense ?? '';
-                  @endphp
-                  @if($type === 'carburant')
-                    <span class="badge bg-warning">Carburant</span>
-                  @elseif($type === 'pieces')
-                    <span class="badge bg-info">Pieces</span>
-                  @elseif($type === 'entretien')
-                    <span class="badge bg-primary">Entretien</span>
-                  @elseif($type === 'reparation')
-                    <span class="badge bg-danger">Reparation</span>
+                  <span class="badge bg-primary">{{ $d->type_depense ?? '-' }}</span>
+                </td>
+                <td>
+                  @if($d->description)
+                    <a href="{{ route('fournisseurs.index') }}" class="text-primary">{{ $d->description }}</a>
                   @else
-                    <span class="badge bg-secondary">{{ $type }}</span>
+                    -
                   @endif
                 </td>
-                <td>{{ $d->description ?? '-' }}</td>
                 <td>{{ number_format((float)($d->montant ?? 0), 0, ',', ' ') }} FCFA</td>
                 <td>
                   @if($d->date_depense)
@@ -111,19 +104,19 @@
             <input type="hidden" name="matricule_vehicule" id="matriculeVehicule">
           </div>
           <div class="mb-3">
-            <label class="form-label">Type de dépense</label>
-            <select name="type_depense" class="form-select" required>
-              <option value="">-- Sélectionner --</option>
-              <option value="carburant">Carburant</option>
-              <option value="pieces">Pièces</option>
-              <option value="entretien">Entretien</option>
-              <option value="reparation">Réparation</option>
-              <option value="autre">Autre</option>
+            <label class="form-label">Service</label>
+            <select name="type_depense" id="service_select_liste" class="form-select" required>
+              <option value="">-- Sélectionner un service --</option>
+              @foreach($services ?? [] as $service)
+                <option value="{{ $service->nom_service }}" data-service-id="{{ $service->id }}">{{ $service->nom_service }}</option>
+              @endforeach
             </select>
           </div>
-          <div class="mb-3">
-            <label class="form-label">Description</label>
-            <textarea name="description" class="form-control" rows="2"></textarea>
+          <div class="mb-3" id="fournisseur_container_liste" style="display: none;">
+            <label class="form-label">Fournisseur</label>
+            <select name="description" id="fournisseur_select_liste" class="form-select">
+              <option value="">-- Sélectionner un fournisseur --</option>
+            </select>
           </div>
           <div class="mb-3">
             <label class="form-label">Montant (FCFA)</label>
@@ -152,6 +145,45 @@ document.addEventListener('DOMContentLoaded', function() {
     selectVehicule.addEventListener('change', function() {
       const selected = this.options[this.selectedIndex];
       matriculeInput.value = selected.dataset.matricule || '';
+    });
+  }
+
+  // Gestion des fournisseurs par service
+  var fournisseursData = {
+    @foreach($services ?? [] as $service)
+      "{{ $service->id }}": [
+        @foreach($fournisseurs ?? [] as $fournisseur)
+          @if($fournisseur->service_id == $service->id)
+            { id: {{ $fournisseur->id }}, nom: "{{ $fournisseur->nom }}" },
+          @endif
+        @endforeach
+      ],
+    @endforeach
+  };
+
+  var serviceSelect = document.getElementById('service_select_liste');
+  var fournisseurContainer = document.getElementById('fournisseur_container_liste');
+  var fournisseurSelect = document.getElementById('fournisseur_select_liste');
+
+  if (serviceSelect && fournisseurSelect) {
+    serviceSelect.addEventListener('change', function() {
+      var selectedOption = this.options[this.selectedIndex];
+      var serviceId = selectedOption.getAttribute('data-service-id');
+      
+      // Vider le select des fournisseurs
+      fournisseurSelect.innerHTML = '<option value="">-- Sélectionner un fournisseur --</option>';
+      
+      if (serviceId && fournisseursData[serviceId] && fournisseursData[serviceId].length > 0) {
+        fournisseursData[serviceId].forEach(function(f) {
+          var option = document.createElement('option');
+          option.value = f.nom;
+          option.textContent = f.nom;
+          fournisseurSelect.appendChild(option);
+        });
+        fournisseurContainer.style.display = 'block';
+      } else {
+        fournisseurContainer.style.display = 'none';
+      }
     });
   }
 });

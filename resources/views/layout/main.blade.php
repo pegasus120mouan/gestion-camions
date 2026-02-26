@@ -144,7 +144,7 @@
                 </li>
                 <li class="menu-item">
                   <a href="{{ route('depenses.liste') }}" class="menu-link">
-                    <div class="text-truncate" data-i18n="Without menu">Dépenses</div>
+                    <div class="text-truncate" data-i18n="Without menu">Historique des Dépenses</div>
                   </a>
                 </li>
                 <li class="menu-item">
@@ -252,6 +252,11 @@
                   <li class="menu-item">
                   <a href="{{ route('gestionfinanciere.montant_chef_chargeur') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Accordion">Montant chef chargeur</div>
+                  </a>
+                </li>
+                 <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.montant_fournisseur') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Montant Fournisseur</div>
                   </a>
                 </li>
                 <li class="menu-item">
@@ -442,6 +447,45 @@
                 <li class="menu-item">
                   <a href="{{ route('utilisateurs.admins') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Basic">Administrateurs</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('utilisateurs.chauffeurs') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Basic">Chauffeurs</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('utilisateurs.agents') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Basic">Agents</div>
+                  </a>
+                </li>
+       <!--         <li class="menu-item">
+                  <a href="{{ route('utilisateurs.create') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Basic">Créer</div>
+                  </a>
+                </li>-->
+              </ul>
+            </li>
+
+
+
+
+
+
+            <li class="menu-item">
+              <a href="javascript:void(0);" class="menu-link menu-toggle">
+                <i class="menu-icon tf-icons bx bx-lock-open-alt"></i>
+                <div class="text-truncate" data-i18n="Authentications">Fournisseurs</div>
+              </a>
+              <ul class="menu-sub">
+                <li class="menu-item">
+                  <a href="{{ route('fournisseurs.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Basic">Liste des fournisseurs</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('services.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Basic">Services</div>
                   </a>
                 </li>
                 <li class="menu-item">

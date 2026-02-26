@@ -27,9 +27,15 @@ class DepenseController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        // Charger les services et fournisseurs
+        $services = \App\Models\Service::orderBy('nom_service')->get();
+        $fournisseurs = \App\Models\Fournisseur::with('service')->orderBy('nom')->get();
+
         return view('depenses.liste', [
             'depenses' => $depenses,
             'vehicules' => $vehicules,
+            'services' => $services,
+            'fournisseurs' => $fournisseurs,
             'external_error' => null,
         ]);
     }
@@ -162,6 +168,10 @@ class DepenseController extends Controller
         // Charger les chefs des chargeurs
         $chefChargeurs = \App\Models\ChefChargeur::orderBy('nom')->get();
 
+        // Charger les services et fournisseurs
+        $services = \App\Models\Service::orderBy('nom_service')->get();
+        $fournisseurs = \App\Models\Fournisseur::with('service')->orderBy('nom')->get();
+
         return view('depenses.index', [
             'depenses' => $depenses,
             'vehicule' => [
@@ -173,6 +183,8 @@ class DepenseController extends Controller
             'agents' => $agents,
             'usines' => $usines,
             'chefChargeurs' => $chefChargeurs,
+            'services' => $services,
+            'fournisseurs' => $fournisseurs,
             'external_error' => null,
         ]);
     }

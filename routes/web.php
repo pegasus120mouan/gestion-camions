@@ -21,6 +21,9 @@ use App\Http\Controllers\MinioProxyController;
 use App\Http\Controllers\ChefChargeurController;
 use App\Http\Controllers\ChargeurController;
 use App\Http\Controllers\MontantChefChargeurController;
+use App\Http\Controllers\MontantFournisseurController;
+use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\FournisseurController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/index.html', function () {
@@ -202,4 +205,20 @@ Route::middleware('auth')->group(function () {
     // Montant Chef Chargeur
     Route::get('/gestion-financiere/montant-chef-chargeur', [MontantChefChargeurController::class, 'index'])->name('gestionfinanciere.montant_chef_chargeur');
     Route::post('/gestion-financiere/montant-chef-chargeur/{chefChargeur}/paiement', [MontantChefChargeurController::class, 'storePaiement'])->name('gestionfinanciere.paiement_chef_chargeur.store');
+
+    // Montant Fournisseur
+    Route::get('/gestion-financiere/montant-fournisseur', [MontantFournisseurController::class, 'index'])->name('gestionfinanciere.montant_fournisseur');
+    Route::post('/gestion-financiere/montant-fournisseur/paiement', [MontantFournisseurController::class, 'storePaiement'])->name('gestionfinanciere.montant_fournisseur.paiement');
+
+    // Services
+    Route::get('/services', [ServiceController::class, 'index'])->name('services.index');
+    Route::post('/services', [ServiceController::class, 'store'])->name('services.store');
+    Route::put('/services/{service}', [ServiceController::class, 'update'])->name('services.update');
+    Route::delete('/services/{service}', [ServiceController::class, 'destroy'])->name('services.destroy');
+
+    // Fournisseurs
+    Route::get('/fournisseurs', [FournisseurController::class, 'index'])->name('fournisseurs.index');
+    Route::post('/fournisseurs', [FournisseurController::class, 'store'])->name('fournisseurs.store');
+    Route::put('/fournisseurs/{fournisseur}', [FournisseurController::class, 'update'])->name('fournisseurs.update');
+    Route::delete('/fournisseurs/{fournisseur}', [FournisseurController::class, 'destroy'])->name('fournisseurs.destroy');
 });
