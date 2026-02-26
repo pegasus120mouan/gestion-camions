@@ -48,6 +48,20 @@ class CamionController extends Controller
             $vehicules = [];
         }
 
+        // Récupérer le groupe PGF
+        $groupePgf = Groupe::where('nom_groupe', 'PGF')->first();
+
+        // Filtrer uniquement les véhicules du groupe PGF
+        if ($groupePgf) {
+            $vehiculesGroupePgf = GroupeVehicule::where('groupe_id', $groupePgf->id)->pluck('vehicule_id')->toArray();
+            $vehicules = array_filter($vehicules, function ($v) use ($vehiculesGroupePgf) {
+                return in_array($v['vehicules_id'] ?? 0, $vehiculesGroupePgf);
+            });
+            $vehicules = array_values($vehicules);
+        } else {
+            $vehicules = [];
+        }
+
         // Filtrer par recherche si présente
         if ($request->filled('q')) {
             $q = strtolower($request->string('q')->toString());

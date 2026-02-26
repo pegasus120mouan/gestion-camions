@@ -375,6 +375,15 @@ class DepenseController extends Controller
             'frais_route' => $validated['frais_route'] ?? null,
         ]);
 
+        // Réponse JSON pour les requêtes AJAX
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Fiche de sortie créée avec succès.',
+                'fiche_id' => $ficheSortie->id,
+            ]);
+        }
+
         return redirect()->route('vehicules.fiche_sortie', [
             'vehicule_id' => $vehiculeId,
             'fiche_id' => $ficheSortie->id,

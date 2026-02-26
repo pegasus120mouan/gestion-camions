@@ -237,22 +237,83 @@ document.addEventListener('DOMContentLoaded', function() {
   var formFicheSortie = document.getElementById('formFicheSortie');
   if (formFicheSortie) {
     formFicheSortie.addEventListener('submit', function(e) {
+      e.preventDefault();
+      
       if (!idPontHidden.value) {
-        e.preventDefault();
         alert('Veuillez selectionner un pont valide dans la liste.');
         pontInput.focus();
         return false;
       }
       if (!idAgentHidden.value) {
-        e.preventDefault();
         alert('Veuillez selectionner un agent valide dans la liste.');
         agentInput.focus();
         return false;
       }
+
+      var formData = new FormData(formFicheSortie);
+      var submitBtn = formFicheSortie.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Enregistrement...';
+
+      fetch(formFicheSortie.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest'
+        }
+      })
+      .then(function(response) {
+        return response.json();
+      })
+      .then(function(data) {
+        if (data.success) {
+          // Fermer le modal de création
+          var modalFicheSortie = bootstrap.Modal.getInstance(document.getElementById('modalFicheSortie'));
+          if (modalFicheSortie) modalFicheSortie.hide();
+          
+          // Afficher le modal de succès
+          var successModal = new bootstrap.Modal(document.getElementById('modalSuccessFiche'));
+          successModal.show();
+          
+          // Rediriger après 2 secondes
+          setTimeout(function() {
+            window.location.href = '{{ route("fiches_sortie.index") }}';
+          }, 2000);
+        } else {
+          alert(data.message || 'Une erreur est survenue.');
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i class="bx bx-save"></i> Enregistrer la fiche';
+        }
+      })
+      .catch(function(error) {
+        alert('Une erreur est survenue lors de l\'enregistrement.');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="bx bx-save"></i> Enregistrer la fiche';
+      });
     });
   }
 });
 </script>
+
+<!-- Modal Succès Fiche -->
+<div class="modal fade" id="modalSuccessFiche" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content text-center">
+      <div class="modal-body py-5">
+        <div class="mb-4">
+          <i class="bx bx-check-circle text-success" style="font-size: 5rem;"></i>
+        </div>
+        <h4 class="text-success mb-3">Fiche créée avec succès !</h4>
+        <p class="text-muted mb-0">Vous allez être redirigé vers la liste des fiches de sortie...</p>
+        <div class="mt-3">
+          <div class="spinner-border spinner-border-sm text-primary" role="status">
+            <span class="visually-hidden">Chargement...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="modal fade" id="modalNouvelleDepense" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog" role="document">
