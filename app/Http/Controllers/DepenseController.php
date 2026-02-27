@@ -12,9 +12,37 @@ class DepenseController extends Controller
 {
     public function listeDepenses(Request $request)
     {
-        $depenses = Depense::orderBy('date_depense', 'desc')
+        $query = Depense::query();
+
+        // Filtre par véhicule
+        if ($request->filled('vehicule')) {
+            $query->where('matricule_vehicule', $request->input('vehicule'));
+        }
+
+        // Filtre par service
+        if ($request->filled('service')) {
+            $query->where('type_depense', $request->input('service'));
+        }
+
+        // Filtre par fournisseur
+        if ($request->filled('fournisseur')) {
+            $query->where('description', $request->input('fournisseur'));
+        }
+
+        // Filtre par date début
+        if ($request->filled('date_debut')) {
+            $query->whereDate('date_depense', '>=', $request->input('date_debut'));
+        }
+
+        // Filtre par date fin
+        if ($request->filled('date_fin')) {
+            $query->whereDate('date_depense', '<=', $request->input('date_fin'));
+        }
+
+        $depenses = $query->orderBy('date_depense', 'desc')
             ->orderBy('id', 'desc')
-            ->paginate(20);
+            ->paginate(20)
+            ->appends($request->query());
 
         // Récupérer les véhicules depuis l'API pour le formulaire d'ajout
         $vehicules = [];

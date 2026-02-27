@@ -9,6 +9,59 @@
       </button>
     </div>
 
+    <div class="card mb-3">
+      <div class="card-body">
+        <form method="GET" action="{{ route('depenses.liste') }}" class="row g-3 align-items-end">
+          <div class="col-md-3">
+            <label class="form-label">Véhicule</label>
+            <select name="vehicule" class="form-select">
+              <option value="">Tous les véhicules</option>
+              @foreach($vehicules ?? [] as $v)
+                <option value="{{ $v['matricule_vehicule'] }}" {{ request('vehicule') == $v['matricule_vehicule'] ? 'selected' : '' }}>
+                  {{ $v['matricule_vehicule'] }}
+                </option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Service</label>
+            <select name="service" class="form-select">
+              <option value="">Tous les services</option>
+              @foreach($services ?? [] as $service)
+                <option value="{{ $service->nom_service }}" {{ request('service') == $service->nom_service ? 'selected' : '' }}>
+                  {{ $service->nom_service }}
+                </option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Fournisseur</label>
+            <select name="fournisseur" class="form-select">
+              <option value="">Tous les fournisseurs</option>
+              @foreach($fournisseurs ?? [] as $fournisseur)
+                <option value="{{ $fournisseur->nom }}" {{ request('fournisseur') == $fournisseur->nom ? 'selected' : '' }}>
+                  {{ $fournisseur->nom }}
+                </option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Date début</label>
+            <input type="date" name="date_debut" class="form-control" value="{{ request('date_debut') }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Date fin</label>
+            <input type="date" name="date_fin" class="form-control" value="{{ request('date_fin') }}">
+          </div>
+          <div class="col-md-1">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="bx bx-search"></i>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div class="card">
       <div class="table-responsive text-nowrap">
         @if(!empty($external_error))

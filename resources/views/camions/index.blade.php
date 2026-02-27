@@ -6,6 +6,13 @@
       <h4 class="mb-0">Camions</h4>
     </div>
 
+    <div class="mb-3">
+      <div class="input-group" style="max-width: 400px;">
+        <span class="input-group-text"><i class="bx bx-search"></i></span>
+        <input type="text" id="searchCamion" class="form-control" placeholder="Rechercher par immatriculation...">
+      </div>
+    </div>
+
     <div class="card">
       <div class="table-responsive text-nowrap">
         @if(!empty($external_error))
@@ -137,4 +144,30 @@
     @endif
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var searchInput = document.getElementById('searchCamion');
+  var tableBody = document.querySelector('table tbody');
+  var rows = tableBody ? tableBody.querySelectorAll('tr') : [];
+
+  if (searchInput && rows.length > 0) {
+    searchInput.addEventListener('input', function() {
+      var searchTerm = this.value.toLowerCase().trim();
+      
+      rows.forEach(function(row) {
+        var matricule = row.querySelector('td:first-child');
+        if (matricule) {
+          var text = matricule.textContent.toLowerCase();
+          if (text.includes(searchTerm) || searchTerm === '') {
+            row.style.display = '';
+          } else {
+            row.style.display = 'none';
+          }
+        }
+      });
+    });
+  }
+});
+</script>
 @endsection
