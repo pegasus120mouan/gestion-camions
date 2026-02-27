@@ -204,10 +204,14 @@ Route::middleware('auth')->group(function () {
 
     // Montant Chef Chargeur
     Route::get('/gestion-financiere/montant-chef-chargeur', [MontantChefChargeurController::class, 'index'])->name('gestionfinanciere.montant_chef_chargeur');
+    Route::get('/gestion-financiere/chef-chargeur/{id}', [MontantChefChargeurController::class, 'show'])->name('gestionfinanciere.chef_chargeur.show');
+    Route::get('/gestion-financiere/chef-chargeur/{id}/pdf', [MontantChefChargeurController::class, 'exportPdf'])->name('gestionfinanciere.chef_chargeur.pdf');
     Route::post('/gestion-financiere/montant-chef-chargeur/{chefChargeur}/paiement', [MontantChefChargeurController::class, 'storePaiement'])->name('gestionfinanciere.paiement_chef_chargeur.store');
 
     // Montant Fournisseur
     Route::get('/gestion-financiere/montant-fournisseur', [MontantFournisseurController::class, 'index'])->name('gestionfinanciere.montant_fournisseur');
+    Route::get('/gestion-financiere/fournisseur/{nom}', [MontantFournisseurController::class, 'show'])->name('gestionfinanciere.fournisseur.show');
+    Route::get('/gestion-financiere/fournisseur/{nom}/pdf', [MontantFournisseurController::class, 'exportPdf'])->name('gestionfinanciere.fournisseur.pdf');
     Route::post('/gestion-financiere/montant-fournisseur/paiement', [MontantFournisseurController::class, 'storePaiement'])->name('gestionfinanciere.montant_fournisseur.paiement');
 
     // Services

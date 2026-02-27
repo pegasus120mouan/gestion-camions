@@ -33,7 +33,9 @@
             @forelse($data as $item)
               <tr>
                 <td>
-                  <strong>{{ $item['chef']->nom }} {{ $item['chef']->prenoms }}</strong>
+                  <a href="{{ route('gestionfinanciere.chef_chargeur.show', ['id' => $item['chef']->id]) }}" class="text-primary fw-bold">
+                    {{ $item['chef']->nom }} {{ $item['chef']->prenoms }}
+                  </a>
                 </td>
                 <td>{{ $item['chef']->contact ?? '-' }}</td>
                 <td class="text-end">

@@ -27,7 +27,11 @@
           <tbody class="table-border-bottom-0">
             @forelse($fournisseursData as $data)
               <tr>
-                <td><strong>{{ $data['fournisseur']->nom }}</strong></td>
+                <td>
+                  <a href="{{ route('gestionfinanciere.fournisseur.show', ['nom' => $data['fournisseur']->nom]) }}" class="text-primary fw-bold">
+                    {{ $data['fournisseur']->nom }}
+                  </a>
+                </td>
                 <td>
                   <span class="badge bg-primary">{{ $data['fournisseur']->service->nom_service ?? '-' }}</span>
                 </td>

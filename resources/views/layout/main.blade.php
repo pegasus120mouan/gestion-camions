@@ -132,7 +132,7 @@
             <!-- Layouts -->
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-layout"></i>
+                <i class="menu-icon tf-icons bx bx-layout" style="color: #7367f0;"></i>
                 <div class="text-truncate" data-i18n="Layouts">Chargement camions</div>
               </a>
 
@@ -157,7 +157,7 @@
 
              <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-map"></i>
+                <i class="menu-icon tf-icons bx bx-map" style="color: #00cfe8;"></i>
                 <div class="text-truncate" data-i18n="Weighbridges">Tickets</div>
               </a>
 
@@ -177,7 +177,7 @@
 
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-map"></i>
+                <i class="menu-icon tf-icons bx bx-map" style="color: #28c76f;"></i>
                 <div class="text-truncate" data-i18n="Weighbridges">Gestion ponts PGF</div>
               </a>
 
@@ -198,7 +198,7 @@
 
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-map"></i>
+                <i class="menu-icon tf-icons bx bx-map" style="color: #ff9f43;"></i>
                 <div class="text-truncate" data-i18n="Weighbridges">Gestion Stocks PGF</div>
               </a>
 
@@ -225,7 +225,7 @@
             <!-- Front Pages -->
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-store"></i>
+                <i class="menu-icon tf-icons bx bx-store" style="color: #ea5455;"></i>
                 <div class="text-truncate" data-i18n="Front Pages">Pesage</div>
                 <div class="badge rounded-pill bg-label-primary text-uppercase fs-tiny ms-auto">{{ $peseesTodayCount }}</div>
               </a>
@@ -245,7 +245,7 @@
 
              <li class="menu-item">
               <a href="javascript:void(0)" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-box"></i>
+                <i class="menu-icon tf-icons bx bx-box" style="color: #28c76f;"></i>
                 <div class="text-truncate" data-i18n="User interface">Gestion financière</div>
               </a>
               <ul class="menu-sub">
@@ -363,25 +363,25 @@
             </li>
            <li class="menu-item">
               <a href="{{ route('agents.index') }}" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-user"></i>
+                <i class="menu-icon tf-icons bx bx-user" style="color: #7367f0;"></i>
                 <div class="text-truncate" data-i18n="Agents">Agents</div>
               </a>
             </li>
             <li class="menu-item">
               <a href="{{ route('chef_chargeurs.index') }}" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-user-check"></i>
+                <i class="menu-icon tf-icons bx bx-user-check" style="color: #00cfe8;"></i>
                 <div class="text-truncate" data-i18n="ChefChargeurs">Chef des chargeurs</div>
               </a>
             </li>
             <li class="menu-item">
               <a href="{{ route('chargeurs.index') }}" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-group"></i>
+                <i class="menu-icon tf-icons bx bx-group" style="color: #ff9f43;"></i>
                 <div class="text-truncate" data-i18n="Chargeurs">Chargeurs</div>
               </a>
             </li>
             <li class="menu-item">
               <a href="{{ route('planteurs.index') }}" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-leaf"></i>
+                <i class="menu-icon tf-icons bx bx-leaf" style="color: #28c76f;"></i>
                 <div class="text-truncate" data-i18n="Planteurs">Planteurs</div>
               </a>
             </li>
@@ -389,13 +389,13 @@
 
            <li class="menu-item">
               <a href="{{ route('financements.index') }}" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-money"></i>
+                <i class="menu-icon tf-icons bx bx-money" style="color: #ea5455;"></i>
                 <div class="text-truncate" data-i18n="Financements">Financements</div>
               </a>
             </li>
             <li class="menu-item">
               <a href="{{ route('usines.index') }}" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-building"></i>
+                <i class="menu-icon tf-icons bx bx-building" style="color: #82868b;"></i>
                 <div class="text-truncate" data-i18n="Usines">Usines</div>
               </a>
             </li>
@@ -435,7 +435,7 @@
             </li>-->
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-lock-open-alt"></i>
+                <i class="menu-icon tf-icons bx bx-lock-open-alt" style="color: #7367f0;"></i>
                 <div class="text-truncate" data-i18n="Authentications">Utilisateurs</div>
               </a>
               <ul class="menu-sub">
@@ -474,7 +474,7 @@
 
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-lock-open-alt"></i>
+                <i class="menu-icon tf-icons bx bx-lock-open-alt" style="color: #ff9f43;"></i>
                 <div class="text-truncate" data-i18n="Authentications">Fournisseurs</div>
               </a>
               <ul class="menu-sub">

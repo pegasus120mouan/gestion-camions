@@ -21333,7 +21333,7 @@ li:not(:first-child) .dropdown-item, .dropdown-menu .dropdown-item:not(:first-ch
   --bs-menu-horizontal-active-bg: var(--bs-menu-bg);
   --bs-menu-box-shadow: 0 0.125rem 0.375rem 0 rgba(34, 48, 62, 0.08);
   --bs-menu-divider-color: var(--bs-white);
-  --bs-menu-width: 16.25rem;
+  --bs-menu-width: 20rem;
   --bs-menu-collapsed-width: 5.25rem;
   --bs-menu-item-spacer: 0.125rem;
   --bs-menu-vertical-link-padding-y: 0.3125rem;
@@ -22697,7 +22697,7 @@ html:not(.layout-footer-fixed) .content-wrapper {
   .layout-menu-fixed.layout-navbar-fixed:not(.layout-menu-collapsed) .modal-open .layout-content-navbar:not(.layout-without-menu) .layout-navbar,
   .layout-menu-fixed-offcanvas.layout-navbar-fixed:not(.layout-menu-collapsed).swal2-shown .layout-content-navbar:not(.layout-without-menu) .layout-navbar,
   .layout-menu-fixed-offcanvas.layout-navbar-fixed:not(.layout-menu-collapsed) .modal-open .layout-content-navbar:not(.layout-without-menu) .layout-navbar {
-    inset-inline-start: calc(16.25rem - var(--bs-scrollbar-width));
+    inset-inline-start: calc(20rem - var(--bs-scrollbar-width));
   }
   /* Horizontal Layout when menu fixed */
   .layout-menu-fixed.swal2-shown .layout-horizontal .layout-navbar,
@@ -22763,7 +22763,7 @@ html:not(.layout-footer-fixed) .content-wrapper {
     inset-inline-start: var(--bs-menu-width);
   }
   .layout-footer-fixed:not(.layout-menu-collapsed).swal2-shown .layout-wrapper .content-footer:has(.container-fluid, .container-sm, .container-md, .container-lg, .container-xl, .container-xxl), .layout-footer-fixed:not(.layout-menu-collapsed) .modal-open .layout-wrapper .content-footer:has(.container-fluid, .container-sm, .container-md, .container-lg, .container-xl, .container-xxl) {
-    inline-size: calc(100% - 16.25rem - var(--bs-scrollbar-width));
+    inline-size: calc(100% - 20rem - var(--bs-scrollbar-width));
   }
   /* Fixed footer - Menu collapsed */
   .layout-footer-fixed.layout-menu-collapsed:not(.layout-menu-offcanvas, .layout-menu-fixed-offcanvas) .layout-wrapper:not(.layout-without-menu) .content-footer {

@@ -7,6 +7,7 @@ use App\Models\FicheSortie;
 use App\Models\PaiementChefChargeur;
 use App\Models\ChefChargeurPrix;
 use Illuminate\Http\Request;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class MontantChefChargeurController extends Controller
 {
@@ -80,5 +81,111 @@ class MontantChefChargeurController extends Controller
 
         return redirect()->route('gestionfinanciere.montant_chef_chargeur')
             ->with('success', 'Paiement enregistré avec succès.');
+    }
+
+    public function show($id)
+    {
+        $chef = ChefChargeur::findOrFail($id);
+        
+        $montantDu = $this->calculerMontantDu($chef);
+        $paiements = $chef->paiements()->orderBy('date_paiement', 'desc')->get();
+        $montantPaye = $paiements->sum('montant');
+        $resteAPayer = $montantDu - $montantPaye;
+
+        // Récupérer les fiches de sortie pour le détail
+        $fiches = FicheSortie::where('id_chef_chargeur', $chef->id)
+            ->whereNotNull('poids_pont')
+            ->whereNotNull('date_chargement')
+            ->orderBy('date_chargement', 'desc')
+            ->get();
+
+        // Calculer le montant pour chaque fiche
+        $fichesAvecMontant = [];
+        foreach ($fiches as $fiche) {
+            $prixPeriode = ChefChargeurPrix::where('id_chef_chargeur', $chef->id)
+                ->where('date_debut', '<=', $fiche->date_chargement)
+                ->where(function ($query) use ($fiche) {
+                    $query->whereNull('date_fin')
+                          ->orWhere('date_fin', '>=', $fiche->date_chargement);
+                })
+                ->first();
+
+            $montant = $prixPeriode ? $prixPeriode->prix_unitaire * (float) $fiche->poids_pont : 0;
+            
+            $fichesAvecMontant[] = [
+                'fiche' => $fiche,
+                'montant' => $montant,
+            ];
+        }
+
+        return view('gestion_financiere.chef_chargeur_detail', [
+            'chef' => $chef,
+            'fichesAvecMontant' => $fichesAvecMontant,
+            'paiements' => $paiements,
+            'montantDu' => $montantDu,
+            'montantPaye' => $montantPaye,
+            'resteAPayer' => $resteAPayer,
+        ]);
+    }
+
+    public function exportPdf(Request $request, $id)
+    {
+        $chef = ChefChargeur::findOrFail($id);
+        $dateDebut = $request->input('date_debut');
+        $dateFin = $request->input('date_fin');
+
+        // Récupérer les fiches de sortie filtrées par date
+        $fichesQuery = FicheSortie::where('id_chef_chargeur', $chef->id)
+            ->whereNotNull('poids_pont')
+            ->whereNotNull('date_chargement');
+        
+        if ($dateDebut && $dateFin) {
+            $fichesQuery->whereBetween('date_chargement', [$dateDebut, $dateFin]);
+        }
+        
+        $fiches = $fichesQuery->orderBy('date_chargement', 'desc')->get();
+
+        // Calculer le montant pour chaque fiche
+        $fichesAvecMontant = [];
+        $montantDu = 0;
+        foreach ($fiches as $fiche) {
+            $prixPeriode = ChefChargeurPrix::where('id_chef_chargeur', $chef->id)
+                ->where('date_debut', '<=', $fiche->date_chargement)
+                ->where(function ($query) use ($fiche) {
+                    $query->whereNull('date_fin')
+                          ->orWhere('date_fin', '>=', $fiche->date_chargement);
+                })
+                ->first();
+
+            $montant = $prixPeriode ? $prixPeriode->prix_unitaire * (float) $fiche->poids_pont : 0;
+            $montantDu += $montant;
+            
+            $fichesAvecMontant[] = [
+                'fiche' => $fiche,
+                'montant' => $montant,
+            ];
+        }
+
+        // Récupérer les paiements filtrés par date
+        $paiementsQuery = $chef->paiements();
+        if ($dateDebut && $dateFin) {
+            $paiementsQuery->whereBetween('date_paiement', [$dateDebut, $dateFin]);
+        }
+        $paiements = $paiementsQuery->orderBy('date_paiement', 'desc')->get();
+        $montantPaye = $paiements->sum('montant');
+        $resteAPayer = $montantDu - $montantPaye;
+
+        $pdf = Pdf::loadView('gestion_financiere.chef_chargeur_pdf', [
+            'chef' => $chef,
+            'fichesAvecMontant' => $fichesAvecMontant,
+            'paiements' => $paiements,
+            'montantDu' => $montantDu,
+            'montantPaye' => $montantPaye,
+            'resteAPayer' => $resteAPayer,
+            'dateDebut' => $dateDebut,
+            'dateFin' => $dateFin,
+        ]);
+
+        return $pdf->download('historique_' . str_replace(' ', '_', $chef->nom . '_' . $chef->prenoms) . '_' . date('Y-m-d') . '.pdf');
     }
 }

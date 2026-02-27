@@ -38,7 +38,7 @@
                 </td>
                 <td>
                   @if($d->description)
-                    <a href="{{ route('fournisseurs.index') }}" class="text-primary">{{ $d->description }}</a>
+                    <a href="{{ route('gestionfinanciere.fournisseur.show', ['nom' => $d->description]) }}" class="text-primary">{{ $d->description }}</a>
                   @else
                     -
                   @endif
