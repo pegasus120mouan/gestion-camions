@@ -6,13 +6,6 @@
       <h4 class="mb-0">Camions</h4>
     </div>
 
-    <form method="GET" action="{{ route('camions.index') }}" class="mb-4">
-      <div class="input-group">
-        <input type="text" name="q" class="form-control" placeholder="Rechercher (immatriculation, type)" value="{{ request('q') }}" />
-        <button class="btn btn-outline-secondary" type="submit">Rechercher</button>
-      </div>
-    </form>
-
     <div class="card">
       <div class="table-responsive text-nowrap">
         @if(!empty($external_error))
