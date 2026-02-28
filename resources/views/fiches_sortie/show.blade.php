@@ -178,7 +178,7 @@
                   @if($paiementChargeur)
                     <strong class="text-success">{{ number_format($paiementChargeur, 0, ',', ' ') }} FCFA</strong>
                     @if(isset($prixUnitaireChargeur))
-                      <br><small class="text-muted">({{ number_format($prixUnitaireChargeur, 0, ',', ' ') }} × {{ number_format((float)$fiche->poids_pont, 0, ',', ' ') }} kg)</small>
+                      <br><small class="text-muted">({{ number_format($prixUnitaireChargeur, 0, ',', ' ') }} × {{ number_format((float)$fiche->poids_pont / 1000, 2, ',', ' ') }} T)</small>
                     @endif
                   @else
                     <span class="text-muted">-</span>

@@ -60,7 +60,9 @@ class MontantChefChargeurController extends Controller
                 ->first();
 
             if ($prixPeriode) {
-                $total += $prixPeriode->prix_unitaire * (float) $fiche->poids_pont;
+                // Convertir kg en tonnes (diviser par 1000)
+                $poidsEnTonnes = (float) $fiche->poids_pont / 1000;
+                $total += $prixPeriode->prix_unitaire * $poidsEnTonnes;
             }
         }
 
@@ -110,7 +112,9 @@ class MontantChefChargeurController extends Controller
                 })
                 ->first();
 
-            $montant = $prixPeriode ? $prixPeriode->prix_unitaire * (float) $fiche->poids_pont : 0;
+            // Convertir kg en tonnes (diviser par 1000)
+            $poidsEnTonnes = (float) $fiche->poids_pont / 1000;
+            $montant = $prixPeriode ? $prixPeriode->prix_unitaire * $poidsEnTonnes : 0;
             
             $fichesAvecMontant[] = [
                 'fiche' => $fiche,
@@ -157,7 +161,9 @@ class MontantChefChargeurController extends Controller
                 })
                 ->first();
 
-            $montant = $prixPeriode ? $prixPeriode->prix_unitaire * (float) $fiche->poids_pont : 0;
+            // Convertir kg en tonnes (diviser par 1000)
+            $poidsEnTonnes = (float) $fiche->poids_pont / 1000;
+            $montant = $prixPeriode ? $prixPeriode->prix_unitaire * $poidsEnTonnes : 0;
             $montantDu += $montant;
             
             $fichesAvecMontant[] = [

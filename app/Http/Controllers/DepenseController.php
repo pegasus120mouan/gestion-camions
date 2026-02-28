@@ -662,7 +662,9 @@ class DepenseController extends Controller
 
                 if ($prixPeriode) {
                     $prixUnitaireChargeur = $prixPeriode->prix_unitaire;
-                    $paiementChargeur = $prixUnitaireChargeur * (float) $ficheSortie->poids_pont;
+                    // Convertir kg en tonnes (diviser par 1000)
+                    $poidsEnTonnes = (float) $ficheSortie->poids_pont / 1000;
+                    $paiementChargeur = $prixUnitaireChargeur * $poidsEnTonnes;
                 }
             }
         }
