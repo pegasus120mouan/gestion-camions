@@ -115,6 +115,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/vehicules/{vehicule_id}/depenses', [DepenseController::class, 'index'])->name('vehicules.depenses');
     Route::post('/vehicules/{vehicule_id}/depenses', [DepenseController::class, 'store'])->name('vehicules.depenses.store');
+    Route::put('/depenses/{depense}', [DepenseController::class, 'update'])->name('depenses.update');
+    Route::delete('/depenses/{depense}', [DepenseController::class, 'destroy'])->name('depenses.destroy');
     Route::get('/vehicules/{vehicule_id}/fiche-sortie', [DepenseController::class, 'ficheSortie'])->name('vehicules.fiche_sortie');
     Route::post('/vehicules/{vehicule_id}/fiche-sortie', [DepenseController::class, 'storeFicheSortie'])->name('vehicules.fiche_sortie.store');
 

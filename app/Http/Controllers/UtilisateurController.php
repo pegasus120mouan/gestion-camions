@@ -94,6 +94,8 @@ class UtilisateurController extends Controller
 
         if ($request->hasFile('avatar')) {
             $user->avatar = $request->file('avatar')->store('avatars', 'public');
+        } else {
+            $user->avatar = 'user.png';
         }
 
         $user->save();
@@ -145,8 +147,16 @@ class UtilisateurController extends Controller
     {
         abort_unless($utilisateur->id !== auth()->id(), 422);
 
+        // Vérifier si l'utilisateur est lié à des pesées
+        $hasPesees = \App\Models\Pesee::where('agent_id', $utilisateur->id)->exists();
+        
+        if ($hasPesees) {
+            return redirect()->route('utilisateurs.index')
+                ->with('error', 'Impossible de supprimer cet utilisateur car il est lié à des pesées.');
+        }
+
         $utilisateur->delete();
 
-        return redirect()->route('utilisateurs.index');
+        return redirect()->route('utilisateurs.index')->with('success', 'Utilisateur supprimé avec succès.');
     }
 }

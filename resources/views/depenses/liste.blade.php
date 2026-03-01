@@ -176,6 +176,10 @@
             <input type="number" name="montant" class="form-control" required min="0" step="1">
           </div>
           <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea name="commentaire" class="form-control" rows="2" placeholder="Description de la dépense..."></textarea>
+          </div>
+          <div class="mb-3">
             <label class="form-label">Date</label>
             <input type="date" name="date_depense" class="form-control" required value="{{ date('Y-m-d') }}">
           </div>

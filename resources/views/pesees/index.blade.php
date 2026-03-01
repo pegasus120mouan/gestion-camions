@@ -131,13 +131,9 @@
                       </button>
                     </form>
                   @endif
-                  <form class="d-inline" method="POST" action="{{ route('pesees.destroy', $p) }}" onsubmit="return confirm('Supprimer cette pesée ?');">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer">
+                  <button type="button" class="btn btn-sm btn-outline-danger" title="Supprimer" data-bs-toggle="modal" data-bs-target="#modalDeletePesee{{ $p->id }}">
                       <i class="bx bx-trash"></i>
                     </button>
-                  </form>
                 </td>
               </tr>
             @empty
@@ -450,4 +446,45 @@
     </script>
   </div>
 </div>
+
+@foreach($pesees as $p)
+<!-- Modal Supprimer Pesée -->
+<div class="modal fade" id="modalDeletePesee{{ $p->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title text-white">
+          <i class="bx bx-error-circle me-2"></i>Confirmer la suppression
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center py-4">
+        <div class="mb-3">
+          <i class="bx bx-trash text-danger" style="font-size: 4rem;"></i>
+        </div>
+        <h5 class="mb-3">Êtes-vous sûr de vouloir supprimer cette pesée ?</h5>
+        <div class="bg-light rounded p-3 mb-3">
+          <p class="mb-1"><strong>Date:</strong> {{ $p->created_at ? $p->created_at->format('d/m/Y H:i') : '-' }}</p>
+          <p class="mb-1"><strong>Pont:</strong> {{ $p->pont->code ?? '-' }}</p>
+          <p class="mb-1"><strong>Produit:</strong> {{ $p->produit->nom ?? '-' }}</p>
+          <p class="mb-0"><strong>Poids net:</strong> {{ number_format($p->poids_net ?? 0, 0, ',', ' ') }} kg</p>
+        </div>
+        <p class="text-danger mb-0"><i class="bx bx-info-circle me-1"></i>Cette action est irréversible.</p>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+          <i class="bx bx-x me-1"></i>Annuler
+        </button>
+        <form method="POST" action="{{ route('pesees.destroy', $p) }}" class="d-inline">
+          @csrf
+          @method('DELETE')
+          <button type="submit" class="btn btn-danger">
+            <i class="bx bx-trash me-1"></i>Supprimer
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+@endforeach
 @endsection

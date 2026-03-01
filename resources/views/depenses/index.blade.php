@@ -34,8 +34,10 @@
             <tr>
               <th>Type</th>
               <th>Fournisseur</th>
+              <th>Description</th>
               <th>Montant</th>
               <th>Date</th>
+              <th class="text-center">Actions</th>
             </tr>
           </thead>
           <tbody class="table-border-bottom-0">
@@ -58,16 +60,25 @@
                   @endif
                 </td>
                 <td>{{ $d->description ?? '-' }}</td>
+                <td>{{ $d->commentaire ?? '-' }}</td>
                 <td>{{ number_format((float)($d->montant ?? 0), 0, ',', ' ') }} FCFA</td>
                 <td>
                   @if($d->date_depense)
                     {{ $d->date_depense->format('d-m-Y') }}
                   @endif
                 </td>
+                <td class="text-center">
+                  <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditDepense{{ $d->id }}">
+                    <i class="bx bx-edit"></i>
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalDeleteDepense{{ $d->id }}">
+                    <i class="bx bx-trash"></i>
+                  </button>
+                </td>
               </tr>
             @empty
               <tr>
-                <td colspan="4" class="text-center">Aucune depense</td>
+                <td colspan="6" class="text-center">Aucune depense</td>
               </tr>
             @endforelse
           </tbody>
@@ -352,6 +363,11 @@ document.addEventListener('DOMContentLoaded', function() {
           </div>
 
           <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea name="commentaire" class="form-control" rows="2" placeholder="Description de la dépense..."></textarea>
+          </div>
+
+          <div class="mb-3">
             <label class="form-label">Date</label>
             <input type="date" name="date_depense" class="form-control" value="{{ date('Y-m-d') }}" required />
             @error('date_depense')<div class="text-danger mt-1">{{ $message }}</div>@enderror
@@ -434,4 +450,86 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 </script>
+
+@foreach($depenses as $d)
+<!-- Modal Modifier Dépense -->
+<div class="modal fade" id="modalEditDepense{{ $d->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-edit me-2"></i>Modifier la dépense</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form action="{{ route('depenses.update', $d->id) }}" method="POST">
+        @csrf
+        @method('PUT')
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Type de dépense</label>
+            <select name="type_depense" class="form-select" required>
+              @foreach($services ?? [] as $service)
+                <option value="{{ $service->nom_service }}" {{ $d->type_depense == $service->nom_service ? 'selected' : '' }}>{{ $service->nom_service }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Fournisseur</label>
+            <select name="description" class="form-select">
+              <option value="">-- Aucun --</option>
+              @foreach($fournisseurs ?? [] as $fournisseur)
+                <option value="{{ $fournisseur->nom }}" {{ $d->description == $fournisseur->nom ? 'selected' : '' }}>{{ $fournisseur->nom }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Montant (FCFA)</label>
+            <input type="number" name="montant" class="form-control" required min="0" value="{{ (int)$d->montant }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <textarea name="commentaire" class="form-control" rows="2">{{ $d->commentaire }}</textarea>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Date</label>
+            <input type="date" name="date_depense" class="form-control" required value="{{ $d->date_depense ? $d->date_depense->format('Y-m-d') : '' }}">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary"><i class="bx bx-save me-1"></i>Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Supprimer Dépense -->
+<div class="modal fade" id="modalDeleteDepense{{ $d->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-trash me-2"></i>Supprimer la dépense</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p>Êtes-vous sûr de vouloir supprimer cette dépense ?</p>
+        <ul>
+          <li><strong>Type:</strong> {{ $d->type_depense }}</li>
+          <li><strong>Montant:</strong> {{ number_format((float)$d->montant, 0, ',', ' ') }} FCFA</li>
+          <li><strong>Date:</strong> {{ $d->date_depense ? $d->date_depense->format('d/m/Y') : '-' }}</li>
+        </ul>
+        <p class="text-danger"><strong>Cette action est irréversible.</strong></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+        <form action="{{ route('depenses.destroy', $d->id) }}" method="POST" class="d-inline">
+          @csrf
+          @method('DELETE')
+          <button type="submit" class="btn btn-danger"><i class="bx bx-trash me-1"></i>Supprimer</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+@endforeach
 @endsection

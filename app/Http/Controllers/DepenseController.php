@@ -223,6 +223,7 @@ class DepenseController extends Controller
             'type_depense' => ['required', 'string', 'max:100'],
             'matricule_vehicule' => ['required', 'string', 'max:50'],
             'description' => ['nullable', 'string', 'max:500'],
+            'commentaire' => ['nullable', 'string'],
             'montant' => ['required', 'numeric', 'min:0'],
             'date_depense' => ['required', 'date'],
         ]);
@@ -232,11 +233,40 @@ class DepenseController extends Controller
             'matricule_vehicule' => $validated['matricule_vehicule'],
             'type_depense' => $validated['type_depense'],
             'description' => $validated['description'] ?? '',
+            'commentaire' => $validated['commentaire'] ?? '',
             'montant' => $validated['montant'],
             'date_depense' => $validated['date_depense'],
         ]);
 
         return back()->with('success', 'Dépense enregistrée avec succès.');
+    }
+
+    public function update(Request $request, Depense $depense)
+    {
+        $validated = $request->validate([
+            'type_depense' => ['required', 'string', 'max:100'],
+            'description' => ['nullable', 'string', 'max:500'],
+            'commentaire' => ['nullable', 'string'],
+            'montant' => ['required', 'numeric', 'min:0'],
+            'date_depense' => ['required', 'date'],
+        ]);
+
+        $depense->update([
+            'type_depense' => $validated['type_depense'],
+            'description' => $validated['description'] ?? '',
+            'commentaire' => $validated['commentaire'] ?? '',
+            'montant' => $validated['montant'],
+            'date_depense' => $validated['date_depense'],
+        ]);
+
+        return back()->with('success', 'Dépense modifiée avec succès.');
+    }
+
+    public function destroy(Depense $depense)
+    {
+        $depense->delete();
+
+        return back()->with('success', 'Dépense supprimée avec succès.');
     }
 
     public function ficheSortie(Request $request, int $vehiculeId)
@@ -621,6 +651,7 @@ class DepenseController extends Controller
             'matricule_vehicule' => ['required', 'string', 'max:50'],
             'type_depense' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:500'],
+            'commentaire' => ['nullable', 'string'],
             'montant' => ['required', 'numeric', 'min:0'],
             'date_depense' => ['required', 'date'],
         ]);
@@ -630,6 +661,7 @@ class DepenseController extends Controller
             'matricule_vehicule' => $validated['matricule_vehicule'],
             'type_depense' => $validated['type_depense'],
             'description' => $validated['description'] ?? '',
+            'commentaire' => $validated['commentaire'] ?? '',
             'montant' => $validated['montant'],
             'date_depense' => $validated['date_depense'],
         ]);

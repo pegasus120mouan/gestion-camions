@@ -20,6 +20,20 @@
       </div>
     @endif
 
+    @if (session('success'))
+      <div class="alert alert-success alert-dismissible fade show">
+        <i class="bx bx-check-circle me-1"></i>{{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
+    @if (session('error'))
+      <div class="alert alert-danger alert-dismissible fade show">
+        <i class="bx bx-error-circle me-1"></i>{{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
     <div class="card">
       <div class="table-responsive text-nowrap">
         <table class="table">
@@ -50,12 +64,12 @@
                 <td>{{ $u->matricule }}</td>
                 <td>{{ $u->role }}</td>
                 <td class="text-end">
-                  <a class="btn btn-sm btn-outline-primary" href="{{ route('utilisateurs.edit', $u) }}">Modifier</a>
-                  <form class="d-inline" method="POST" action="{{ route('utilisateurs.destroy', $u) }}" onsubmit="return confirm('Supprimer cet utilisateur ?');">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
-                  </form>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ route('utilisateurs.edit', $u) }}" title="Modifier">
+                    <i class="bx bx-edit"></i>
+                  </a>
+                  <button type="button" class="btn btn-sm btn-outline-danger" title="Supprimer" data-bs-toggle="modal" data-bs-target="#modalDeleteUser{{ $u->id }}">
+                    <i class="bx bx-trash"></i>
+                  </button>
                 </td>
               </tr>
             @empty
@@ -109,19 +123,7 @@
                 </div>
               </div>
 
-              <div class="row">
-                <div class="col-md-6 mb-3">
-                  <label class="form-label">Matricule</label>
-                  <input type="text" name="matricule" class="form-control" value="{{ old('matricule') }}" />
-                  @error('matricule')<div class="text-danger mt-1">{{ $message }}</div>@enderror
-                </div>
-                <div class="col-md-6 mb-3">
-                  <label class="form-label">Avatar</label>
-                  <input type="file" name="avatar" class="form-control" accept="image/*" />
-                  @error('avatar')<div class="text-danger mt-1">{{ $message }}</div>@enderror
-                </div>
-              </div>
-
+              
               <div class="row">
                 <div class="col-md-6 mb-3">
                   <label class="form-label">Rôle</label>
@@ -137,12 +139,24 @@
               <div class="row">
                 <div class="col-md-6 mb-3">
                   <label class="form-label">Mot de passe</label>
-                  <input type="password" name="password" class="form-control" required />
+                  <div class="input-group">
+                    <input type="password" name="password" id="password" class="form-control" required />
+                    <button type="button" class="btn btn-outline-secondary" onclick="togglePassword('password', 'eyeIcon1')">
+                      <i class="bx bx-hide" id="eyeIcon1"></i>
+                    </button>
+                  </div>
+                  <div id="passwordStrength" class="mt-1"></div>
                   @error('password')<div class="text-danger mt-1">{{ $message }}</div>@enderror
                 </div>
                 <div class="col-md-6 mb-3">
                   <label class="form-label">Confirmer mot de passe</label>
-                  <input type="password" name="password_confirmation" class="form-control" required />
+                  <div class="input-group">
+                    <input type="password" name="password_confirmation" id="password_confirmation" class="form-control" required />
+                    <button type="button" class="btn btn-outline-secondary" onclick="togglePassword('password_confirmation', 'eyeIcon2')">
+                      <i class="bx bx-hide" id="eyeIcon2"></i>
+                    </button>
+                  </div>
+                  <div id="passwordMatch" class="mt-1"></div>
                 </div>
               </div>
 
@@ -168,4 +182,124 @@
     @endif
   </div>
 </div>
+
+@foreach($utilisateurs as $u)
+<!-- Modal Supprimer Utilisateur -->
+<div class="modal fade" id="modalDeleteUser{{ $u->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title text-white">
+          <i class="bx bx-error-circle me-2"></i>Confirmer la suppression
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center py-4">
+        <div class="mb-3">
+          <i class="bx bx-user-x text-danger" style="font-size: 4rem;"></i>
+        </div>
+        <h5 class="mb-3">Êtes-vous sûr de vouloir supprimer cet utilisateur ?</h5>
+        <div class="bg-light rounded p-3 mb-3">
+          <p class="mb-1"><strong>Nom:</strong> {{ $u->name }} {{ $u->prenom }}</p>
+          <p class="mb-1"><strong>Login:</strong> {{ $u->login }}</p>
+          <p class="mb-0"><strong>Rôle:</strong> <span class="badge bg-secondary">{{ $u->role }}</span></p>
+        </div>
+        <p class="text-danger mb-0"><i class="bx bx-info-circle me-1"></i>Cette action est irréversible.</p>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+          <i class="bx bx-x me-1"></i>Annuler
+        </button>
+        <form method="POST" action="{{ route('utilisateurs.destroy', $u) }}" class="d-inline">
+          @csrf
+          @method('DELETE')
+          <button type="submit" class="btn btn-danger">
+            <i class="bx bx-trash me-1"></i>Supprimer
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+@endforeach
+
+<script>
+function togglePassword(inputId, iconId) {
+  var input = document.getElementById(inputId);
+  var icon = document.getElementById(iconId);
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.classList.remove('bx-hide');
+    icon.classList.add('bx-show');
+  } else {
+    input.type = 'password';
+    icon.classList.remove('bx-show');
+    icon.classList.add('bx-hide');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var passwordInput = document.getElementById('password');
+  var confirmInput = document.getElementById('password_confirmation');
+  var strengthDiv = document.getElementById('passwordStrength');
+  var matchDiv = document.getElementById('passwordMatch');
+
+  function checkPasswordStrength(password) {
+    var strength = 0;
+    if (password.length >= 6) strength++;
+    if (password.length >= 8) strength++;
+    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
+    if (/\d/.test(password)) strength++;
+    if (/[^a-zA-Z0-9]/.test(password)) strength++;
+    return strength;
+  }
+
+  function updateStrengthIndicator() {
+    var password = passwordInput.value;
+    if (password.length === 0) {
+      strengthDiv.innerHTML = '';
+      return;
+    }
+    var strength = checkPasswordStrength(password);
+    var text = '';
+    var color = '';
+    if (strength <= 1) {
+      text = '<i class="bx bx-x-circle"></i> Faible';
+      color = 'text-danger';
+    } else if (strength <= 3) {
+      text = '<i class="bx bx-minus-circle"></i> Moyen';
+      color = 'text-warning';
+    } else {
+      text = '<i class="bx bx-check-circle"></i> Fort';
+      color = 'text-success';
+    }
+    strengthDiv.innerHTML = '<small class="' + color + '">' + text + '</small>';
+  }
+
+  function checkPasswordMatch() {
+    var password = passwordInput.value;
+    var confirm = confirmInput.value;
+    if (confirm.length === 0) {
+      matchDiv.innerHTML = '';
+      return;
+    }
+    if (password === confirm) {
+      matchDiv.innerHTML = '<small class="text-success"><i class="bx bx-check-circle"></i> Les mots de passe correspondent</small>';
+    } else {
+      matchDiv.innerHTML = '<small class="text-danger"><i class="bx bx-x-circle"></i> Les mots de passe ne correspondent pas</small>';
+    }
+  }
+
+  if (passwordInput) {
+    passwordInput.addEventListener('input', function() {
+      updateStrengthIndicator();
+      checkPasswordMatch();
+    });
+  }
+
+  if (confirmInput) {
+    confirmInput.addEventListener('input', checkPasswordMatch);
+  }
+});
+</script>
 @endsection

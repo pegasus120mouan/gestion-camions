@@ -16,6 +16,7 @@ class Depense extends Model
         'matricule_vehicule',
         'type_depense',
         'description',
+        'commentaire',
         'montant',
         'date_depense',
     ];
