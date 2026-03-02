@@ -32,17 +32,22 @@
         <table class="table">
           <thead>
             <tr>
+              <th>Date</th>
               <th>Type</th>
               <th>Fournisseur</th>
               <th>Description</th>
               <th>Montant</th>
-              <th>Date</th>
               <th class="text-center">Actions</th>
             </tr>
           </thead>
           <tbody class="table-border-bottom-0">
             @forelse($depenses as $d)
               <tr>
+                <td>
+                  @if($d->date_depense)
+                    {{ $d->date_depense->format('d-m-Y') }}
+                  @endif
+                </td>
                 <td>
                   @php
                     $type = $d->type_depense ?? '';
@@ -62,11 +67,6 @@
                 <td>{{ $d->description ?? '-' }}</td>
                 <td>{{ $d->commentaire ?? '-' }}</td>
                 <td>{{ number_format((float)($d->montant ?? 0), 0, ',', ' ') }} FCFA</td>
-                <td>
-                  @if($d->date_depense)
-                    {{ $d->date_depense->format('d-m-Y') }}
-                  @endif
-                </td>
                 <td class="text-center">
                   <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditDepense{{ $d->id }}">
                     <i class="bx bx-edit"></i>

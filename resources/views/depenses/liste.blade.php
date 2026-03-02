@@ -71,16 +71,21 @@
         <table class="table">
           <thead>
             <tr>
+              <th>Date</th>
               <th>Vehicule</th>
               <th>Service</th>
               <th>Fournisseur</th>
               <th>Montant</th>
-              <th>Date</th>
             </tr>
           </thead>
           <tbody class="table-border-bottom-0">
             @forelse($depenses as $d)
               <tr>
+                <td>
+                  @if($d->date_depense)
+                    {{ $d->date_depense->format('d-m-Y') }}
+                  @endif
+                </td>
                 <td>
                   <a href="{{ route('vehicules.depenses', ['vehicule_id' => $d->vehicule_id, 'matricule' => $d->matricule_vehicule]) }}">
                     {{ $d->matricule_vehicule }}
@@ -97,11 +102,6 @@
                   @endif
                 </td>
                 <td>{{ number_format((float)($d->montant ?? 0), 0, ',', ' ') }} FCFA</td>
-                <td>
-                  @if($d->date_depense)
-                    {{ $d->date_depense->format('d-m-Y') }}
-                  @endif
-                </td>
               </tr>
             @empty
               <tr>
