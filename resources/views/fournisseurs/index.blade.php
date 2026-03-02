@@ -38,7 +38,7 @@
               <tr>
                 <td><strong>{{ $fournisseur->nom }}</strong></td>
                 <td>
-                  <span class="badge bg-label-info">{{ $fournisseur->service->nom_service ?? '-' }}</span>
+                  <span class="badge bg-label-info d-inline-block text-center" style="min-width: 120px;">{{ $fournisseur->service->nom_service ?? '-' }}</span>
                 </td>
                 <td>
                   <div class="d-flex gap-1">
