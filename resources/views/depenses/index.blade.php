@@ -53,15 +53,15 @@
                     $type = $d->type_depense ?? '';
                   @endphp
                   @if($type === 'carburant')
-                    <span class="badge bg-warning">Carburant</span>
+                    <span class="badge bg-warning d-inline-block text-center" style="min-width: 120px;">Carburant</span>
                   @elseif($type === 'pieces')
-                    <span class="badge bg-info">Pieces</span>
+                    <span class="badge bg-info d-inline-block text-center" style="min-width: 120px;">Achat de pièces</span>
                   @elseif($type === 'entretien')
-                    <span class="badge bg-primary">Entretien</span>
+                    <span class="badge bg-primary d-inline-block text-center" style="min-width: 120px;">Entretien</span>
                   @elseif($type === 'reparation')
-                    <span class="badge bg-danger">Reparation</span>
+                    <span class="badge bg-danger d-inline-block text-center" style="min-width: 120px;">Reparation</span>
                   @else
-                    <span class="badge bg-secondary">{{ $type }}</span>
+                    <span class="badge bg-secondary d-inline-block text-center" style="min-width: 120px;">{{ $type }}</span>
                   @endif
                 </td>
                 <td>{{ $d->description ?? '-' }}</td>

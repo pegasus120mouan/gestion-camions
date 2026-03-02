@@ -92,13 +92,13 @@
                   </a>
                 </td>
                 <td>
-                  <span class="badge bg-primary">{{ $d->type_depense ?? '-' }}</span>
+                  <span class="badge bg-primary d-inline-block text-center" style="min-width: 120px;">{{ $d->type_depense ?? '-' }}</span>
                 </td>
                 <td>
                   @if($d->description)
-                    <a href="{{ route('gestionfinanciere.fournisseur.show', ['nom' => $d->description]) }}" class="text-primary">{{ $d->description }}</a>
+                    <a href="{{ route('gestionfinanciere.fournisseur.show', ['nom' => $d->description]) }}" class="btn btn-sm btn-outline-secondary d-inline-block text-center" style="min-width: 150px;">{{ $d->description }}</a>
                   @else
-                    -
+                    <span class="btn btn-sm btn-outline-secondary d-inline-block text-center disabled" style="min-width: 150px;">-</span>
                   @endif
                 </td>
                 <td>{{ number_format((float)($d->montant ?? 0), 0, ',', ' ') }} FCFA</td>
