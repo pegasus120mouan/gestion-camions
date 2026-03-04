@@ -48,6 +48,17 @@ class CamionController extends Controller
             $vehicules = [];
         }
 
+        // Filtrer par recherche si un terme est fourni
+        $search = $request->get('q');
+        if ($search) {
+            $search = strtolower(trim($search));
+            $vehicules = array_filter($vehicules, function ($v) use ($search) {
+                $matricule = strtolower($v['matricule_vehicule'] ?? '');
+                return str_contains($matricule, $search);
+            });
+            $vehicules = array_values($vehicules); // Réindexer le tableau
+        }
+
         return view('camions.index', [
             'camions' => new LengthAwarePaginator([], 0, 20),
             'chauffeurs' => collect(),
