@@ -38,6 +38,39 @@
       </div>
     </div>
 
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="mb-0">Filtres de recherche</h5>
+      </div>
+      <div class="card-body">
+        <form method="GET" action="{{ route('gestionfinanciere.montant_transporteur') }}">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Véhicule</label>
+              <select name="vehicule" class="form-select">
+                <option value="">Tous les véhicules</option>
+                @foreach($vehicules ?? [] as $vehicule)
+                  <option value="{{ $vehicule }}" {{ request('vehicule') == $vehicule ? 'selected' : '' }}>{{ $vehicule }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Date début</label>
+              <input type="date" name="date_debut" class="form-control" value="{{ request('date_debut') }}">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Date fin</label>
+              <input type="date" name="date_fin" class="form-control" value="{{ request('date_fin') }}">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <button type="submit" class="btn btn-primary me-2"><i class="bx bx-search"></i> Filtrer</button>
+              <a href="{{ route('gestionfinanciere.montant_transporteur') }}" class="btn btn-outline-secondary"><i class="bx bx-reset"></i></a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header">
         <h5 class="mb-0">Liste des fiches de sortie - Transporteur "Autre" ({{ isset($fichesSortie) ? $fichesSortie->count() : 0 }})</h5>

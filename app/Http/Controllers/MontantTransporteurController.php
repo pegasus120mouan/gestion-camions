@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 
 class MontantTransporteurController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         // Uniquement le transporteur "Autre"
         $transporteur = CodeTransporteur::where('nom', 'Autre')->first();
@@ -17,6 +17,7 @@ class MontantTransporteurController extends Controller
         if (!$transporteur) {
             return view('gestion_financiere.montant_transporteur', [
                 'transporteursData' => collect(),
+                'vehicules' => [],
             ]);
         }
 
@@ -25,29 +26,67 @@ class MontantTransporteurController extends Controller
             ->pluck('matricule_vehicule')
             ->toArray();
 
-        // Récupérer les fiches de sortie de ces véhicules
+        // Liste des véhicules pour le filtre
+        $vehicules = $matricules;
+
+        // Récupérer les fiches de sortie de ces véhicules avec filtres
         $fichesSortie = collect();
         if (!empty($matricules)) {
-            $fichesSortie = FicheSortie::whereIn('matricule_vehicule', $matricules)
-                ->orderBy('date_chargement', 'desc')
-                ->get();
+            $query = FicheSortie::whereIn('matricule_vehicule', $matricules);
+
+            // Filtre par véhicule
+            if ($request->filled('vehicule')) {
+                $query->where('matricule_vehicule', $request->vehicule);
+            }
+
+            // Filtre par date début
+            if ($request->filled('date_debut')) {
+                $query->whereDate('date_chargement', '>=', $request->date_debut);
+            }
+
+            // Filtre par date fin
+            if ($request->filled('date_fin')) {
+                $query->whereDate('date_chargement', '<=', $request->date_fin);
+            }
+
+            $fichesSortie = $query->orderBy('date_chargement', 'desc')->get();
         }
 
-        // Calculer Montant Dû = somme de (Poids * PU) pour chaque fiche
-        $montantDu = $fichesSortie->sum(function ($fiche) {
+        // Calculer Montant Global = somme de (Poids * PU) pour chaque fiche
+        $montantGlobal = $fichesSortie->sum(function ($fiche) {
             $poids = $fiche->poids_pont ?? 0;
             $pu = $fiche->prix_unitaire_transport ?? 0;
             return $poids * $pu;
         });
-        $montantPaye = $fichesSortie->sum('montant_paye_transporteur');
-        $resteAPayer = $montantDu - $montantPaye;
+
+        // Calculer l'Avance totale (Carburant + Frais Route + Dépenses)
+        $totalAvance = $fichesSortie->sum(function ($fiche) {
+            $carburant = $fiche->carburant ?? 0;
+            $fraisRoute = $fiche->frais_route ?? 0;
+            
+            // Dépenses liées à cette fiche
+            $depenses = \App\Models\Depense::where('matricule_vehicule', $fiche->matricule_vehicule)
+                ->whereDate('date_depense', '>=', $fiche->date_chargement)
+                ->whereDate('date_depense', '<=', $fiche->date_dechargement ?? $fiche->date_chargement)
+                ->sum('montant');
+            
+            return $carburant + $fraisRoute + $depenses;
+        });
+
+        // Montant Payé = Avance + Montant Payé (paiements effectués)
+        $montantPayeTransporteur = $fichesSortie->sum('montant_paye_transporteur');
+        $montantPaye = $totalAvance + $montantPayeTransporteur;
+        
+        // Reste à Payer = Montant Global - Montant Payé (Avance + Paiements)
+        $resteAPayer = $montantGlobal - $montantPaye;
 
         return view('gestion_financiere.montant_transporteur', [
             'fichesSortie' => $fichesSortie,
-            'montantDu' => $montantDu,
+            'montantDu' => $montantGlobal,
             'montantPaye' => $montantPaye,
             'resteAPayer' => $resteAPayer,
             'transporteurNom' => 'Autre',
+            'vehicules' => $vehicules,
         ]);
     }
 
