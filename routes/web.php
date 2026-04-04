@@ -219,6 +219,7 @@ Route::middleware('auth')->group(function () {
 
     // Montant Autres Transporteurs
     Route::get('/gestion-financiere/montant-transporteur', [MontantTransporteurController::class, 'index'])->name('gestionfinanciere.montant_transporteur');
+    Route::get('/gestion-financiere/transporteur/historique-paiements', [MontantTransporteurController::class, 'historiquePaiements'])->name('gestionfinanciere.transporteur.historique');
     Route::get('/gestion-financiere/transporteur/{nom}', [MontantTransporteurController::class, 'show'])->name('gestionfinanciere.transporteur.show');
     Route::put('/gestion-financiere/transporteur/fiche/{ficheId}/pu', [MontantTransporteurController::class, 'updatePU'])->name('gestionfinanciere.transporteur.updatePU');
     Route::post('/gestion-financiere/transporteur/fiche/{ficheId}/paiement', [MontantTransporteurController::class, 'storePaiement'])->name('gestionfinanciere.transporteur.paiement');

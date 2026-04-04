@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CodeTransporteur;
 use App\Models\CodeTransporteurVehicule;
 use App\Models\FicheSortie;
+use App\Models\PaiementTransporteur;
 use Illuminate\Http\Request;
 
 class MontantTransporteurController extends Controller
@@ -192,6 +193,15 @@ class MontantTransporteurController extends Controller
 
         $fiche = FicheSortie::findOrFail($ficheId);
         
+        // Enregistrer le paiement dans l'historique
+        PaiementTransporteur::create([
+            'fiche_sortie_id' => $ficheId,
+            'matricule_vehicule' => $fiche->matricule_vehicule,
+            'montant' => $validated['montant'],
+            'date_paiement' => $validated['date_paiement'],
+            'observation' => $validated['observation'] ?? null,
+        ]);
+        
         // Ajouter le montant au montant déjà payé
         $nouveauMontantPaye = ($fiche->montant_paye_transporteur ?? 0) + $validated['montant'];
         
@@ -201,5 +211,37 @@ class MontantTransporteurController extends Controller
 
         return redirect()->route('gestionfinanciere.montant_transporteur')
             ->with('success', 'Paiement de ' . number_format($validated['montant'], 0, ',', ' ') . ' FCFA enregistré avec succès.');
+    }
+
+    public function historiquePaiements(Request $request)
+    {
+        // Récupérer le transporteur "Autre"
+        $transporteur = CodeTransporteur::where('nom', 'Autre')->first();
+        
+        $vehicules = [];
+        $paiements = collect();
+        
+        if ($transporteur) {
+            // Récupérer les matricules des véhicules liés à ce transporteur
+            $vehicules = CodeTransporteurVehicule::where('code_transporteur_id', $transporteur->id)
+                ->pluck('matricule_vehicule')
+                ->toArray();
+            
+            // Récupérer les paiements
+            $query = PaiementTransporteur::whereIn('matricule_vehicule', $vehicules)
+                ->orderBy('date_paiement', 'desc');
+            
+            // Filtre par véhicule
+            if ($request->filled('vehicule')) {
+                $query->where('matricule_vehicule', $request->vehicule);
+            }
+            
+            $paiements = $query->get();
+        }
+        
+        return response()->json([
+            'paiements' => $paiements,
+            'vehicules' => $vehicules,
+        ]);
     }
 }

@@ -11,6 +11,13 @@
       </div>
     @endif
 
+    @if(session('error'))
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
     <div class="row mb-4">
       <div class="col-md-4">
         <div class="card bg-danger text-white">
@@ -72,8 +79,11 @@
     </div>
 
     <div class="card">
-      <div class="card-header">
+      <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Liste des fiches de sortie - Transporteur "Autre" ({{ isset($fichesSortie) ? $fichesSortie->count() : 0 }})</h5>
+        <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#modalHistorique">
+          <i class="bx bx-history"></i> Historique des paiements
+        </button>
       </div>
       <div class="table-responsive text-nowrap">
         <table class="table">
@@ -120,7 +130,7 @@
                 <td class="text-danger fw-bold">{{ $montantGlobalFiche > 0 ? number_format($montantGlobalFiche, 0, ',', ' ') . ' FCFA' : '-' }}</td>
                 <td class="text-info fw-bold">{{ $avanceTableau > 0 ? number_format($avanceTableau, 0, ',', ' ') . ' FCFA' : '-' }}</td>
                 <td class="text-success">{{ number_format($montantPayeFiche, 0, ',', ' ') }} FCFA</td>
-                <td class="text-warning fw-bold">{{ $resteAPayerFiche > 0 ? number_format($resteAPayerFiche, 0, ',', ' ') . ' FCFA' : '-' }}</td>
+                <td class="{{ $resteAPayerFiche < 0 ? 'text-danger' : 'text-success' }} fw-bold">{{ number_format($resteAPayerFiche, 0, ',', ' ') }} FCFA</td>
                 <td>
                   <button type="button" class="btn btn-sm btn-success me-1" data-bs-toggle="modal" data-bs-target="#modalPaiement{{ $fiche->id }}">
                     <i class="bx bx-plus"></i> Paiement
@@ -222,7 +232,7 @@
                       </div>
                       <div class="row mb-2">
                         <div class="col-5 fw-bold">Reste à Payer:</div>
-                        <div class="col-7 text-warning fw-bold">{{ $resteAPayerFiche > 0 ? number_format($resteAPayerFiche, 0, ',', ' ') . ' FCFA' : '-' }}</div>
+                        <div class="col-7 {{ $resteAPayerFiche < 0 ? 'text-danger' : 'text-success' }} fw-bold">{{ number_format($resteAPayerFiche, 0, ',', ' ') }} FCFA</div>
                       </div>
                     </div>
                     <div class="modal-footer">
@@ -275,7 +285,7 @@
                         <p class="mb-2"><strong>Montant Global:</strong> <span class="text-danger">{{ number_format($montantGlobalFiche, 0, ',', ' ') }} FCFA</span></p>
                         <p class="mb-2"><strong>Avance:</strong> <span class="text-info">{{ number_format($avanceTableau, 0, ',', ' ') }} FCFA</span></p>
                         <p class="mb-2"><strong>Déjà Payé:</strong> <span class="text-success">{{ number_format($montantPayeFiche, 0, ',', ' ') }} FCFA</span></p>
-                        <p class="mb-3"><strong>Reste à Payer:</strong> <span class="text-warning">{{ number_format($resteAPayerFiche, 0, ',', ' ') }} FCFA</span></p>
+                        <p class="mb-3"><strong>Reste à Payer:</strong> <span class="{{ $resteAPayerFiche < 0 ? 'text-danger' : 'text-success' }}">{{ number_format($resteAPayerFiche, 0, ',', ' ') }} FCFA</span></p>
                         <div class="mb-3">
                           <label class="form-label">Montant du paiement (FCFA)</label>
                           <input type="text" name="montant" class="form-control montant-input" data-max="{{ $resteAPayerFiche }}" required placeholder="Ex: 1 000 000">
@@ -304,6 +314,56 @@
             @endforelse
           </tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- Modal Historique des paiements -->
+    <div class="modal fade" id="modalHistorique" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Historique des paiements</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label">Filtrer par véhicule</label>
+              <select id="filtreVehiculeHistorique" class="form-select">
+                <option value="">Tous les véhicules</option>
+                @foreach($vehicules ?? [] as $vehicule)
+                  <option value="{{ $vehicule }}">{{ $vehicule }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-striped" id="tableHistorique">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Véhicule</th>
+                    <th>Montant</th>
+                    <th>Observation</th>
+                  </tr>
+                </thead>
+                <tbody id="historiqueBody">
+                  <tr>
+                    <td colspan="4" class="text-center">Chargement...</td>
+                  </tr>
+                </tbody>
+                <tfoot>
+                  <tr class="fw-bold">
+                    <td colspan="2">Total</td>
+                    <td id="totalHistorique" class="text-success">0 FCFA</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -359,6 +419,58 @@ document.addEventListener('DOMContentLoaded', function() {
                 input.value = input.value.replace(/\s/g, '');
             });
         });
+    });
+
+    // Historique des paiements
+    function chargerHistorique(vehicule = '') {
+        let url = '{{ route("gestionfinanciere.transporteur.historique") }}';
+        if (vehicule) {
+            url += '?vehicule=' + encodeURIComponent(vehicule);
+        }
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                let tbody = document.getElementById('historiqueBody');
+                let total = 0;
+                
+                if (data.paiements.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Aucun paiement trouvé</td></tr>';
+                } else {
+                    tbody.innerHTML = '';
+                    data.paiements.forEach(function(paiement) {
+                        let date = new Date(paiement.date_paiement);
+                        let dateStr = date.toLocaleDateString('fr-FR');
+                        let montant = parseFloat(paiement.montant);
+                        total += montant;
+                        
+                        tbody.innerHTML += `
+                            <tr>
+                                <td>${dateStr}</td>
+                                <td class="fw-bold">${paiement.matricule_vehicule}</td>
+                                <td class="text-success">${montant.toLocaleString('fr-FR')} FCFA</td>
+                                <td>${paiement.observation || '-'}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                
+                document.getElementById('totalHistorique').textContent = total.toLocaleString('fr-FR') + ' FCFA';
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                document.getElementById('historiqueBody').innerHTML = '<tr><td colspan="4" class="text-center text-danger">Erreur de chargement</td></tr>';
+            });
+    }
+
+    // Charger l'historique quand le modal s'ouvre
+    document.getElementById('modalHistorique').addEventListener('shown.bs.modal', function() {
+        chargerHistorique();
+    });
+
+    // Filtrer par véhicule
+    document.getElementById('filtreVehiculeHistorique').addEventListener('change', function() {
+        chargerHistorique(this.value);
     });
 });
 </script>
