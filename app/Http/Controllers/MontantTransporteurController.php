@@ -141,6 +141,10 @@ class MontantTransporteurController extends Controller
 
     public function storePaiement(Request $request, int $ficheId)
     {
+        // Nettoyer le montant (enlever les espaces)
+        $montant = str_replace(' ', '', $request->input('montant'));
+        $request->merge(['montant' => $montant]);
+
         $validated = $request->validate([
             'montant' => ['required', 'numeric', 'min:1'],
             'date_paiement' => ['required', 'date'],

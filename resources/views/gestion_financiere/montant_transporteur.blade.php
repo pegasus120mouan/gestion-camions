@@ -15,7 +15,7 @@
       <div class="col-md-4">
         <div class="card bg-danger text-white">
           <div class="card-body">
-            <h6 class="card-title text-white">Montant Dû (Poids × PU)</h6>
+            <h6 class="card-title text-white">Montant Global (Poids × PU)</h6>
             <h3 class="mb-0">{{ number_format($montantDu ?? 0, 0, ',', ' ') }} FCFA</h3>
           </div>
         </div>
@@ -52,7 +52,8 @@
               <th>Usine</th>
               <th>Poids (kg)</th>
               <th>PU</th>
-              <th>Montant Dû</th>
+              <th>Montant Global</th>
+              <th>Avance</th>
               <th>Montant Payé</th>
               <th>Reste à Payer</th>
               <th>Actions</th>
@@ -63,9 +64,18 @@
               @php
                 $poids = $fiche->poids_pont ?? 0;
                 $pu = $fiche->prix_unitaire_transport;
-                $montantDuFiche = $pu ? ($poids * $pu) : 0;
+                $montantGlobalFiche = $pu ? ($poids * $pu) : 0;
+                
+                // Calculer l'avance (Carburant + Frais Route + Dépenses)
+                $depensesTableau = \App\Models\Depense::where('matricule_vehicule', $fiche->matricule_vehicule)
+                    ->whereDate('date_depense', '>=', $fiche->date_chargement)
+                    ->whereDate('date_depense', '<=', $fiche->date_dechargement ?? $fiche->date_chargement)
+                    ->sum('montant');
+                $avanceTableau = ($fiche->carburant ?? 0) + ($fiche->frais_route ?? 0) + $depensesTableau;
+                
                 $montantPayeFiche = $fiche->montant_paye_transporteur ?? 0;
-                $resteAPayerFiche = $montantDuFiche - $montantPayeFiche;
+                // Reste à Payer = Montant Global - Avance - Montant Payé
+                $resteAPayerFiche = $montantGlobalFiche - $avanceTableau - $montantPayeFiche;
               @endphp
               <tr>
                 <td>{{ $fiche->date_chargement ? $fiche->date_chargement->format('d-m-Y') : '-' }}</td>
@@ -74,7 +84,8 @@
                 <td>{{ $fiche->usine ?? '-' }}</td>
                 <td>{{ $poids ? number_format($poids, 0, ',', ' ') : '-' }}</td>
                 <td>{{ $pu !== null ? number_format($pu, 0, ',', ' ') : '-' }}</td>
-                <td class="text-danger fw-bold">{{ $montantDuFiche > 0 ? number_format($montantDuFiche, 0, ',', ' ') . ' FCFA' : '-' }}</td>
+                <td class="text-danger fw-bold">{{ $montantGlobalFiche > 0 ? number_format($montantGlobalFiche, 0, ',', ' ') . ' FCFA' : '-' }}</td>
+                <td class="text-info fw-bold">{{ $avanceTableau > 0 ? number_format($avanceTableau, 0, ',', ' ') . ' FCFA' : '-' }}</td>
                 <td class="text-success">{{ number_format($montantPayeFiche, 0, ',', ' ') }} FCFA</td>
                 <td class="text-warning fw-bold">{{ $resteAPayerFiche > 0 ? number_format($resteAPayerFiche, 0, ',', ' ') . ' FCFA' : '-' }}</td>
                 <td>
@@ -128,13 +139,49 @@
                         <div class="col-7">{{ $poids ? number_format($poids, 0, ',', ' ') : '-' }}</div>
                       </div>
                       <div class="row mb-2">
+                        <div class="col-5 fw-bold">Carburant:</div>
+                        <div class="col-7">{{ $fiche->carburant ? number_format($fiche->carburant, 0, ',', ' ') . ' FCFA' : '-' }}</div>
+                      </div>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Frais de Route:</div>
+                        <div class="col-7">{{ $fiche->frais_route ? number_format($fiche->frais_route, 0, ',', ' ') . ' FCFA' : '-' }}</div>
+                      </div>
+                      <div class="row mb-2">
                         <div class="col-5 fw-bold">Prix Unitaire:</div>
                         <div class="col-7">{{ $pu !== null ? number_format($pu, 0, ',', ' ') . ' FCFA' : '-' }}</div>
                       </div>
+                      @php
+                        $depenses = \App\Models\Depense::where('matricule_vehicule', $fiche->matricule_vehicule)
+                            ->whereDate('date_depense', '>=', $fiche->date_chargement)
+                            ->whereDate('date_depense', '<=', $fiche->date_dechargement ?? $fiche->date_chargement)
+                            ->get();
+                        $totalDepenses = $depenses->sum('montant');
+                        $avance = ($fiche->carburant ?? 0) + ($fiche->frais_route ?? 0) + $totalDepenses;
+                      @endphp
+
+                      @if($depenses->count() > 0)
+                        <hr>
+                        <h6 class="fw-bold mb-3">Dépenses relatives à cette sortie</h6>
+                        @foreach($depenses as $depense)
+                          <div class="row mb-2">
+                            <div class="col-5">{{ $depense->type_depense ?? $depense->description }}</div>
+                            <div class="col-7 text-danger">{{ number_format($depense->montant, 0, ',', ' ') }} FCFA</div>
+                          </div>
+                        @endforeach
+                        <div class="row mb-2 mt-2">
+                          <div class="col-5 fw-bold">Total Dépenses:</div>
+                          <div class="col-7 text-danger fw-bold">{{ number_format($totalDepenses, 0, ',', ' ') }} FCFA</div>
+                        </div>
+                      @endif
+
                       <hr>
                       <div class="row mb-2">
-                        <div class="col-5 fw-bold">Montant Dû:</div>
-                        <div class="col-7 text-danger fw-bold">{{ $montantDuFiche > 0 ? number_format($montantDuFiche, 0, ',', ' ') . ' FCFA' : '-' }}</div>
+                        <div class="col-5 fw-bold">Avance:</div>
+                        <div class="col-7 text-info fw-bold">{{ number_format($avance, 0, ',', ' ') }} FCFA</div>
+                      </div>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Montant Global:</div>
+                        <div class="col-7 text-danger fw-bold">{{ $montantGlobalFiche > 0 ? number_format($montantGlobalFiche, 0, ',', ' ') . ' FCFA' : '-' }}</div>
                       </div>
                       <div class="row mb-2">
                         <div class="col-5 fw-bold">Montant Payé:</div>
@@ -192,7 +239,8 @@
                       </div>
                       <div class="modal-body">
                         <p class="mb-2"><strong>Véhicule:</strong> {{ $fiche->matricule_vehicule }}</p>
-                        <p class="mb-2"><strong>Montant Dû:</strong> <span class="text-danger">{{ number_format($montantDuFiche, 0, ',', ' ') }} FCFA</span></p>
+                        <p class="mb-2"><strong>Montant Global:</strong> <span class="text-danger">{{ number_format($montantGlobalFiche, 0, ',', ' ') }} FCFA</span></p>
+                        <p class="mb-2"><strong>Avance:</strong> <span class="text-info">{{ number_format($avanceTableau, 0, ',', ' ') }} FCFA</span></p>
                         <p class="mb-2"><strong>Déjà Payé:</strong> <span class="text-success">{{ number_format($montantPayeFiche, 0, ',', ' ') }} FCFA</span></p>
                         <p class="mb-3"><strong>Reste à Payer:</strong> <span class="text-warning">{{ number_format($resteAPayerFiche, 0, ',', ' ') }} FCFA</span></p>
                         <div class="mb-3">
@@ -229,26 +277,56 @@
 </div>
 @endsection
 
-@push('scripts')
+@section('page-scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Formater les montants avec espaces (1 000 000)
-    document.querySelectorAll('.montant-input').forEach(function(input) {
-        input.addEventListener('input', function(e) {
-            // Enlever tout sauf les chiffres
-            let value = this.value.replace(/\D/g, '');
-            // Formater avec des espaces
-            if (value) {
-                value = parseInt(value).toLocaleString('fr-FR').replace(/,/g, ' ');
-            }
-            this.value = value;
-        });
+    // Fonction pour formater un nombre avec des espaces
+    function formatNumber(value) {
+        // Enlever tout sauf les chiffres
+        value = value.replace(/\D/g, '');
+        if (value) {
+            return parseInt(value).toLocaleString('fr-FR').replace(/\u202F/g, ' ').replace(/,/g, ' ');
+        }
+        return '';
+    }
 
-        // Avant soumission, convertir en nombre
-        input.closest('form').addEventListener('submit', function(e) {
-            input.value = input.value.replace(/\s/g, '');
+    // Appliquer le formatage à tous les champs montant-input
+    function initMontantInputs() {
+        document.querySelectorAll('.montant-input').forEach(function(input) {
+            // Supprimer les anciens listeners pour éviter les doublons
+            input.removeEventListener('input', handleInput);
+            input.addEventListener('input', handleInput);
+        });
+    }
+
+    function handleInput(e) {
+        let cursorPos = this.selectionStart;
+        let oldLength = this.value.length;
+        this.value = formatNumber(this.value);
+        let newLength = this.value.length;
+        // Ajuster la position du curseur
+        cursorPos = cursorPos + (newLength - oldLength);
+        this.setSelectionRange(cursorPos, cursorPos);
+    }
+
+    // Initialiser au chargement
+    initMontantInputs();
+
+    // Réinitialiser quand un modal s'ouvre
+    document.querySelectorAll('.modal').forEach(function(modal) {
+        modal.addEventListener('shown.bs.modal', function() {
+            initMontantInputs();
+        });
+    });
+
+    // Avant soumission, convertir en nombre
+    document.querySelectorAll('form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            form.querySelectorAll('.montant-input').forEach(function(input) {
+                input.value = input.value.replace(/\s/g, '');
+            });
         });
     });
 });
 </script>
-@endpush
+@endsection
