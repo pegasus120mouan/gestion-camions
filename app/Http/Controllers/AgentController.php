@@ -27,6 +27,7 @@ class AgentController extends Controller
 
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get($mesAgentsUrl, $queryParams);
         } catch (\Throwable $e) {
@@ -90,6 +91,7 @@ class AgentController extends Controller
             
             while ($page <= $maxPages) {
                 $response = Http::acceptJson()
+                    ->withoutVerifying()
                     ->timeout($timeout)
                     ->get($mesAgentsUrl, ['page' => $page]);
                 
@@ -127,6 +129,7 @@ class AgentController extends Controller
         $usines = [];
         try {
             $usinesResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get($mesUsinesUrl);
             if ($usinesResponse->successful()) {

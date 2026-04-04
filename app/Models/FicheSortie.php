@@ -29,6 +29,7 @@ class FicheSortie extends Model
         'numero_ticket',
         'prix_unitaire_transport',
         'poids_unitaire_regime',
+        'montant_paye_transporteur',
     ];
 
     protected $casts = [

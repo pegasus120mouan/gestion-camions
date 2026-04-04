@@ -57,20 +57,21 @@ class CodeTransporteurController extends Controller
         $code = CodeTransporteur::with('vehicules')->findOrFail($id);
         
         // Récupérer les véhicules depuis l'API mes_camions
-        $mesCamionsUrl = (string) config('services.external_auth.mes_camions_url');
         $timeout = (int) config('services.external_auth.timeout', 10);
-        $phpsessid = (string) $request->session()->get('external_auth.phpsessid', '');
         $vehiculesApi = [];
         
         try {
             $response = Http::acceptJson()
                 ->timeout($timeout)
-                ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                ->get($mesCamionsUrl);
+                ->withoutVerifying()
+                ->post('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
+            \Log::info('API Response', ['status' => $response->status(), 'body' => substr($response->body(), 0, 500)]);
             if ($response->successful()) {
                 $vehiculesApi = $response->json('vehicules') ?? [];
             }
-        } catch (\Throwable $e) {}
+        } catch (\Throwable $e) {
+            \Log::error('API Error', ['message' => $e->getMessage()]);
+        }
 
         // Filtrer les véhicules déjà attribués
         $vehiculesAttribues = $code->vehicules->pluck('vehicule_id')->toArray();

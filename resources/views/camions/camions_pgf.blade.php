@@ -98,8 +98,8 @@
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Sélectionner un véhicule</label>
-            <select name="vehicule_id" class="form-select" required id="selectVehicule">
-              <option value="">-- Choisir un véhicule --</option>
+            <input type="text" id="searchVehicule" class="form-control mb-2" placeholder="Rechercher par immatriculation..." autocomplete="off">
+            <select name="vehicule_id" class="form-select" required id="selectVehicule" size="8" style="height: auto;">
               @foreach($all_vehicules as $v)
                 <option value="{{ $v['vehicules_id'] }}" data-matricule="{{ $v['matricule_vehicule'] }}">
                   {{ $v['matricule_vehicule'] }} ({{ $v['type_vehicule'] ?? '-' }})
@@ -123,11 +123,35 @@
 document.addEventListener('DOMContentLoaded', function() {
   const selectVehicule = document.getElementById('selectVehicule');
   const matriculeInput = document.getElementById('matriculeVehicule');
+  const searchInput = document.getElementById('searchVehicule');
+  
+  // Stocker toutes les options originales
+  const allOptions = Array.from(selectVehicule.options);
+  
+  // Filtrer les options lors de la saisie
+  if (searchInput) {
+    searchInput.addEventListener('input', function() {
+      const searchTerm = this.value.toLowerCase().trim();
+      
+      // Vider le select
+      selectVehicule.innerHTML = '';
+      
+      // Filtrer et réajouter les options correspondantes
+      allOptions.forEach(function(option) {
+        const text = option.textContent.toLowerCase();
+        if (text.includes(searchTerm) || searchTerm === '') {
+          selectVehicule.appendChild(option.cloneNode(true));
+        }
+      });
+    });
+  }
   
   if (selectVehicule && matriculeInput) {
     selectVehicule.addEventListener('change', function() {
       const selected = this.options[this.selectedIndex];
-      matriculeInput.value = selected.dataset.matricule || '';
+      if (selected) {
+        matriculeInput.value = selected.dataset.matricule || '';
+      }
     });
   }
 });

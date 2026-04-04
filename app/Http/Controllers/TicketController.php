@@ -40,6 +40,7 @@ class TicketController extends Controller
 
         try {
             $usinesResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
             if ($usinesResponse->successful()) {
@@ -52,6 +53,7 @@ class TicketController extends Controller
             $hasMore = true;
             while ($hasMore) {
                 $agentsResponse = Http::acceptJson()
+                    ->withoutVerifying()
                     ->timeout($timeout)
                     ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php', ['page' => $page]);
                 if ($agentsResponse->successful()) {
@@ -160,6 +162,7 @@ class TicketController extends Controller
         $vehiculesApi = [];
         try {
             $vehiculesResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
             if ($vehiculesResponse->successful()) {
@@ -255,6 +258,7 @@ class TicketController extends Controller
 
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_tickets.php');
             if ($response->successful()) {
@@ -269,7 +273,7 @@ class TicketController extends Controller
         $usinesApi = [];
         $agentsApi = [];
         try {
-            $usinesResponse = Http::acceptJson()->timeout($timeout)
+            $usinesResponse = Http::acceptJson()->withoutVerifying()->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
             if ($usinesResponse->successful()) {
                 $usinesApi = $usinesResponse->json('usines') ?? [];
@@ -277,7 +281,7 @@ class TicketController extends Controller
         } catch (\Throwable $e) {}
 
         try {
-            $agentsResponse = Http::acceptJson()->timeout($timeout)
+            $agentsResponse = Http::acceptJson()->withoutVerifying()->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php');
             if ($agentsResponse->successful()) {
                 $agentsApi = $agentsResponse->json('agents') ?? [];
@@ -401,6 +405,7 @@ class TicketController extends Controller
 
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_tickets.php', [
                     'page' => $page,

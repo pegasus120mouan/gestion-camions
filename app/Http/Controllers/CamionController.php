@@ -21,6 +21,7 @@ class CamionController extends Controller
 
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
         } catch (\Throwable $e) {
@@ -269,6 +270,7 @@ class CamionController extends Controller
         $vehicules = [];
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
             if ($response->successful()) {

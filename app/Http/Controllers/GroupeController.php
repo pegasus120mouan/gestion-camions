@@ -47,6 +47,7 @@ class GroupeController extends Controller
             $hasMore = true;
             while ($hasMore) {
                 $response = Http::acceptJson()
+                    ->withoutVerifying()
                     ->timeout($timeout)
                     ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                     ->get($mesAgentsUrl, ['page' => $page]);

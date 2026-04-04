@@ -49,7 +49,7 @@ class StockPgfController extends Controller
         $ponts = [];
 
         try {
-            $response = Http::acceptJson()->timeout($timeout)->get($mesPontsUrl);
+            $response = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($mesPontsUrl);
             if ($response->successful()) {
                 $ponts = $response->json('ponts') ?? [];
             }
@@ -165,7 +165,7 @@ class StockPgfController extends Controller
         $ponts = [];
 
         try {
-            $response = Http::acceptJson()->timeout($timeout)->get($mesPontsUrl);
+            $response = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($mesPontsUrl);
             if ($response->successful()) {
                 $ponts = $response->json('ponts') ?? [];
             }
@@ -187,7 +187,7 @@ class StockPgfController extends Controller
         $ponts = [];
 
         try {
-            $response = Http::acceptJson()->timeout($timeout)->get($mesPontsUrl);
+            $response = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($mesPontsUrl);
             if ($response->successful()) {
                 $ponts = $response->json('ponts') ?? [];
             }
@@ -200,6 +200,7 @@ class StockPgfController extends Controller
 
         try {
             $ticketsResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                 ->get($mesTicketsUrl);
@@ -274,7 +275,7 @@ class StockPgfController extends Controller
         $pontsApi = [];
 
         try {
-            $response = Http::acceptJson()->timeout($timeout)->get($mesPontsUrl);
+            $response = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($mesPontsUrl);
             if ($response->successful()) {
                 $pontsApi = $response->json('ponts') ?? [];
             }
@@ -365,6 +366,7 @@ class StockPgfController extends Controller
 
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                 ->get($mesTicketsUrl);

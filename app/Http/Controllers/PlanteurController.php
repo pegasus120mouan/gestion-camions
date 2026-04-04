@@ -15,6 +15,7 @@ class PlanteurController extends Controller
 
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout(15)
                 ->get('https://api.objetombrepegasus.online/api/planteur/actions/planteurs.php');
 
@@ -39,6 +40,7 @@ class PlanteurController extends Controller
 
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout(15)
                 ->get('https://api.objetombrepegasus.online/api/planteur/actions/planteurs.php', [
                     'id' => $id
@@ -61,6 +63,7 @@ class PlanteurController extends Controller
     {
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout(15)
                 ->put('https://api.objetombrepegasus.online/api/planteur/actions/planteurs.php', [
                     'id' => $id,
@@ -90,6 +93,7 @@ class PlanteurController extends Controller
     {
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout(15)
                 ->delete('https://api.objetombrepegasus.online/api/planteur/actions/planteurs.php', [
                     'id' => $id

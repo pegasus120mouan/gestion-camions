@@ -1,0 +1,254 @@
+@extends('layout.main')
+@section('content')
+<div class="content-wrapper">
+  <div class="container-xxl flex-grow-1 container-p-y">
+    <h4 class="mb-4">Montant Autres Transporteurs</h4>
+
+    @if(session('success'))
+      <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
+    <div class="row mb-4">
+      <div class="col-md-4">
+        <div class="card bg-danger text-white">
+          <div class="card-body">
+            <h6 class="card-title text-white">Montant Dû (Poids × PU)</h6>
+            <h3 class="mb-0">{{ number_format($montantDu ?? 0, 0, ',', ' ') }} FCFA</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card bg-success text-white">
+          <div class="card-body">
+            <h6 class="card-title text-white">Montant Payé</h6>
+            <h3 class="mb-0">{{ number_format($montantPaye ?? 0, 0, ',', ' ') }} FCFA</h3>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card bg-warning text-white">
+          <div class="card-body">
+            <h6 class="card-title text-white">Reste à Payer</h6>
+            <h3 class="mb-0">{{ number_format($resteAPayer ?? 0, 0, ',', ' ') }} FCFA</h3>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">Liste des fiches de sortie - Transporteur "Autre" ({{ isset($fichesSortie) ? $fichesSortie->count() : 0 }})</h5>
+      </div>
+      <div class="table-responsive text-nowrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Date Chargement</th>
+              <th>Véhicule</th>
+              <th>Pont</th>
+              <th>Usine</th>
+              <th>Poids (kg)</th>
+              <th>PU</th>
+              <th>Montant Dû</th>
+              <th>Montant Payé</th>
+              <th>Reste à Payer</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody class="table-border-bottom-0">
+            @forelse($fichesSortie ?? [] as $fiche)
+              @php
+                $poids = $fiche->poids_pont ?? 0;
+                $pu = $fiche->prix_unitaire_transport;
+                $montantDuFiche = $pu ? ($poids * $pu) : 0;
+                $montantPayeFiche = $fiche->montant_paye_transporteur ?? 0;
+                $resteAPayerFiche = $montantDuFiche - $montantPayeFiche;
+              @endphp
+              <tr>
+                <td>{{ $fiche->date_chargement ? $fiche->date_chargement->format('d-m-Y') : '-' }}</td>
+                <td class="fw-bold">{{ $fiche->matricule_vehicule ?? '-' }}</td>
+                <td>{{ $fiche->nom_pont ?? '-' }}</td>
+                <td>{{ $fiche->usine ?? '-' }}</td>
+                <td>{{ $poids ? number_format($poids, 0, ',', ' ') : '-' }}</td>
+                <td>{{ $pu !== null ? number_format($pu, 0, ',', ' ') : '-' }}</td>
+                <td class="text-danger fw-bold">{{ $montantDuFiche > 0 ? number_format($montantDuFiche, 0, ',', ' ') . ' FCFA' : '-' }}</td>
+                <td class="text-success">{{ number_format($montantPayeFiche, 0, ',', ' ') }} FCFA</td>
+                <td class="text-warning fw-bold">{{ $resteAPayerFiche > 0 ? number_format($resteAPayerFiche, 0, ',', ' ') . ' FCFA' : '-' }}</td>
+                <td>
+                  <button type="button" class="btn btn-sm btn-success me-1" data-bs-toggle="modal" data-bs-target="#modalPaiement{{ $fiche->id }}">
+                    <i class="bx bx-plus"></i> Paiement
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-info me-1" data-bs-toggle="modal" data-bs-target="#modalDetails{{ $fiche->id }}">
+                    <i class="bx bx-show"></i>
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalPU{{ $fiche->id }}">
+                    <i class="bx bx-edit"></i> PU
+                  </button>
+                </td>
+              </tr>
+
+              <!-- Modal Détails -->
+              <div class="modal fade" id="modalDetails{{ $fiche->id }}" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h5 class="modal-title">Détails de la fiche de sortie</h5>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Véhicule:</div>
+                        <div class="col-7">{{ $fiche->matricule_vehicule ?? '-' }}</div>
+                      </div>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Date Chargement:</div>
+                        <div class="col-7">{{ $fiche->date_chargement ? $fiche->date_chargement->format('d-m-Y') : '-' }}</div>
+                      </div>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Date Déchargement:</div>
+                        <div class="col-7">{{ $fiche->date_dechargement ? $fiche->date_dechargement->format('d-m-Y') : '-' }}</div>
+                      </div>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Pont:</div>
+                        <div class="col-7">{{ $fiche->nom_pont ?? '-' }}</div>
+                      </div>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Agent:</div>
+                        <div class="col-7">{{ $fiche->nom_agent ?? '-' }}</div>
+                      </div>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Usine:</div>
+                        <div class="col-7">{{ $fiche->usine ?? '-' }}</div>
+                      </div>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Poids (kg):</div>
+                        <div class="col-7">{{ $poids ? number_format($poids, 0, ',', ' ') : '-' }}</div>
+                      </div>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Prix Unitaire:</div>
+                        <div class="col-7">{{ $pu !== null ? number_format($pu, 0, ',', ' ') . ' FCFA' : '-' }}</div>
+                      </div>
+                      <hr>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Montant Dû:</div>
+                        <div class="col-7 text-danger fw-bold">{{ $montantDuFiche > 0 ? number_format($montantDuFiche, 0, ',', ' ') . ' FCFA' : '-' }}</div>
+                      </div>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Montant Payé:</div>
+                        <div class="col-7 text-success">{{ number_format($montantPayeFiche, 0, ',', ' ') }} FCFA</div>
+                      </div>
+                      <div class="row mb-2">
+                        <div class="col-5 fw-bold">Reste à Payer:</div>
+                        <div class="col-7 text-warning fw-bold">{{ $resteAPayerFiche > 0 ? number_format($resteAPayerFiche, 0, ',', ' ') . ' FCFA' : '-' }}</div>
+                      </div>
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Modal pour modifier le PU -->
+              <div class="modal fade" id="modalPU{{ $fiche->id }}" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-sm">
+                  <div class="modal-content">
+                    <form action="{{ route('gestionfinanciere.transporteur.updatePU', $fiche->id) }}" method="POST">
+                      @csrf
+                      @method('PUT')
+                      <div class="modal-header">
+                        <h5 class="modal-title">Modifier PU</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                      </div>
+                      <div class="modal-body">
+                        <p class="mb-2"><strong>Véhicule:</strong> {{ $fiche->matricule_vehicule }}</p>
+                        <p class="mb-3"><strong>Poids:</strong> {{ number_format($poids, 0, ',', ' ') }} kg</p>
+                        <div class="mb-3">
+                          <label class="form-label">Prix Unitaire (FCFA)</label>
+                          <input type="number" name="prix_unitaire" class="form-control" value="{{ $pu ?? '' }}" min="0" step="1" required>
+                        </div>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-primary">Enregistrer</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Modal Paiement -->
+              <div class="modal fade" id="modalPaiement{{ $fiche->id }}" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog">
+                  <div class="modal-content">
+                    <form action="{{ route('gestionfinanciere.transporteur.paiement', $fiche->id) }}" method="POST">
+                      @csrf
+                      <div class="modal-header">
+                        <h5 class="modal-title">Effectuer un paiement</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                      </div>
+                      <div class="modal-body">
+                        <p class="mb-2"><strong>Véhicule:</strong> {{ $fiche->matricule_vehicule }}</p>
+                        <p class="mb-2"><strong>Montant Dû:</strong> <span class="text-danger">{{ number_format($montantDuFiche, 0, ',', ' ') }} FCFA</span></p>
+                        <p class="mb-2"><strong>Déjà Payé:</strong> <span class="text-success">{{ number_format($montantPayeFiche, 0, ',', ' ') }} FCFA</span></p>
+                        <p class="mb-3"><strong>Reste à Payer:</strong> <span class="text-warning">{{ number_format($resteAPayerFiche, 0, ',', ' ') }} FCFA</span></p>
+                        <div class="mb-3">
+                          <label class="form-label">Montant du paiement (FCFA)</label>
+                          <input type="text" name="montant" class="form-control montant-input" data-max="{{ $resteAPayerFiche }}" required placeholder="Ex: 1 000 000">
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label">Date du paiement</label>
+                          <input type="date" name="date_paiement" class="form-control" value="{{ date('Y-m-d') }}" required>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label">Observation (optionnel)</label>
+                          <textarea name="observation" class="form-control" rows="2"></textarea>
+                        </div>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-success">Enregistrer le paiement</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            @empty
+              <tr>
+                <td colspan="11" class="text-center">Aucune fiche de sortie pour le transporteur "Autre"</td>
+              </tr>
+            @endforelse
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Formater les montants avec espaces (1 000 000)
+    document.querySelectorAll('.montant-input').forEach(function(input) {
+        input.addEventListener('input', function(e) {
+            // Enlever tout sauf les chiffres
+            let value = this.value.replace(/\D/g, '');
+            // Formater avec des espaces
+            if (value) {
+                value = parseInt(value).toLocaleString('fr-FR').replace(/,/g, ' ');
+            }
+            this.value = value;
+        });
+
+        // Avant soumission, convertir en nombre
+        input.closest('form').addEventListener('submit', function(e) {
+            input.value = input.value.replace(/\s/g, '');
+        });
+    });
+});
+</script>
+@endpush

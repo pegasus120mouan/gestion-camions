@@ -22,6 +22,7 @@ use App\Http\Controllers\ChefChargeurController;
 use App\Http\Controllers\ChargeurController;
 use App\Http\Controllers\MontantChefChargeurController;
 use App\Http\Controllers\MontantFournisseurController;
+use App\Http\Controllers\MontantTransporteurController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\FournisseurController;
 use Illuminate\Support\Facades\Route;
@@ -215,6 +216,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/gestion-financiere/fournisseur/{nom}', [MontantFournisseurController::class, 'show'])->name('gestionfinanciere.fournisseur.show');
     Route::get('/gestion-financiere/fournisseur/{nom}/pdf', [MontantFournisseurController::class, 'exportPdf'])->name('gestionfinanciere.fournisseur.pdf');
     Route::post('/gestion-financiere/montant-fournisseur/paiement', [MontantFournisseurController::class, 'storePaiement'])->name('gestionfinanciere.montant_fournisseur.paiement');
+
+    // Montant Autres Transporteurs
+    Route::get('/gestion-financiere/montant-transporteur', [MontantTransporteurController::class, 'index'])->name('gestionfinanciere.montant_transporteur');
+    Route::get('/gestion-financiere/transporteur/{nom}', [MontantTransporteurController::class, 'show'])->name('gestionfinanciere.transporteur.show');
+    Route::put('/gestion-financiere/transporteur/fiche/{ficheId}/pu', [MontantTransporteurController::class, 'updatePU'])->name('gestionfinanciere.transporteur.updatePU');
+    Route::post('/gestion-financiere/transporteur/fiche/{ficheId}/paiement', [MontantTransporteurController::class, 'storePaiement'])->name('gestionfinanciere.transporteur.paiement');
 
     // Services
     Route::get('/services', [ServiceController::class, 'index'])->name('services.index');

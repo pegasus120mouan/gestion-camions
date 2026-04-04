@@ -15,6 +15,7 @@ class PontController extends Controller
 
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get($mesPontsUrl);
         } catch (\Throwable $e) {
@@ -44,6 +45,7 @@ class PontController extends Controller
         $tickets = [];
         try {
             $ticketsResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                 ->get($mesTicketsUrl);
@@ -105,6 +107,7 @@ class PontController extends Controller
         $pont = null;
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get($mesPontsUrl);
             
@@ -151,6 +154,7 @@ class PontController extends Controller
             
             try {
                 $ticketsResponse = Http::acceptJson()
+                    ->withoutVerifying()
                     ->timeout($timeout)
                     ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                     ->get($mesTicketsUrl);
@@ -197,7 +201,7 @@ class PontController extends Controller
         $pont = null;
 
         try {
-            $response = Http::acceptJson()->timeout($timeout)->get($mesPontsUrl);
+            $response = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($mesPontsUrl);
             if ($response->successful()) {
                 $ponts = $response->json('ponts') ?? [];
                 foreach ($ponts as $p) {
@@ -243,7 +247,7 @@ class PontController extends Controller
         // Récupérer les ponts
         $ponts = [];
         try {
-            $response = Http::acceptJson()->timeout($timeout)->get($mesPontsUrl);
+            $response = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($mesPontsUrl);
             if ($response->successful()) {
                 $ponts = $response->json('ponts') ?? [];
             }
@@ -253,6 +257,7 @@ class PontController extends Controller
         $tickets = [];
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                 ->get($mesTicketsUrl);

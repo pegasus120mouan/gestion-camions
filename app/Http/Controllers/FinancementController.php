@@ -23,6 +23,7 @@ class FinancementController extends Controller
 
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                 ->get($mesFinancementsUrl, $queryParams);

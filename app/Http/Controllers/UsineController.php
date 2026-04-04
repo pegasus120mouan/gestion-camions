@@ -22,6 +22,7 @@ class UsineController extends Controller
 
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get($mesUsinesUrl, $queryParams);
         } catch (\Throwable $e) {

@@ -260,6 +260,11 @@
                   </a>
                 </li>
                 <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.montant_transporteur') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Montant autres Transporteur</div>
+                  </a>
+                </li>
+                <li class="menu-item">
                   <a href="{{ route('gestionfinanciere.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Accordion">Soldes</div>
                   </a>

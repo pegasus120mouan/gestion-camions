@@ -48,6 +48,7 @@ class DepenseController extends Controller
         $vehicules = [];
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout(10)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
             if ($response->successful()) {
@@ -88,6 +89,7 @@ class DepenseController extends Controller
 
         try {
             $camionsResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                 ->get($mesCamionsUrl);
@@ -98,6 +100,7 @@ class DepenseController extends Controller
 
         try {
             $pontsResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                 ->get($mesPontsUrl);
@@ -108,6 +111,7 @@ class DepenseController extends Controller
 
         try {
             $agentsResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                 ->get($mesAgentsUrl);
@@ -118,6 +122,7 @@ class DepenseController extends Controller
 
         try {
             $usinesResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
             if ($usinesResponse->successful()) {
@@ -162,6 +167,7 @@ class DepenseController extends Controller
 
         try {
             $pontsResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_ponts.php');
             if ($pontsResponse->successful()) {
@@ -173,6 +179,7 @@ class DepenseController extends Controller
 
         try {
             $agentsResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php');
             if ($agentsResponse->successful()) {
@@ -184,6 +191,7 @@ class DepenseController extends Controller
 
         try {
             $usinesResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
             if ($usinesResponse->successful()) {
@@ -302,6 +310,7 @@ class DepenseController extends Controller
         if ($idPont > 0) {
             try {
                 $pontsResponse = Http::acceptJson()
+                    ->withoutVerifying()
                     ->timeout($timeout)
                     ->get(config('services.external_auth.mes_ponts_url'));
                 if ($pontsResponse->successful()) {
@@ -321,6 +330,7 @@ class DepenseController extends Controller
         if ($idAgent > 0) {
             try {
                 $agentsResponse = Http::acceptJson()
+                    ->withoutVerifying()
                     ->timeout($timeout)
                     ->get(config('services.external_auth.mes_agents_url'));
                 if ($agentsResponse->successful()) {
@@ -350,6 +360,7 @@ class DepenseController extends Controller
             try {
                 $phpsessid = session('external_auth.phpsessid', '');
                 $ticketsResponse = Http::acceptJson()
+                    ->withoutVerifying()
                     ->timeout($timeout)
                     ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                     ->get(config('services.external_auth.mes_tickets_url'));
@@ -541,6 +552,7 @@ class DepenseController extends Controller
             $phpsessid = session('external_auth.phpsessid', '');
             try {
                 $response = Http::acceptJson()
+                    ->withoutVerifying()
                     ->timeout($timeout)
                     ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                     ->get($mesCamionsUrl);
@@ -575,6 +587,7 @@ class DepenseController extends Controller
             $phpsessid = session('external_auth.phpsessid', '');
             try {
                 $pontsResponse = Http::acceptJson()
+                    ->withoutVerifying()
                     ->timeout($timeout)
                     ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                     ->get($mesPontsUrl);
@@ -606,6 +619,7 @@ class DepenseController extends Controller
             $phpsessid = session('external_auth.phpsessid', '');
             try {
                 $agentsResponse = Http::acceptJson()
+                    ->withoutVerifying()
                     ->timeout($timeout)
                     ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                     ->get($mesAgentsUrl);
@@ -717,6 +731,7 @@ class DepenseController extends Controller
         
         try {
             $response = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_tickets.php');
             
@@ -763,6 +778,7 @@ class DepenseController extends Controller
 
         try {
             $pontsResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_ponts.php');
             if ($pontsResponse->successful()) {
@@ -781,6 +797,7 @@ class DepenseController extends Controller
 
         try {
             $agentsResponse = Http::acceptJson()
+                ->withoutVerifying()
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php');
             if ($agentsResponse->successful()) {
