@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CodeTransporteur;
 use App\Models\CodeTransporteurVehicule;
+use App\Models\Depense;
 use App\Models\FicheSortie;
 use App\Models\PaiementTransporteur;
 use Illuminate\Http\Request;
@@ -242,6 +243,60 @@ class MontantTransporteurController extends Controller
         return response()->json([
             'paiements' => $paiements,
             'vehicules' => $vehicules,
+        ]);
+    }
+
+    public function showVehicule(string $matricule)
+    {
+        // Récupérer toutes les fiches de sortie de ce véhicule
+        $fichesSortie = FicheSortie::where('matricule_vehicule', $matricule)
+            ->orderBy('date_chargement', 'desc')
+            ->get();
+
+        // Calculer les totaux
+        $totalFiches = $fichesSortie->count();
+        
+        // Montant Global = somme de (Poids * PU)
+        $montantGlobal = $fichesSortie->sum(function ($fiche) {
+            $poids = $fiche->poids_pont ?? 0;
+            $pu = $fiche->prix_unitaire_transport ?? 0;
+            return $poids * $pu;
+        });
+
+        // Avance totale (Carburant + Frais Route + Dépenses)
+        $totalAvance = $fichesSortie->sum(function ($fiche) {
+            $carburant = $fiche->carburant ?? 0;
+            $fraisRoute = $fiche->frais_route ?? 0;
+            
+            $depenses = Depense::where('matricule_vehicule', $fiche->matricule_vehicule)
+                ->whereDate('date_depense', '>=', $fiche->date_chargement)
+                ->whereDate('date_depense', '<=', $fiche->date_dechargement ?? $fiche->date_chargement)
+                ->sum('montant');
+            
+            return $carburant + $fraisRoute + $depenses;
+        });
+
+        // Montant Payé = somme des paiements
+        $montantPayeTransporteur = $fichesSortie->sum('montant_paye_transporteur');
+        $montantPaye = $totalAvance + $montantPayeTransporteur;
+        
+        // Reste à Payer
+        $resteAPayer = $montantGlobal - $montantPaye;
+
+        // Récupérer l'historique des paiements pour ce véhicule
+        $paiements = PaiementTransporteur::where('matricule_vehicule', $matricule)
+            ->orderBy('date_paiement', 'desc')
+            ->get();
+
+        return view('gestion_financiere.vehicule_transporteur', [
+            'matricule' => $matricule,
+            'fichesSortie' => $fichesSortie,
+            'totalFiches' => $totalFiches,
+            'montantGlobal' => $montantGlobal,
+            'totalAvance' => $totalAvance,
+            'montantPaye' => $montantPaye,
+            'resteAPayer' => $resteAPayer,
+            'paiements' => $paiements,
         ]);
     }
 }

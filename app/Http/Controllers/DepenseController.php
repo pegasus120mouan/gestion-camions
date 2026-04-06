@@ -110,14 +110,34 @@ class DepenseController extends Controller
         } catch (\Throwable $e) {}
 
         try {
-            $agentsResponse = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                ->get($mesAgentsUrl);
-            if ($agentsResponse->successful()) {
-                $agents = $agentsResponse->json('agents') ?? [];
+            // Récupérer tous les agents avec pagination
+            $allAgents = [];
+            $page = 1;
+            $hasMore = true;
+            
+            while ($hasMore) {
+                $agentsResponse = Http::acceptJson()
+                    ->withoutVerifying()
+                    ->timeout($timeout)
+                    ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
+                    ->get($mesAgentsUrl, ['page' => $page]);
+                
+                if ($agentsResponse->successful()) {
+                    $pageAgents = $agentsResponse->json('agents') ?? [];
+                    $pagination = $agentsResponse->json('pagination') ?? [];
+                    
+                    $allAgents = array_merge($allAgents, $pageAgents);
+                    
+                    $currentPage = $pagination['current_page'] ?? $page;
+                    $lastPage = $pagination['last_page'] ?? 1;
+                    $hasMore = $currentPage < $lastPage;
+                    $page++;
+                } else {
+                    $hasMore = false;
+                }
             }
+            
+            $agents = $allAgents;
         } catch (\Throwable $e) {}
 
         try {
@@ -859,5 +879,39 @@ class DepenseController extends Controller
         $ficheSortie->delete();
 
         return redirect()->route('fiches_sortie.index')->with('success', 'Fiche de sortie supprimée avec succès.');
+    }
+
+    public function updateDechargement(Request $request, int $ficheId)
+    {
+        $validated = $request->validate([
+            'date_dechargement' => ['required', 'date'],
+            'poids_pont' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $ficheSortie = FicheSortie::findOrFail($ficheId);
+        $ficheSortie->update([
+            'date_dechargement' => $validated['date_dechargement'],
+            'poids_pont' => $validated['poids_pont'],
+        ]);
+
+        return redirect()->route('fiches_sortie.index')->with('success', 'Déchargement enregistré avec succès.');
+    }
+
+    public function exportFicheSortiePdf(int $ficheId)
+    {
+        $fiche = FicheSortie::findOrFail($ficheId);
+        $user = Auth::user();
+        $printedBy = $user ? $user->name : 'Utilisateur';
+        $printedAt = now()->format('d/m/Y à H:i:s');
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('fiches_sortie.pdf', [
+            'fiche' => $fiche,
+            'printedBy' => $printedBy,
+            'printedAt' => $printedAt,
+        ]);
+
+        $pdf->setPaper('A4', 'portrait');
+
+        return $pdf->stream('fiche_sortie_' . $fiche->id . '.pdf');
     }
 }

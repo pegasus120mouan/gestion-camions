@@ -122,7 +122,7 @@
               @endphp
               <tr>
                 <td>{{ $fiche->date_chargement ? $fiche->date_chargement->format('d-m-Y') : '-' }}</td>
-                <td class="fw-bold">{{ $fiche->matricule_vehicule ?? '-' }}</td>
+                <td class="fw-bold"><a href="{{ route('gestionfinanciere.transporteur.vehicule', ['matricule' => $fiche->matricule_vehicule]) }}" class="text-primary text-decoration-none">{{ $fiche->matricule_vehicule ?? '-' }}</a></td>
                 <td>{{ $fiche->nom_pont ?? '-' }}</td>
                 <td>{{ $fiche->usine ?? '-' }}</td>
                 <td>{{ $poids ? number_format($poids, 0, ',', ' ') : '-' }}</td>

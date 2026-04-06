@@ -153,12 +153,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/depenses', [DepenseController::class, 'listeDepenses'])->name('depenses.liste');
     Route::post('/depenses', [DepenseController::class, 'storeFromList'])->name('depenses.store');
     Route::get('/fiches-sortie', [DepenseController::class, 'listeFichesSortie'])->name('fiches_sortie.index');
+    Route::get('/fiches-sortie/{fiche_id}/pdf', [DepenseController::class, 'exportFicheSortiePdf'])->name('fiches_sortie.pdf');
     Route::get('/fiches-sortie/{fiche_id}', [DepenseController::class, 'showFicheSortie'])->name('fiches_sortie.show');
     Route::get('/api/tickets-conformes', [DepenseController::class, 'getTicketsConformesApi'])->name('api.tickets_conformes');
     Route::post('/fiches-sortie', [DepenseController::class, 'storeFicheSortieFromList'])->name('fiches_sortie.store');
     Route::post('/fiches-sortie/{fiche_id}/associer-ticket', [DepenseController::class, 'associerTicket'])->name('fiches_sortie.associer_ticket');
     Route::post('/fiches-sortie/{fiche_id}/prix-transport', [DepenseController::class, 'updatePrixTransport'])->name('fiches_sortie.update_prix_transport');
     Route::put('/fiches-sortie/{fiche_id}', [DepenseController::class, 'updateFicheSortie'])->name('fiches_sortie.update');
+    Route::put('/fiches-sortie/{fiche_id}/dechargement', [DepenseController::class, 'updateDechargement'])->name('fiches_sortie.dechargement');
     Route::delete('/fiches-sortie/{fiche_id}', [DepenseController::class, 'destroyFicheSortie'])->name('fiches_sortie.destroy');
 
     // Stocks PGF
@@ -220,6 +222,7 @@ Route::middleware('auth')->group(function () {
     // Montant Autres Transporteurs
     Route::get('/gestion-financiere/montant-transporteur', [MontantTransporteurController::class, 'index'])->name('gestionfinanciere.montant_transporteur');
     Route::get('/gestion-financiere/transporteur/historique-paiements', [MontantTransporteurController::class, 'historiquePaiements'])->name('gestionfinanciere.transporteur.historique');
+    Route::get('/gestion-financiere/transporteur/vehicule/{matricule}', [MontantTransporteurController::class, 'showVehicule'])->name('gestionfinanciere.transporteur.vehicule');
     Route::get('/gestion-financiere/transporteur/{nom}', [MontantTransporteurController::class, 'show'])->name('gestionfinanciere.transporteur.show');
     Route::put('/gestion-financiere/transporteur/fiche/{ficheId}/pu', [MontantTransporteurController::class, 'updatePU'])->name('gestionfinanciere.transporteur.updatePU');
     Route::post('/gestion-financiere/transporteur/fiche/{ficheId}/paiement', [MontantTransporteurController::class, 'storePaiement'])->name('gestionfinanciere.transporteur.paiement');

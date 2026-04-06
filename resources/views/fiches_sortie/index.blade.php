@@ -30,7 +30,7 @@
               <tr>
                 <td>{{ $f->date_chargement ? $f->date_chargement->format('d-m-Y') : '-' }}</td>
                 <td>
-                  <a href="{{ route('vehicules.depenses', ['vehicule_id' => $f->vehicule_id, 'matricule' => $f->matricule_vehicule]) }}">
+                  <a href="#" data-bs-toggle="modal" data-bs-target="#modalDechargement{{ $f->id }}" class="text-primary text-decoration-none">
                     <strong>{{ $f->matricule_vehicule }}</strong>
                   </a>
                 </td>
@@ -53,13 +53,16 @@
                 </td>
                 <td>
                   <div class="d-flex gap-1">
-                    <a href="{{ route('fiches_sortie.show', ['fiche_id' => $f->id]) }}" class="btn btn-sm btn-outline-primary">
+                    <a href="{{ route('fiches_sortie.show', ['fiche_id' => $f->id]) }}" class="btn btn-sm btn-outline-primary" title="Voir">
                       <i class="bx bx-show"></i>
                     </a>
-                    <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalEditFiche{{ $f->id }}">
+                    <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalEditFiche{{ $f->id }}" title="Modifier">
                       <i class="bx bx-edit"></i>
                     </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalDeleteFiche{{ $f->id }}">
+                    <a href="{{ route('fiches_sortie.pdf', ['fiche_id' => $f->id]) }}" target="_blank" class="btn btn-sm btn-outline-info" title="Imprimer PDF">
+                      <i class="bx bx-printer"></i>
+                    </a>
+                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalDeleteFiche{{ $f->id }}" title="Supprimer">
                       <i class="bx bx-trash"></i>
                     </button>
                   </div>
@@ -191,8 +194,13 @@
               <select name="id_pont" class="form-select" required>
                 <option value="">-- Sélectionner un pont --</option>
                 @foreach($ponts as $p)
-                  <option value="{{ $p['id_pont'] ?? '' }}" {{ ($f->id_pont == ($p['id_pont'] ?? '')) ? 'selected' : '' }}>
-                    {{ $p['nom_pont'] ?? '' }} ({{ $p['code_pont'] ?? '' }})
+                  @php
+                    $pontNom = trim($p['nom_pont'] ?? '');
+                    $ficheNomPont = trim($f->nom_pont ?? '');
+                    $isSelectedPont = ($f->id_pont == ($p['id_pont'] ?? '')) || (strtolower($pontNom) == strtolower($ficheNomPont));
+                  @endphp
+                  <option value="{{ $p['id_pont'] ?? '' }}" data-nom="{{ $pontNom }}" data-code="{{ $p['code_pont'] ?? '' }}" {{ $isSelectedPont ? 'selected' : '' }}>
+                    {{ $pontNom }} ({{ $p['code_pont'] ?? '' }})
                   </option>
                 @endforeach
               </select>
@@ -205,8 +213,10 @@
                   @php
                     $nomComplet = $a['nom_complet'] ?? (($a['nom_agent'] ?? '') . ' ' . ($a['prenom_agent'] ?? ''));
                     $numeroAgent = $a['numero_agent'] ?? '';
+                    $ficheNomAgent = trim($f->nom_agent ?? '');
+                    $isSelectedAgent = ($f->id_agent == ($a['id_agent'] ?? '')) || (strtolower(trim($nomComplet)) == strtolower($ficheNomAgent));
                   @endphp
-                  <option value="{{ $a['id_agent'] ?? '' }}" {{ ($f->id_agent == ($a['id_agent'] ?? '')) ? 'selected' : '' }}>
+                  <option value="{{ $a['id_agent'] ?? '' }}" data-nom="{{ $nomComplet }}" data-numero="{{ $numeroAgent }}" {{ $isSelectedAgent ? 'selected' : '' }}>
                     {{ $nomComplet }} ({{ $numeroAgent }})
                   </option>
                 @endforeach
@@ -294,6 +304,42 @@
           </button>
         </form>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Déchargement -->
+<div class="modal fade" id="modalDechargement{{ $f->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title"><i class="bx bx-package me-2"></i>Déchargement - {{ $f->matricule_vehicule }}</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ route('fiches_sortie.dechargement', ['fiche_id' => $f->id]) }}">
+        @csrf
+        @method('PUT')
+        <div class="modal-body">
+          <div class="mb-3">
+            <p><strong>Date de chargement:</strong> {{ $f->date_chargement ? $f->date_chargement->format('d/m/Y') : '-' }}</p>
+            <p><strong>Pont:</strong> {{ $f->nom_pont ?? '-' }}</p>
+            <p><strong>Agent:</strong> {{ $f->nom_agent ?? '-' }}</p>
+          </div>
+          <hr>
+          <div class="mb-3">
+            <label class="form-label">Date de déchargement <span class="text-danger">*</span></label>
+            <input type="date" name="date_dechargement" class="form-control" value="{{ $f->date_dechargement ? $f->date_dechargement->format('Y-m-d') : '' }}" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Poids (kg) <span class="text-danger">*</span></label>
+            <input type="number" name="poids_pont" class="form-control" value="{{ $f->poids_pont ?? '' }}" placeholder="Poids en kg" min="0" required>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-info"><i class="bx bx-save me-1"></i>Enregistrer</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
