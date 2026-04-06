@@ -71,9 +71,39 @@ class DepenseController extends Controller
 
     public function listeFichesSortie(Request $request)
     {
-        $fiches = FicheSortie::orderBy('date_chargement', 'desc')
+        $query = FicheSortie::query();
+
+        // Filtre par véhicule
+        if ($request->filled('vehicule')) {
+            $query->where('matricule_vehicule', $request->input('vehicule'));
+        }
+
+        // Filtre par pont
+        if ($request->filled('pont')) {
+            $query->where('nom_pont', $request->input('pont'));
+        }
+
+        // Filtre par usine
+        if ($request->filled('usine')) {
+            $query->where('usine', $request->input('usine'));
+        }
+
+        // Filtre par date (chargement ou déchargement)
+        $typeDate = $request->input('type_date', 'chargement');
+        $dateColumn = $typeDate === 'dechargement' ? 'date_dechargement' : 'date_chargement';
+
+        if ($request->filled('date_debut')) {
+            $query->whereDate($dateColumn, '>=', $request->input('date_debut'));
+        }
+
+        if ($request->filled('date_fin')) {
+            $query->whereDate($dateColumn, '<=', $request->input('date_fin'));
+        }
+
+        $fiches = $query->orderBy('date_chargement', 'desc')
             ->orderBy('id', 'desc')
-            ->paginate(20);
+            ->paginate(20)
+            ->withQueryString();
 
         // Récupérer les véhicules, ponts et agents depuis l'API
         $mesCamionsUrl = (string) config('services.external_auth.mes_camions_url');
@@ -153,6 +183,11 @@ class DepenseController extends Controller
         // Récupérer les chefs des chargeurs
         $chefChargeurs = \App\Models\ChefChargeur::orderBy('nom')->get();
 
+        // Statistiques des fiches de sortie
+        $totalFiches = FicheSortie::count();
+        $fichesEnAttente = FicheSortie::whereNull('date_dechargement')->count();
+        $fichesDechargees = FicheSortie::whereNotNull('date_dechargement')->count();
+
         return view('fiches_sortie.index', [
             'fiches' => $fiches,
             'vehicules' => $vehicules,
@@ -160,6 +195,9 @@ class DepenseController extends Controller
             'agents' => $agents,
             'usines' => $usines,
             'chefChargeurs' => $chefChargeurs,
+            'totalFiches' => $totalFiches,
+            'fichesEnAttente' => $fichesEnAttente,
+            'fichesDechargees' => $fichesDechargees,
             'external_error' => null,
         ]);
     }

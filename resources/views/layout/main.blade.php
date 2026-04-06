@@ -889,6 +889,13 @@
 
           <!-- / Navbar -->
 
+          <!-- Statistiques fiches de sortie (visible sur toutes les pages sauf dashboards) -->
+          @if(!request()->routeIs('dashboard') && !request()->routeIs('dashboard.*') && !request()->routeIs('home'))
+            <div class="container-xxl flex-grow-1 container-p-y pb-0">
+              @include('partials.fiches_sortie_stats')
+            </div>
+          @endif
+
           <!-- Content wrapper -->
             @yield('content')
           <!-- Content wrapper -->

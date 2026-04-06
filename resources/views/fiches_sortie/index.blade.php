@@ -6,6 +6,75 @@
       <h4 class="mb-0">Liste des fiches de sortie</h4>
     </div>
 
+    <!-- Filtres de recherche -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="bx bx-filter-alt me-2"></i>Filtres de recherche</h5>
+      </div>
+      <div class="card-body">
+        <form method="GET" action="{{ route('fiches_sortie.index') }}">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label">Véhicule</label>
+              <select name="vehicule" class="form-select">
+                <option value="">Tous les véhicules</option>
+                @foreach($vehicules ?? [] as $v)
+                  <option value="{{ $v['matricule_vehicule'] ?? '' }}" {{ request('vehicule') == ($v['matricule_vehicule'] ?? '') ? 'selected' : '' }}>
+                    {{ $v['matricule_vehicule'] ?? '' }}
+                  </option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Pont</label>
+              <select name="pont" class="form-select">
+                <option value="">Tous les ponts</option>
+                @foreach($ponts ?? [] as $p)
+                  <option value="{{ $p['nom_pont'] ?? '' }}" {{ request('pont') == ($p['nom_pont'] ?? '') ? 'selected' : '' }}>
+                    {{ $p['nom_pont'] ?? '' }}
+                  </option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Usine</label>
+              <select name="usine" class="form-select">
+                <option value="">Toutes les usines</option>
+                @foreach($usines ?? [] as $u)
+                  <option value="{{ $u['nom_usine'] ?? '' }}" {{ request('usine') == ($u['nom_usine'] ?? '') ? 'selected' : '' }}>
+                    {{ $u['nom_usine'] ?? '' }}
+                  </option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Type de date</label>
+              <select name="type_date" class="form-select">
+                <option value="chargement" {{ request('type_date', 'chargement') == 'chargement' ? 'selected' : '' }}>Date chargement</option>
+                <option value="dechargement" {{ request('type_date') == 'dechargement' ? 'selected' : '' }}>Date déchargement</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Date début</label>
+              <input type="date" name="date_debut" class="form-control" value="{{ request('date_debut') }}">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Date fin</label>
+              <input type="date" name="date_fin" class="form-control" value="{{ request('date_fin') }}">
+            </div>
+            <div class="col-md-6 d-flex align-items-end gap-2">
+              <button type="submit" class="btn btn-primary">
+                <i class="bx bx-search me-1"></i>Filtrer
+              </button>
+              <a href="{{ route('fiches_sortie.index') }}" class="btn btn-outline-secondary">
+                <i class="bx bx-refresh me-1"></i>Réinitialiser
+              </a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div class="card">
       <div class="table-responsive text-nowrap">
         @if(!empty($external_error))
