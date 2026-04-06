@@ -202,6 +202,174 @@ class DepenseController extends Controller
         ]);
     }
 
+    public function listeFichesNonDechargees(Request $request)
+    {
+        $query = FicheSortie::whereNull('date_dechargement');
+
+        // Filtre par véhicule
+        if ($request->filled('vehicule')) {
+            $query->where('matricule_vehicule', $request->input('vehicule'));
+        }
+
+        // Filtre par pont
+        if ($request->filled('pont')) {
+            $query->where('nom_pont', $request->input('pont'));
+        }
+
+        // Filtre par usine
+        if ($request->filled('usine')) {
+            $query->where('usine', $request->input('usine'));
+        }
+
+        // Filtre par date de chargement
+        if ($request->filled('date_debut')) {
+            $query->whereDate('date_chargement', '>=', $request->input('date_debut'));
+        }
+
+        if ($request->filled('date_fin')) {
+            $query->whereDate('date_chargement', '<=', $request->input('date_fin'));
+        }
+
+        $fiches = $query->orderBy('date_chargement', 'desc')
+            ->orderBy('id', 'desc')
+            ->paginate(20)
+            ->withQueryString();
+
+        // Récupérer les véhicules, ponts et agents depuis l'API
+        $mesCamionsUrl = (string) config('services.external_auth.mes_camions_url');
+        $mesPontsUrl = (string) config('services.external_auth.mes_ponts_url');
+        $timeout = (int) config('services.external_auth.timeout', 10);
+        $phpsessid = session('external_auth.phpsessid', '');
+
+        $vehicules = [];
+        $ponts = [];
+        $usines = [];
+
+        try {
+            $camionsResponse = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout($timeout)
+                ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
+                ->get($mesCamionsUrl);
+            if ($camionsResponse->successful()) {
+                $vehicules = $camionsResponse->json('vehicules') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            $pontsResponse = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout($timeout)
+                ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
+                ->get($mesPontsUrl);
+            if ($pontsResponse->successful()) {
+                $ponts = $pontsResponse->json('ponts') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            $usinesResponse = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
+            if ($usinesResponse->successful()) {
+                $usines = $usinesResponse->json('usines') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        return view('fiches_sortie.non_dechargees', [
+            'fiches' => $fiches,
+            'vehicules' => $vehicules,
+            'ponts' => $ponts,
+            'usines' => $usines,
+            'external_error' => null,
+        ]);
+    }
+
+    public function listeFichesDechargees(Request $request)
+    {
+        $query = FicheSortie::whereNotNull('date_dechargement');
+
+        // Filtre par véhicule
+        if ($request->filled('vehicule')) {
+            $query->where('matricule_vehicule', $request->input('vehicule'));
+        }
+
+        // Filtre par pont
+        if ($request->filled('pont')) {
+            $query->where('nom_pont', $request->input('pont'));
+        }
+
+        // Filtre par usine
+        if ($request->filled('usine')) {
+            $query->where('usine', $request->input('usine'));
+        }
+
+        // Filtre par date de déchargement
+        if ($request->filled('date_debut')) {
+            $query->whereDate('date_dechargement', '>=', $request->input('date_debut'));
+        }
+
+        if ($request->filled('date_fin')) {
+            $query->whereDate('date_dechargement', '<=', $request->input('date_fin'));
+        }
+
+        $fiches = $query->orderBy('date_dechargement', 'desc')
+            ->orderBy('id', 'desc')
+            ->paginate(20)
+            ->withQueryString();
+
+        // Récupérer les véhicules, ponts depuis l'API
+        $mesCamionsUrl = (string) config('services.external_auth.mes_camions_url');
+        $mesPontsUrl = (string) config('services.external_auth.mes_ponts_url');
+        $timeout = (int) config('services.external_auth.timeout', 10);
+        $phpsessid = session('external_auth.phpsessid', '');
+
+        $vehicules = [];
+        $ponts = [];
+        $usines = [];
+
+        try {
+            $camionsResponse = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout($timeout)
+                ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
+                ->get($mesCamionsUrl);
+            if ($camionsResponse->successful()) {
+                $vehicules = $camionsResponse->json('vehicules') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            $pontsResponse = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout($timeout)
+                ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
+                ->get($mesPontsUrl);
+            if ($pontsResponse->successful()) {
+                $ponts = $pontsResponse->json('ponts') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        try {
+            $usinesResponse = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout($timeout)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
+            if ($usinesResponse->successful()) {
+                $usines = $usinesResponse->json('usines') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        return view('fiches_sortie.dechargees', [
+            'fiches' => $fiches,
+            'vehicules' => $vehicules,
+            'ponts' => $ponts,
+            'usines' => $usines,
+            'external_error' => null,
+        ]);
+    }
+
     public function index(Request $request, int $vehiculeId)
     {
         $matricule = (string) $request->query('matricule', '');

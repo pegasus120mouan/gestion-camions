@@ -153,6 +153,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/depenses', [DepenseController::class, 'listeDepenses'])->name('depenses.liste');
     Route::post('/depenses', [DepenseController::class, 'storeFromList'])->name('depenses.store');
     Route::get('/fiches-sortie', [DepenseController::class, 'listeFichesSortie'])->name('fiches_sortie.index');
+    Route::get('/fiches-sortie-non-dechargees', [DepenseController::class, 'listeFichesNonDechargees'])->name('fiches_sortie.non_dechargees');
+    Route::get('/fiches-sortie-dechargees', [DepenseController::class, 'listeFichesDechargees'])->name('fiches_sortie.dechargees');
     Route::get('/fiches-sortie/{fiche_id}/pdf', [DepenseController::class, 'exportFicheSortiePdf'])->name('fiches_sortie.pdf');
     Route::get('/fiches-sortie/{fiche_id}', [DepenseController::class, 'showFicheSortie'])->name('fiches_sortie.show');
     Route::get('/api/tickets-conformes', [DepenseController::class, 'getTicketsConformesApi'])->name('api.tickets_conformes');

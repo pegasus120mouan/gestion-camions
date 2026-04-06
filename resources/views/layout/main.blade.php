@@ -155,6 +155,39 @@
               </ul>
             </li>
 
+
+
+
+           <li class="menu-item">
+              <a href="javascript:void(0);" class="menu-link menu-toggle">
+                <i class="menu-icon tf-icons bx bx-export" style="color: #00cfe8;"></i>
+                <div class="text-truncate" data-i18n="Weighbridges">Fiche de Sorties</div>
+              </a>
+
+              <ul class="menu-sub" style="list-style: none;">
+                <li class="menu-item" style="list-style: none;">
+                  <a href="{{ route('fiches_sortie.index') }}" class="menu-link">
+                    <i class="bx bxs-file me-2"></i>
+                    <div class="text-truncate" data-i18n="Weighbridges list">Liste des fiches</div>
+                  </a>
+                </li>
+                <li class="menu-item" style="list-style: none;">
+                  <a href="{{ route('fiches_sortie.dechargees') }}" class="menu-link">
+                    <i class="bx bxs-check-circle me-2 text-success"></i>
+                    <div class="text-truncate" data-i18n="Weighbridges list">Fiches déchargées</div>
+                  </a>
+                </li>
+                <li class="menu-item" style="list-style: none;">
+                  <a href="{{ route('fiches_sortie.non_dechargees') }}" class="menu-link">
+                    <i class="bx bxs-time-five me-2 text-warning"></i>
+                    <div class="text-truncate" data-i18n="Weighbridges list">Fiches non déchargées</div>
+                  </a>
+                </li>
+              </ul>
+            </li>
+
+
+
              <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-map" style="color: #00cfe8;"></i>
