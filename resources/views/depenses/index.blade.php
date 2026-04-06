@@ -144,12 +144,14 @@
 
           <div class="mb-3">
             <label class="form-label">Agent <span class="text-danger">*</span></label>
-            <input type="text" id="agent_input" class="form-control" placeholder="Tapez pour rechercher un agent..." list="agents_list" autocomplete="off" required />
-            <datalist id="agents_list">
-              @foreach($agents ?? [] as $agent)
-                <option data-id="{{ $agent['id_agent'] }}" value="{{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})">
-              @endforeach
-            </datalist>
+            <div class="position-relative">
+              <input type="text" id="agent_search" class="form-control" placeholder="Tapez pour rechercher un agent..." autocomplete="off" required />
+              <div id="agent_dropdown" class="dropdown-menu w-100" style="max-height: 250px; overflow-y: auto; display: none;">
+                @foreach($agents ?? [] as $agent)
+                  <a href="#" class="dropdown-item agent-option" data-id="{{ $agent['id_agent'] }}" data-display="{{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})">{{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})</a>
+                @endforeach
+              </div>
+            </div>
           </div>
 
           <div class="mb-3">
@@ -212,7 +214,8 @@ document.addEventListener('DOMContentLoaded', function() {
   };
 
   var pontInput = document.getElementById('pont_input');
-  var agentInput = document.getElementById('agent_input');
+  var agentSearch = document.getElementById('agent_search');
+  var agentDropdown = document.getElementById('agent_dropdown');
   var idPontHidden = document.getElementById('id_pont_hidden');
   var idAgentHidden = document.getElementById('id_agent_hidden');
   var pontDisplayHidden = document.getElementById('pont_display_hidden');
@@ -231,16 +234,48 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  if (agentInput) {
-    agentInput.addEventListener('change', function() {
-      var val = this.value;
-      idAgentHidden.value = agentsMap[val] || '';
-      agentDisplayHidden.value = val;
+  // Autocomplétion pour les agents
+  if (agentSearch && agentDropdown) {
+    var agentOptions = agentDropdown.querySelectorAll('.agent-option');
+    
+    agentSearch.addEventListener('input', function() {
+      var searchVal = this.value.toLowerCase();
+      var hasVisible = false;
+      
+      agentOptions.forEach(function(option) {
+        var text = option.textContent.toLowerCase();
+        if (text.includes(searchVal)) {
+          option.style.display = 'block';
+          hasVisible = true;
+        } else {
+          option.style.display = 'none';
+        }
+      });
+      
+      agentDropdown.style.display = hasVisible && searchVal.length > 0 ? 'block' : 'none';
     });
-    agentInput.addEventListener('input', function() {
-      var val = this.value;
-      idAgentHidden.value = agentsMap[val] || '';
-      agentDisplayHidden.value = val;
+    
+    agentSearch.addEventListener('focus', function() {
+      if (this.value.length > 0) {
+        agentDropdown.style.display = 'block';
+      }
+    });
+    
+    agentOptions.forEach(function(option) {
+      option.addEventListener('click', function(e) {
+        e.preventDefault();
+        agentSearch.value = this.dataset.display;
+        idAgentHidden.value = this.dataset.id;
+        agentDisplayHidden.value = this.dataset.display;
+        agentDropdown.style.display = 'none';
+      });
+    });
+    
+    // Fermer le dropdown si on clique ailleurs
+    document.addEventListener('click', function(e) {
+      if (!agentSearch.contains(e.target) && !agentDropdown.contains(e.target)) {
+        agentDropdown.style.display = 'none';
+      }
     });
   }
 
@@ -257,7 +292,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       if (!idAgentHidden.value) {
         alert('Veuillez selectionner un agent valide dans la liste.');
-        agentInput.focus();
+        agentSearch.focus();
         return false;
       }
 

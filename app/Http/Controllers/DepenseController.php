@@ -178,13 +178,34 @@ class DepenseController extends Controller
         }
 
         try {
-            $agentsResponse = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php');
-            if ($agentsResponse->successful()) {
-                $agents = $agentsResponse->json('agents') ?? [];
+            // Récupérer tous les agents avec pagination
+            $allAgents = [];
+            $page = 1;
+            $hasMore = true;
+            
+            while ($hasMore) {
+                $agentsResponse = Http::acceptJson()
+                    ->withoutVerifying()
+                    ->timeout($timeout)
+                    ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php', ['page' => $page]);
+                
+                if ($agentsResponse->successful()) {
+                    $pageAgents = $agentsResponse->json('agents') ?? [];
+                    $pagination = $agentsResponse->json('pagination') ?? [];
+                    
+                    $allAgents = array_merge($allAgents, $pageAgents);
+                    
+                    // Vérifier s'il y a d'autres pages
+                    $currentPage = $pagination['current_page'] ?? $page;
+                    $lastPage = $pagination['last_page'] ?? 1;
+                    $hasMore = $currentPage < $lastPage;
+                    $page++;
+                } else {
+                    $hasMore = false;
+                }
             }
+            
+            $agents = $allAgents;
         } catch (\Throwable $e) {
             // Ignorer l'erreur
         }
