@@ -149,7 +149,8 @@
           <div class="alert alert-info">
             <strong>Véhicule:</strong> {{ $f->matricule_vehicule }}<br>
             <strong>Date chargement:</strong> {{ $f->date_chargement ? $f->date_chargement->format('d/m/Y') : '-' }}<br>
-            <strong>Pont:</strong> {{ $f->nom_pont }}
+            <strong>Pont:</strong> {{ $f->nom_pont }}<br>
+            <strong class="text-danger">Usine:</strong> <span class="text-danger fw-bold">{{ $f->usine ?? '-' }}</span>
           </div>
           <div class="mb-3">
             <label class="form-label">Date de déchargement <span class="text-danger">*</span></label>
