@@ -45,7 +45,7 @@
             <div class="d-flex justify-content-between align-items-center">
               <div>
                 <h6 class="text-white mb-1">Cumul des sorties</h6>
-                <h3 class="mb-0">{{ number_format($totalEntrees ?? 0, 0, ',', ' ') }} kg</h3>
+                <h3 class="mb-0">{{ number_format($totalSorties ?? 0, 0, ',', ' ') }} kg</h3>
               </div>
               <i class="bx bx-down-arrow-circle" style="font-size: 3rem; opacity: 0.5;"></i>
             </div>
@@ -58,7 +58,7 @@
             <div class="d-flex justify-content-between align-items-center">
               <div>
                 <h6 class="text-white mb-1">Ecart</h6>
-                <h3 class="mb-0">{{ number_format(($totalEntrees ?? 0) - ($stockTotal ?? 0), 0, ',', ' ') }} kg</h3>
+                <h3 class="mb-0">{{ number_format(($totalSorties ?? 0) - ($stockTotal ?? 0), 0, ',', ' ') }} kg</h3>
               </div>
               <i class="bx bx-up-arrow-circle" style="font-size: 3rem; opacity: 0.5;"></i>
             </div>
@@ -71,14 +71,7 @@
             <div class="d-flex justify-content-between align-items-center">
               <div>
                 <h6 class="text-white mb-1">Stock disponible</h6>
-                @php
-                  if (($totalEntrees ?? 0) >= ($stockTotal ?? 0)) {
-                    $stockDisponible = 0;
-                  } else {
-                    $stockDisponible = ($stockTotal ?? 0) - ($totalEntrees ?? 0);
-                  }
-                @endphp
-                <h3 class="mb-0">{{ number_format($stockDisponible, 0, ',', ' ') }} kg</h3>
+                <h3 class="mb-0">{{ number_format($stockDisponible ?? 0, 0, ',', ' ') }} kg</h3>
               </div>
               <i class="bx bx-transfer" style="font-size: 3rem; opacity: 0.5;"></i>
             </div>
@@ -143,6 +136,39 @@
         </table>
       </div>
     </div>
+
+    <!-- Tableau des sorties (fiches déchargées) -->
+    @if(isset($fichesDechargees) && $fichesDechargees->count() > 0)
+    <div class="card mt-4">
+      <div class="card-header d-flex justify-content-between align-items-center bg-danger text-white">
+        <h5 class="mb-0 text-white"><i class="bx bx-up-arrow-circle me-2"></i>Sorties (Fiches déchargées)</h5>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>Date déchargement</th>
+              <th>Véhicule</th>
+              <th>Agent</th>
+              <th>Usine</th>
+              <th class="text-end">Poids (kg)</th>
+            </tr>
+          </thead>
+          <tbody>
+            @foreach($fichesDechargees as $fiche)
+              <tr>
+                <td>{{ $fiche->date_dechargement ? $fiche->date_dechargement->format('d-m-Y') : '-' }}</td>
+                <td><strong>{{ $fiche->matricule_vehicule }}</strong></td>
+                <td>{{ $fiche->nom_agent ?? '-' }}</td>
+                <td>{{ $fiche->usine ?? '-' }}</td>
+                <td class="text-end fw-bold text-danger">{{ number_format((float)$fiche->poids_pont, 0, ',', ' ') }}</td>
+              </tr>
+            @endforeach
+          </tbody>
+        </table>
+      </div>
+    </div>
+    @endif
 
   </div>
 </div>

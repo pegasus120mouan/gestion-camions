@@ -41,7 +41,7 @@ class StockPgfController extends Controller
 
     public function show(Request $request, int $id)
     {
-        $stock = StockPgf::with('entrees')->findOrFail($id);
+        $stock = StockPgf::with(['entrees', 'sorties'])->findOrFail($id);
 
         // Récupérer les ponts depuis l'API
         $mesPontsUrl = (string) config('services.external_auth.mes_ponts_url');
@@ -55,8 +55,10 @@ class StockPgfController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        // Calculer le total des entrées
+        // Calculer le total des entrées et sorties
         $totalEntrees = $stock->entrees->sum('quantite');
+        $totalSorties = $stock->sorties->sum('quantite');
+        $stockDisponible = $totalEntrees - $totalSorties;
 
         // Grouper les entrées par pont
         $entreesParPont = $stock->entrees->groupBy('id_pont')->map(function ($entrees) {
@@ -67,11 +69,23 @@ class StockPgfController extends Controller
             ];
         });
 
+        // Grouper les sorties par pont
+        $sortiesParPont = $stock->sorties->groupBy('id_pont')->map(function ($sorties) {
+            return [
+                'nom_pont' => $sorties->first()->nom_pont,
+                'total' => $sorties->sum('quantite'),
+                'nb_sorties' => $sorties->count(),
+            ];
+        });
+
         return view('stocks_pgf.show', [
             'stock' => $stock,
             'ponts' => $ponts,
             'totalEntrees' => $totalEntrees,
+            'totalSorties' => $totalSorties,
+            'stockDisponible' => $stockDisponible,
             'entreesParPont' => $entreesParPont,
+            'sortiesParPont' => $sortiesParPont,
         ]);
     }
 

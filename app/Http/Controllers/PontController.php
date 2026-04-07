@@ -39,56 +39,26 @@ class PontController extends Controller
             $ponts = [];
         }
 
-        // Récupérer les tickets pour calculer les sorties (poids usine)
-        $mesTicketsUrl = (string) config('services.external_auth.mes_tickets_url');
-        $phpsessid = (string) $request->session()->get('external_auth.phpsessid', '');
-        $tickets = [];
-        try {
-            $ticketsResponse = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                ->get($mesTicketsUrl);
-            if ($ticketsResponse->successful()) {
-                $tickets = $ticketsResponse->json('tickets') ?? [];
-            }
-        } catch (\Throwable $e) {}
-
-        // Récupérer les fiches de sortie pour associer les tickets aux ponts
-        $ticketIds = array_column($tickets, 'id_ticket');
-        $sortiesParPont = [];
-        if (!empty($ticketIds)) {
-            $fiches = \App\Models\FicheSortie::whereIn('id_ticket', $ticketIds)->get();
-            foreach ($fiches as $fiche) {
-                $idPont = $fiche->id_pont;
-                $idTicket = $fiche->id_ticket;
-                // Trouver le poids usine du ticket
-                foreach ($tickets as $ticket) {
-                    if (($ticket['id_ticket'] ?? null) == $idTicket) {
-                        $poidsUsine = (float) ($ticket['poids'] ?? 0);
-                        if (!isset($sortiesParPont[$idPont])) {
-                            $sortiesParPont[$idPont] = 0;
-                        }
-                        $sortiesParPont[$idPont] += $poidsUsine;
-                        break;
-                    }
-                }
-            }
-        }
-
         // Calculer le stock disponible pour chaque pont
         foreach ($ponts as &$pont) {
             $idPont = $pont['id_pont'] ?? 0;
+            
+            // Entrées manuelles de stock
             $totalEntrees = Stock::where('id_pont', $idPont)->where('type', 'entree')->sum('quantite');
+            
+            // Sorties manuelles de stock
             $totalSortiesManuelles = Stock::where('id_pont', $idPont)->where('type', 'sortie')->sum('quantite');
-            $totalSortiesTickets = $sortiesParPont[$idPont] ?? 0;
-            $totalSorties = $totalSortiesManuelles + $totalSortiesTickets;
-            // Stock disponible = 0 si sorties >= entrées
-            if ($totalSorties >= $totalEntrees) {
-                $pont['stock_disponible'] = 0;
-            } else {
-                $pont['stock_disponible'] = $totalEntrees - $totalSorties;
-            }
+            
+            // Sorties des fiches de sortie déchargées (poids_pont)
+            $totalSortiesFiches = \App\Models\FicheSortie::where('id_pont', $idPont)
+                ->whereNotNull('date_dechargement')
+                ->whereNotNull('poids_pont')
+                ->sum('poids_pont');
+            
+            $totalSorties = $totalSortiesManuelles + $totalSortiesFiches;
+            
+            // Stock disponible = entrées - sorties
+            $pont['stock_disponible'] = max(0, $totalEntrees - $totalSorties);
         }
         unset($pont);
 
@@ -142,46 +112,35 @@ class PontController extends Controller
         $totalEntrees = Stock::where('id_pont', $id_pont)->where('type', 'entree')->sum('quantite');
         $totalSortiesManuelles = Stock::where('id_pont', $id_pont)->where('type', 'sortie')->sum('quantite');
         
-        // Calculer les sorties réelles du pont (poids usine des tickets associés aux fiches de sortie)
-        $fichesIds = \App\Models\FicheSortie::where('id_pont', $id_pont)->pluck('id_ticket')->filter()->toArray();
-        $totalSortiesPont = 0;
+        // Calculer les sorties réelles du pont (poids_pont des fiches de sortie déchargées)
+        $totalSortiesFiches = \App\Models\FicheSortie::where('id_pont', $id_pont)
+            ->whereNotNull('date_dechargement')
+            ->whereNotNull('poids_pont')
+            ->sum('poids_pont');
         
-        if (!empty($fichesIds)) {
-            // Récupérer les tickets depuis l'API pour avoir le poids usine
-            $mesTicketsUrl = (string) config('services.external_auth.mes_tickets_url');
-            $timeout = (int) config('services.external_auth.timeout', 10);
-            $phpsessid = (string) $request->session()->get('external_auth.phpsessid', '');
-            
-            try {
-                $ticketsResponse = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                    ->get($mesTicketsUrl);
-                if ($ticketsResponse->successful()) {
-                    $tickets = $ticketsResponse->json('tickets') ?? [];
-                    foreach ($tickets as $ticket) {
-                        if (in_array($ticket['id_ticket'] ?? 0, $fichesIds)) {
-                            $totalSortiesPont += (float) ($ticket['poids'] ?? 0);
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {}
-        }
+        // Total des sorties = sorties manuelles + sorties des fiches déchargées
+        $totalSorties = $totalSortiesManuelles + $totalSortiesFiches;
         
-        // Stock initial = entrées - sorties manuelles
-        $stockTotal = $totalEntrees - $totalSortiesManuelles;
-        // Stock disponible = stock initial - sorties du pont (poids usine)
-        $stockDisponible = $stockTotal - $totalSortiesPont;
+        // Stock disponible = entrées - sorties totales
+        $stockTotal = $totalEntrees;
+        $stockDisponible = $totalEntrees - $totalSorties;
         
         $nbMouvements = $stocks->count();
+        
+        // Récupérer les fiches de sortie déchargées pour ce pont
+        $fichesDechargees = \App\Models\FicheSortie::where('id_pont', $id_pont)
+            ->whereNotNull('date_dechargement')
+            ->whereNotNull('poids_pont')
+            ->orderBy('date_dechargement', 'desc')
+            ->get();
 
         return view('ponts.stock', [
             'pont' => $pont,
             'stocks' => $stocks,
             'stockTotal' => $stockTotal,
-            'totalEntrees' => $totalSortiesPont,
-            'totalSorties' => $stockDisponible,
+            'totalSorties' => $totalSorties,
+            'stockDisponible' => $stockDisponible,
+            'fichesDechargees' => $fichesDechargees,
             'nbMouvements' => $nbMouvements,
             'external_error' => null,
         ]);

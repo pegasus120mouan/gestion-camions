@@ -1095,12 +1095,37 @@ class DepenseController extends Controller
         ]);
 
         $ficheSortie = FicheSortie::findOrFail($ficheId);
+        
+        // Vérifier si la fiche n'est pas déjà déchargée
+        $dejaDecharge = $ficheSortie->date_dechargement !== null;
+        
         $ficheSortie->update([
             'date_dechargement' => $validated['date_dechargement'],
             'poids_pont' => $validated['poids_pont'],
         ]);
 
-        return redirect()->route('fiches_sortie.index')->with('success', 'Déchargement enregistré avec succès.');
+        // Créer une sortie de stock si la fiche a un pont et n'était pas déjà déchargée
+        if (!$dejaDecharge && $ficheSortie->id_pont && $validated['poids_pont'] > 0) {
+            // Trouver le stock actif
+            $stockActif = \App\Models\StockPgf::where('statut', 'actif')
+                ->orderBy('created_at', 'desc')
+                ->first();
+
+            if ($stockActif) {
+                \App\Models\SortieStockPgf::create([
+                    'stock_pgf_id' => $stockActif->id,
+                    'fiche_sortie_id' => $ficheSortie->id,
+                    'id_pont' => $ficheSortie->id_pont,
+                    'nom_pont' => $ficheSortie->nom_pont,
+                    'code_pont' => $ficheSortie->code_pont,
+                    'quantite' => $validated['poids_pont'],
+                    'date_sortie' => $validated['date_dechargement'],
+                    'commentaire' => 'Sortie automatique - Fiche de sortie #' . $ficheSortie->id . ' - Véhicule: ' . $ficheSortie->matricule_vehicule,
+                ]);
+            }
+        }
+
+        return redirect()->back()->with('success', 'Déchargement enregistré avec succès.');
     }
 
     public function exportFicheSortiePdf(int $ficheId)

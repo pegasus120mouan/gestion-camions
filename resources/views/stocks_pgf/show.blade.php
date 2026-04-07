@@ -71,9 +71,21 @@
               <label class="form-label text-muted">Date fin</label>
               <p class="fw-bold mb-0">{{ $stock->date_fin ? $stock->date_fin->format('d-m-Y') : '-' }}</p>
             </div>
+            <div class="mb-3">
+              <label class="form-label text-muted">Cumul des Entrées</label>
+              <p class="fw-bold mb-0 text-success fs-5">{{ number_format($totalEntrees, 0, ',', ' ') }} kg</p>
+            </div>
+            <div class="mb-3">
+              <label class="form-label text-muted">Cumul des Sorties</label>
+              <p class="fw-bold mb-0 text-danger fs-5">{{ number_format($totalSorties, 0, ',', ' ') }} kg</p>
+            </div>
+            <div class="mb-3">
+              <label class="form-label text-muted">Écart</label>
+              <p class="fw-bold mb-0 text-warning fs-5">{{ number_format(-$stockDisponible, 0, ',', ' ') }} kg</p>
+            </div>
             <div class="mb-0">
-              <label class="form-label text-muted">Total Entrées</label>
-              <p class="fw-bold mb-0 text-success fs-4">{{ number_format($totalEntrees, 0, ',', ' ') }} kg</p>
+              <label class="form-label text-muted">Stock Disponible</label>
+              <p class="fw-bold mb-0 text-primary fs-4">{{ number_format($stockDisponible, 0, ',', ' ') }} kg</p>
             </div>
           </div>
         </div>
@@ -93,6 +105,28 @@
                       <br><small class="text-muted">{{ $data['nb_entrees'] }} entrée(s)</small>
                     </div>
                     <span class="badge bg-primary rounded-pill">{{ number_format($data['total'], 0, ',', ' ') }} kg</span>
+                  </li>
+                @endforeach
+              </ul>
+            </div>
+          </div>
+        @endif
+
+        <!-- Résumé sorties par pont -->
+        @if($sortiesParPont->count() > 0)
+          <div class="card mb-4">
+            <div class="card-header bg-danger text-white">
+              <h5 class="mb-0 text-white"><i class="bx bx-map me-2"></i>Sorties par pont</h5>
+            </div>
+            <div class="card-body p-0">
+              <ul class="list-group list-group-flush">
+                @foreach($sortiesParPont as $idPont => $data)
+                  <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                      <strong>{{ $data['nom_pont'] ?: 'Pont #' . $idPont }}</strong>
+                      <br><small class="text-muted">{{ $data['nb_sorties'] }} sortie(s)</small>
+                    </div>
+                    <span class="badge bg-danger rounded-pill">{{ number_format($data['total'], 0, ',', ' ') }} kg</span>
                   </li>
                 @endforeach
               </ul>
@@ -147,6 +181,44 @@
                 @empty
                   <tr>
                     <td colspan="5" class="text-center text-muted py-4">Aucune entrée enregistrée</td>
+                  </tr>
+                @endforelse
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Liste des sorties -->
+        <div class="card mt-4">
+          <div class="card-header bg-danger text-white">
+            <h5 class="mb-0 text-white"><i class="bx bx-up-arrow-circle me-2"></i>Sorties de stock</h5>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Date</th>
+                  <th>Pont</th>
+                  <th class="text-end">Quantité (kg)</th>
+                  <th>Commentaire</th>
+                </tr>
+              </thead>
+              <tbody>
+                @forelse($stock->sorties->sortByDesc('date_sortie') as $sortie)
+                  <tr>
+                    <td>{{ $sortie->date_sortie ? $sortie->date_sortie->format('d-m-Y') : '-' }}</td>
+                    <td>
+                      <strong>{{ $sortie->nom_pont ?: 'Pont #' . $sortie->id_pont }}</strong>
+                      @if($sortie->code_pont)
+                        <br><small class="text-muted">{{ $sortie->code_pont }}</small>
+                      @endif
+                    </td>
+                    <td class="text-end fw-bold text-danger">{{ number_format($sortie->quantite, 0, ',', ' ') }}</td>
+                    <td>{{ $sortie->commentaire ?: '-' }}</td>
+                  </tr>
+                @empty
+                  <tr>
+                    <td colspan="4" class="text-center text-muted py-4">Aucune sortie enregistrée</td>
                   </tr>
                 @endforelse
               </tbody>

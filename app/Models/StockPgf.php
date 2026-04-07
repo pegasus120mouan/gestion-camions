@@ -25,9 +25,24 @@ class StockPgf extends Model
         return $this->hasMany(EntreeStockPgf::class, 'stock_pgf_id');
     }
 
+    public function sorties()
+    {
+        return $this->hasMany(SortieStockPgf::class, 'stock_pgf_id');
+    }
+
     public function getTotalEntreesAttribute()
     {
         return $this->entrees()->sum('quantite');
+    }
+
+    public function getTotalSortiesAttribute()
+    {
+        return $this->sorties()->sum('quantite');
+    }
+
+    public function getStockDisponibleAttribute()
+    {
+        return $this->total_entrees - $this->total_sorties;
     }
 
     public static function generateCode()
