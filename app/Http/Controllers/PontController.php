@@ -39,17 +39,19 @@ class PontController extends Controller
             $ponts = [];
         }
 
-        // Calculer le stock disponible pour chaque pont (stock ouvert uniquement)
+        // Calculer le stock disponible pour chaque pont (somme de tous les stocks ouverts de tous les parcs)
         foreach ($ponts as &$pont) {
             $idPont = $pont['id_pont'] ?? 0;
             
-            // Trouver le stock ouvert pour ce pont
-            $stockOuvert = Stock::where('id_pont', $idPont)
+            // Trouver TOUS les stocks ouverts pour ce pont (un par parc)
+            $stocksOuverts = Stock::where('id_pont', $idPont)
                 ->where('type', 'entree')
                 ->where('statut', 'ouvert')
-                ->first();
+                ->get();
             
-            if ($stockOuvert) {
+            $totalStockDisponible = 0;
+            
+            foreach ($stocksOuverts as $stockOuvert) {
                 $entrees = $stockOuvert->total_entrees;
                 
                 // Sorties liées à ce stock spécifique (via stock_id)
@@ -58,11 +60,10 @@ class PontController extends Controller
                     ->whereNotNull('poids_pont')
                     ->sum('poids_pont');
                 
-                $pont['stock_disponible'] = max(0, $entrees - $sorties);
-            } else {
-                // Pas de stock ouvert = 0
-                $pont['stock_disponible'] = 0;
+                $totalStockDisponible += max(0, $entrees - $sorties);
             }
+            
+            $pont['stock_disponible'] = $totalStockDisponible;
         }
         unset($pont);
 
@@ -147,6 +148,7 @@ class PontController extends Controller
             'fichesDechargees' => $fichesDechargees,
             'nbMouvements' => $nbMouvements,
             'external_error' => null,
+            'parcs' => \App\Models\Parc::where('id_pont', $id_pont)->where('statut', 'actif')->get(),
         ]);
     }
 
@@ -154,6 +156,7 @@ class PontController extends Controller
     {
         $validated = $request->validate([
             'type' => ['required', 'in:entree,sortie'],
+            'parc_id' => ['required', 'exists:parcs,id'],
             'quantite' => ['required', 'numeric', 'min:0'],
             'date' => ['required', 'date'],
         ]);
@@ -176,14 +179,21 @@ class PontController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        // Vérifier s'il y a déjà un stock ouvert pour ce pont
-        $stockOuvert = Stock::where('id_pont', $id_pont)
+        // Récupérer le parc
+        $parc = \App\Models\Parc::find($validated['parc_id']);
+        if (!$parc || $parc->id_pont != $id_pont) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Parc invalide pour ce pont.']);
+        }
+
+        // Vérifier s'il y a déjà un stock ouvert pour ce parc spécifique
+        $stockOuvertParc = Stock::where('id_pont', $id_pont)
+            ->where('parc_id', $parc->id)
             ->where('type', 'entree')
             ->where('statut', 'ouvert')
             ->exists();
         
-        if ($stockOuvert) {
-            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Un stock est déjà ouvert. Fermez-le avant d\'en créer un nouveau.']);
+        if ($stockOuvertParc) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Un stock est déjà ouvert pour le parc "' . $parc->nom . '". Fermez-le avant d\'en créer un nouveau.']);
         }
 
         $codePont = $pont['code_pont'] ?? 'PONT';
@@ -191,6 +201,8 @@ class PontController extends Controller
 
         Stock::create([
             'id_pont' => $id_pont,
+            'parc_id' => $parc->id,
+            'nom_parc' => $parc->nom,
             'code_pont' => $codePont,
             'nom_pont' => $pont['nom_pont'] ?? '',
             'type' => 'entree',

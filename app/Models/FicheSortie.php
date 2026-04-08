@@ -10,6 +10,8 @@ class FicheSortie extends Model
 
     protected $fillable = [
         'stock_id',
+        'parc_id',
+        'nom_parc',
         'vehicule_id',
         'matricule_vehicule',
         'id_pont',

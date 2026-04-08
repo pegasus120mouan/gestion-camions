@@ -282,11 +282,17 @@ class DepenseController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        // Récupérer tous les parcs actifs groupés par pont
+        $parcsParPont = \App\Models\Parc::where('statut', 'actif')
+            ->get()
+            ->groupBy('id_pont');
+
         return view('fiches_sortie.non_dechargees', [
             'fiches' => $fiches,
             'vehicules' => $vehicules,
             'ponts' => $ponts,
             'usines' => $usines,
+            'parcsParPont' => $parcsParPont,
             'external_error' => null,
         ]);
     }
@@ -1097,6 +1103,7 @@ class DepenseController extends Controller
         $validated = $request->validate([
             'date_dechargement' => ['required', 'date'],
             'poids_pont' => ['required', 'numeric', 'min:0'],
+            'parc_id' => ['required', 'exists:parcs,id'],
         ]);
 
         $ficheSortie = FicheSortie::findOrFail($ficheId);
@@ -1104,24 +1111,29 @@ class DepenseController extends Controller
         // Vérifier si la fiche n'est pas déjà déchargée
         $dejaDecharge = $ficheSortie->date_dechargement !== null;
 
-        // Trouver le stock ouvert pour ce pont
-        $stockOuvert = null;
-        if ($ficheSortie->id_pont) {
-            $stockOuvert = \App\Models\Stock::where('id_pont', $ficheSortie->id_pont)
-                ->where('type', 'entree')
-                ->where('statut', 'ouvert')
-                ->first();
+        // Récupérer le parc sélectionné
+        $parc = \App\Models\Parc::find($validated['parc_id']);
+        if (!$parc || $parc->id_pont != $ficheSortie->id_pont) {
+            return redirect()->back()->withErrors(['error' => 'Parc invalide pour ce pont.']);
         }
 
-        // Vérifier si un stock est ouvert pour ce pont
-        if (!$dejaDecharge && $ficheSortie->id_pont && !$stockOuvert) {
-            return redirect()->back()->withErrors(['error' => 'Aucun stock ouvert pour ce pont. Veuillez créer un stock avant de décharger.']);
+        // Trouver le stock ouvert pour ce parc
+        $stockOuvert = \App\Models\Stock::where('parc_id', $parc->id)
+            ->where('type', 'entree')
+            ->where('statut', 'ouvert')
+            ->first();
+
+        // Vérifier si un stock est ouvert pour ce parc
+        if (!$dejaDecharge && !$stockOuvert) {
+            return redirect()->back()->withErrors(['error' => 'Aucun stock ouvert pour le parc "' . $parc->nom . '". Veuillez créer un stock avant de décharger.']);
         }
         
         $ficheSortie->update([
             'date_dechargement' => $validated['date_dechargement'],
             'poids_pont' => $validated['poids_pont'],
             'stock_id' => $stockOuvert ? $stockOuvert->id : $ficheSortie->stock_id,
+            'parc_id' => $parc->id,
+            'nom_parc' => $parc->nom,
         ]);
 
         // Créer une sortie de stock PGF si la fiche a un pont et n'était pas déjà déchargée

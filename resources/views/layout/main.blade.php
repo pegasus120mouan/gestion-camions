@@ -82,6 +82,7 @@
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-home-smile"></i>
                 <div class="text-truncate" data-i18n="Dashboards">Tableau de bord</div>
+
               </a>
               <ul class="menu-sub">
                <li class="menu-item active">
@@ -546,6 +547,24 @@
                 </li>-->
               </ul>
             </li>
+
+
+           <li class="menu-item">
+              <a href="javascript:void(0);" class="menu-link menu-toggle">
+                <i class="menu-icon tf-icons bx bx-car" style="color: #ff9f43;"></i>
+                <div class="text-truncate" data-i18n="Authentications">Parcs</div>
+              </a>
+              <ul class="menu-sub">
+                <li class="menu-item">
+                  <a href="{{ route('parcs.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Basic">Liste des Parcs</div>
+                  </a>
+                </li>
+              </ul>
+            </li>
+
+
+
          <!--   <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-cube-alt"></i>

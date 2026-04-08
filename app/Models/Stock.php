@@ -8,6 +8,8 @@ class Stock extends Model
 {
     protected $fillable = [
         'id_pont',
+        'parc_id',
+        'nom_parc',
         'code_pont',
         'nom_pont',
         'type',
@@ -50,6 +52,11 @@ class Stock extends Model
     public function entreesStock()
     {
         return $this->hasMany(EntreeStock::class);
+    }
+
+    public function parc()
+    {
+        return $this->belongsTo(Parc::class);
     }
 
     public function getTotalEntreesAttribute(): float

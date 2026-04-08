@@ -25,6 +25,7 @@ use App\Http\Controllers\MontantFournisseurController;
 use App\Http\Controllers\MontantTransporteurController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\FournisseurController;
+use App\Http\Controllers\ParcController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/index.html', function () {
@@ -313,4 +314,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/fournisseurs', [FournisseurController::class, 'store'])->name('fournisseurs.store');
     Route::put('/fournisseurs/{fournisseur}', [FournisseurController::class, 'update'])->name('fournisseurs.update');
     Route::delete('/fournisseurs/{fournisseur}', [FournisseurController::class, 'destroy'])->name('fournisseurs.destroy');
+
+    // Parcs
+    Route::get('/parcs', [ParcController::class, 'index'])->name('parcs.index');
+    Route::post('/parcs', [ParcController::class, 'store'])->name('parcs.store');
+    Route::put('/parcs/{parc}', [ParcController::class, 'update'])->name('parcs.update');
+    Route::delete('/parcs/{parc}', [ParcController::class, 'destroy'])->name('parcs.destroy');
 });

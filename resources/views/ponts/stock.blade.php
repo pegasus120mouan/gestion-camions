@@ -16,11 +16,15 @@
         <small class="text-muted">Code: {{ $pont['code_pont'] ?? '-' }} | Gérant: {{ $pont['gerant'] ?? '-' }}</small>
       </div>
       @php
-        $hasStockOuvert = $stocks->where('type', 'entree')->where('statut', 'ouvert')->count() > 0;
+        $stocksOuverts = $stocks->where('type', 'entree')->where('statut', 'ouvert');
+        $parcsAvecStockOuvert = $stocksOuverts->pluck('parc_id')->toArray();
+        $parcsDisponibles = ($parcs ?? collect())->filter(function($p) use ($parcsAvecStockOuvert) {
+            return !in_array($p->id, $parcsAvecStockOuvert);
+        });
       @endphp
-      @if($hasStockOuvert)
-        <button type="button" class="btn btn-secondary" disabled title="Fermez le stock actif avant d'en créer un nouveau">
-          <i class="bx bx-lock me-1"></i> Stock actif en cours
+      @if($parcsDisponibles->isEmpty())
+        <button type="button" class="btn btn-secondary" disabled title="Tous les parcs ont un stock actif">
+          <i class="bx bx-lock me-1"></i> Tous les parcs occupés
         </button>
       @else
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStockModal">
@@ -33,25 +37,17 @@
       <div class="alert alert-danger">{{ $external_error }}</div>
     @endif
 
+    <!-- Résumé des stocks OUVERTS -->
+    @foreach($stocksOuverts as $stockOuvert)
     @php
-      // Calculer les statistiques pour le stock ouvert uniquement
-      $stockOuvert = $stocks->where('type', 'entree')->where('statut', 'ouvert')->first();
-      $stockOuvertEntrees = $stockOuvert ? $stockOuvert->total_entrees : 0;
-      
-      // Sorties liées à ce stock spécifique (via stock_id)
-      $sortiesFichesOuvert = 0;
-      if ($stockOuvert) {
-          $sortiesFichesOuvert = \App\Models\FicheSortie::where('stock_id', $stockOuvert->id)
-              ->whereNotNull('date_dechargement')
-              ->whereNotNull('poids_pont')
-              ->sum('poids_pont');
-      }
+      $stockOuvertEntrees = $stockOuvert->total_entrees;
+      $sortiesFichesOuvert = \App\Models\FicheSortie::where('stock_id', $stockOuvert->id)
+          ->whereNotNull('date_dechargement')
+          ->whereNotNull('poids_pont')
+          ->sum('poids_pont');
       $ecartOuvert = $sortiesFichesOuvert - $stockOuvertEntrees;
       $stockDisponibleOuvert = $stockOuvertEntrees - $sortiesFichesOuvert;
     @endphp
-
-    <!-- Résumé du stock OUVERT -->
-    @if($stockOuvert)
     <div class="card mb-4 border-primary">
       <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
         <div>
@@ -61,7 +57,7 @@
               {{ $stockOuvert->code_stock ?? 'N/A' }}
             </a>
           </h5>
-          <small>Ouvert le {{ $stockOuvert->date_mouvement ? $stockOuvert->date_mouvement->format('d/m/Y') : '-' }}</small>
+          <small>Ouvert le {{ $stockOuvert->date_mouvement ? $stockOuvert->date_mouvement->format('d/m/Y') : '-' }} | Parc: <strong>{{ $stockOuvert->nom_parc ?? '-' }}</strong></small>
         </div>
         <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#fermerStockModal-{{ $stockOuvert->id }}">
           <i class="bx bx-lock me-1"></i> Fermer ce stock
@@ -142,7 +138,9 @@
         </div>
       </div>
     </div>
-    @else
+    @endforeach
+
+    @if($stocksOuverts->isEmpty())
     <div class="alert alert-info mb-4">
       <i class="bx bx-info-circle me-1"></i>
       Aucun stock ouvert. Cliquez sur "Ajouter un stock" pour créer une nouvelle entrée.
@@ -165,6 +163,7 @@
           <thead>
             <tr>
               <th>Code Stock</th>
+              <th>Parc</th>
               <th>Date Entrée</th>
               <th>Date Fermeture</th>
               <th class="text-end">Entrée (kg)</th>
@@ -191,6 +190,7 @@
                     <span class="badge bg-secondary" style="cursor: pointer;">{{ $sf->code_stock ?? 'N/A' }}</span>
                   </a>
                 </td>
+                <td><span class="badge bg-warning">{{ $sf->nom_parc ?? '-' }}</span></td>
                 <td>{{ $sf->date_mouvement ? $sf->date_mouvement->format('d/m/Y') : '-' }}</td>
                 <td>{{ $sf->date_fermeture ? $sf->date_fermeture->format('d/m/Y') : '-' }}</td>
                 <td class="text-end text-primary fw-bold">{{ number_format($entree, 0, ',', ' ') }}</td>
@@ -332,6 +332,20 @@
             <label class="form-label">Type de mouvement <span class="text-danger">*</span></label>
             <input type="text" class="form-control" value="Entrée" readonly />
             <input type="hidden" name="type" value="entree" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Parc <span class="text-danger">*</span></label>
+            <select name="parc_id" class="form-select" required>
+              <option value="">-- Sélectionner un parc --</option>
+              @foreach($parcsDisponibles ?? [] as $parc)
+                <option value="{{ $parc->id }}">{{ $parc->nom }} ({{ $parc->code }})</option>
+              @endforeach
+            </select>
+            @if(($parcs ?? collect())->isEmpty())
+              <small class="text-danger">Aucun parc disponible. <a href="{{ route('parcs.index') }}">Créer un parc</a></small>
+            @elseif($parcsDisponibles->isEmpty())
+              <small class="text-warning">Tous les parcs ont déjà un stock actif.</small>
+            @endif
           </div>
           <div class="mb-3">
             <label class="form-label">Quantité (kg) <span class="text-danger">*</span></label>

@@ -153,6 +153,32 @@
             <strong class="text-danger">Usine:</strong> <span class="text-danger fw-bold">{{ $f->usine ?? '-' }}</span>
           </div>
           <div class="mb-3">
+            <label class="form-label">Parc <span class="text-danger">*</span></label>
+            <select name="parc_id" class="form-select" required>
+              <option value="">-- Sélectionner un parc --</option>
+              @php
+                $parcsForPont = $parcsParPont[$f->id_pont] ?? collect();
+              @endphp
+              @foreach($parcsForPont as $parc)
+                @php
+                  // Vérifier si ce parc a un stock ouvert
+                  $stockOuvert = \App\Models\Stock::where('parc_id', $parc->id)
+                      ->where('statut', 'ouvert')
+                      ->first();
+                  $stockDispo = $stockOuvert ? $stockOuvert->total_entrees - \App\Models\FicheSortie::where('stock_id', $stockOuvert->id)->whereNotNull('poids_pont')->sum('poids_pont') : 0;
+                @endphp
+                @if($stockOuvert)
+                  <option value="{{ $parc->id }}">{{ $parc->nom }} (Stock dispo: {{ number_format(max(0, $stockDispo), 0, ',', ' ') }} kg)</option>
+                @else
+                  <option value="{{ $parc->id }}" disabled>{{ $parc->nom }} (Pas de stock ouvert)</option>
+                @endif
+              @endforeach
+            </select>
+            @if($parcsForPont->isEmpty())
+              <small class="text-danger">Aucun parc pour ce pont. <a href="{{ route('parcs.index') }}">Créer un parc</a></small>
+            @endif
+          </div>
+          <div class="mb-3">
             <label class="form-label">Date de déchargement <span class="text-danger">*</span></label>
             <input type="date" name="date_dechargement" class="form-control" value="{{ date('Y-m-d') }}" required />
           </div>
