@@ -176,12 +176,12 @@
 
           <div class="row">
             <div class="col-md-6 mb-3">
-              <label class="form-label">Carburant (FCFA)</label>
-              <input type="number" name="carburant" class="form-control" min="0" />
+              <label class="form-label text-muted">Carburant (FCFA)</label>
+              <input type="number" name="carburant" class="form-control" min="0" disabled style="background-color: #e9ecef;" />
             </div>
             <div class="col-md-6 mb-3">
-              <label class="form-label">Frais de route (FCFA)</label>
-              <input type="number" name="frais_route" class="form-control" min="0" />
+              <label class="form-label text-muted">Frais de route (FCFA)</label>
+              <input type="number" name="frais_route" class="form-control" min="0" disabled style="background-color: #e9ecef;" />
             </div>
           </div>
 

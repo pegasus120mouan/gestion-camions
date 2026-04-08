@@ -46,4 +46,14 @@ class Stock extends Model
         
         return sprintf('STK-%s-%s%s-%03d', strtoupper($codePont), $year, $month, $count);
     }
+
+    public function entreesStock()
+    {
+        return $this->hasMany(EntreeStock::class);
+    }
+
+    public function getTotalEntreesAttribute(): float
+    {
+        return (float)$this->quantite + $this->entreesStock()->sum('quantite');
+    }
 }

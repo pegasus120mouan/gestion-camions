@@ -50,7 +50,7 @@ class PontController extends Controller
                 ->first();
             
             if ($stockOuvert) {
-                $entrees = (float)$stockOuvert->quantite;
+                $entrees = $stockOuvert->total_entrees;
                 
                 // Sorties liées à ce stock spécifique (via stock_id)
                 $sorties = \App\Models\FicheSortie::where('stock_id', $stockOuvert->id)
@@ -176,6 +176,16 @@ class PontController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        // Vérifier s'il y a déjà un stock ouvert pour ce pont
+        $stockOuvert = Stock::where('id_pont', $id_pont)
+            ->where('type', 'entree')
+            ->where('statut', 'ouvert')
+            ->exists();
+        
+        if ($stockOuvert) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Un stock est déjà ouvert. Fermez-le avant d\'en créer un nouveau.']);
+        }
+
         $codePont = $pont['code_pont'] ?? 'PONT';
         $codeStock = Stock::generateCodeStock($id_pont, $codePont);
 
@@ -218,14 +228,100 @@ class PontController extends Controller
         $stock = Stock::where('id', $stock_id)->where('id_pont', $id_pont)->first();
         
         if ($stock) {
-            if ($stock->isFerme()) {
-                return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Impossible de supprimer un stock fermé.']);
+            // Vérifier s'il y a des sorties liées à ce stock
+            $hasSorties = \App\Models\FicheSortie::where('stock_id', $stock->id)
+                ->whereNotNull('date_dechargement')
+                ->whereNotNull('poids_pont')
+                ->exists();
+            
+            if ($hasSorties) {
+                return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Impossible de supprimer un stock avec des sorties.']);
             }
+            
+            // Supprimer les entrées supplémentaires liées
+            $stock->entreesStock()->delete();
+            
             $stock->delete();
-            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Mouvement supprimé.');
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Stock supprimé avec succès.');
         }
 
-        return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Mouvement non trouvé.']);
+        return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Stock non trouvé.']);
+    }
+
+    public function addEntreeStock(Request $request, int $id_pont, int $stock_id)
+    {
+        $validated = $request->validate([
+            'quantite' => ['required', 'numeric', 'min:0'],
+            'date_entree' => ['required', 'date'],
+            'commentaire' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $stock = Stock::where('id', $stock_id)->where('id_pont', $id_pont)->where('type', 'entree')->first();
+        
+        if (!$stock) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Stock non trouvé.']);
+        }
+
+        if ($stock->isFerme()) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Impossible d\'ajouter une entrée à un stock fermé.']);
+        }
+
+        \App\Models\EntreeStock::create([
+            'stock_id' => $stock->id,
+            'quantite' => $validated['quantite'],
+            'date_entree' => $validated['date_entree'],
+            'commentaire' => $validated['commentaire'] ?? null,
+        ]);
+
+        return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Entrée de stock ajoutée avec succès.');
+    }
+
+    public function updateEntreeStock(Request $request, int $id_pont, int $stock_id, int $entree_id)
+    {
+        $validated = $request->validate([
+            'quantite' => ['required', 'numeric', 'min:0'],
+            'date_entree' => ['required', 'date'],
+            'commentaire' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $stock = Stock::where('id', $stock_id)->where('id_pont', $id_pont)->where('type', 'entree')->first();
+        
+        if (!$stock || $stock->isFerme()) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Impossible de modifier cette entrée.']);
+        }
+
+        $entree = \App\Models\EntreeStock::where('id', $entree_id)->where('stock_id', $stock_id)->first();
+        
+        if (!$entree) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Entrée non trouvée.']);
+        }
+
+        $entree->update([
+            'quantite' => $validated['quantite'],
+            'date_entree' => $validated['date_entree'],
+            'commentaire' => $validated['commentaire'] ?? null,
+        ]);
+
+        return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Entrée de stock modifiée avec succès.');
+    }
+
+    public function deleteEntreeStock(int $id_pont, int $stock_id, int $entree_id)
+    {
+        $stock = Stock::where('id', $stock_id)->where('id_pont', $id_pont)->where('type', 'entree')->first();
+        
+        if (!$stock || $stock->isFerme()) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Impossible de supprimer cette entrée.']);
+        }
+
+        $entree = \App\Models\EntreeStock::where('id', $entree_id)->where('stock_id', $stock_id)->first();
+        
+        if (!$entree) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Entrée non trouvée.']);
+        }
+
+        $entree->delete();
+
+        return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Entrée de stock supprimée avec succès.');
     }
 
     public function sorties(Request $request)

@@ -15,9 +15,18 @@
         </h4>
         <small class="text-muted">Code: {{ $pont['code_pont'] ?? '-' }} | Gérant: {{ $pont['gerant'] ?? '-' }}</small>
       </div>
-      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStockModal">
-        <i class="bx bx-plus me-1"></i> Ajouter un stock
-      </button>
+      @php
+        $hasStockOuvert = $stocks->where('type', 'entree')->where('statut', 'ouvert')->count() > 0;
+      @endphp
+      @if($hasStockOuvert)
+        <button type="button" class="btn btn-secondary" disabled title="Fermez le stock actif avant d'en créer un nouveau">
+          <i class="bx bx-lock me-1"></i> Stock actif en cours
+        </button>
+      @else
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStockModal">
+          <i class="bx bx-plus me-1"></i> Ajouter un stock
+        </button>
+      @endif
     </div>
 
     @if(!empty($external_error))
@@ -27,7 +36,7 @@
     @php
       // Calculer les statistiques pour le stock ouvert uniquement
       $stockOuvert = $stocks->where('type', 'entree')->where('statut', 'ouvert')->first();
-      $stockOuvertEntrees = $stockOuvert ? (float)$stockOuvert->quantite : 0;
+      $stockOuvertEntrees = $stockOuvert ? $stockOuvert->total_entrees : 0;
       
       // Sorties liées à ce stock spécifique (via stock_id)
       $sortiesFichesOuvert = 0;
@@ -47,7 +56,10 @@
       <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
         <div>
           <h5 class="mb-0 text-white">
-            <i class="bx bx-package me-2"></i>Stock Actif: {{ $stockOuvert->code_stock ?? 'N/A' }}
+            <i class="bx bx-package me-2"></i>Stock Actif: 
+            <a href="#" data-bs-toggle="modal" data-bs-target="#modalStockDetail-{{ $stockOuvert->id }}" class="text-white text-decoration-underline" style="cursor: pointer;">
+              {{ $stockOuvert->code_stock ?? 'N/A' }}
+            </a>
           </h5>
           <small>Ouvert le {{ $stockOuvert->date_mouvement ? $stockOuvert->date_mouvement->format('d/m/Y') : '-' }}</small>
         </div>
@@ -158,21 +170,27 @@
               <th class="text-end">Entrée (kg)</th>
               <th class="text-end">Sorties (kg)</th>
               <th class="text-end">Écart (kg)</th>
+              <th class="text-center" style="width: 80px;">Actions</th>
             </tr>
           </thead>
           <tbody>
             @foreach($stocksFermes as $sf)
               @php
-                $entree = (float)$sf->quantite;
+                $entree = $sf->total_entrees;
                 // Sorties liées à ce stock spécifique (via stock_id)
                 $sortiesStock = \App\Models\FicheSortie::where('stock_id', $sf->id)
                     ->whereNotNull('date_dechargement')
                     ->whereNotNull('poids_pont')
                     ->sum('poids_pont');
                 $ecart = $sortiesStock - $entree;
+                $hasSorties = $sortiesStock > 0;
               @endphp
               <tr>
-                <td><span class="badge bg-secondary">{{ $sf->code_stock ?? 'N/A' }}</span></td>
+                <td>
+                  <a href="#" data-bs-toggle="modal" data-bs-target="#modalStockDetail-{{ $sf->id }}" class="text-decoration-none">
+                    <span class="badge bg-secondary" style="cursor: pointer;">{{ $sf->code_stock ?? 'N/A' }}</span>
+                  </a>
+                </td>
                 <td>{{ $sf->date_mouvement ? $sf->date_mouvement->format('d/m/Y') : '-' }}</td>
                 <td>{{ $sf->date_fermeture ? $sf->date_fermeture->format('d/m/Y') : '-' }}</td>
                 <td class="text-end text-primary fw-bold">{{ number_format($entree, 0, ',', ' ') }}</td>
@@ -184,6 +202,17 @@
                     <i class="bx bx-trending-down"></i>
                   @endif
                   {{ number_format($ecart, 0, ',', ' ') }}
+                </td>
+                <td class="text-center">
+                  @if($hasSorties)
+                    <button type="button" class="btn btn-sm btn-icon btn-outline-secondary" disabled title="Stock avec sorties - suppression impossible">
+                      <i class="bx bx-lock"></i>
+                    </button>
+                  @else
+                    <button type="button" class="btn btn-sm btn-icon btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalDeleteStock-{{ $sf->id }}" title="Supprimer ce stock">
+                      <i class="bx bx-trash"></i>
+                    </button>
+                  @endif
                 </td>
               </tr>
             @endforeach
@@ -323,4 +352,290 @@
     </div>
   </div>
 </div>
+
+<!-- Modals pour les détails des stocks fermés -->
+@foreach($stocks->where('type', 'entree') as $stockItem)
+@php
+  $fichesStock = \App\Models\FicheSortie::where('stock_id', $stockItem->id)
+      ->whereNotNull('date_dechargement')
+      ->whereNotNull('poids_pont')
+      ->orderBy('date_dechargement', 'desc')
+      ->get();
+  $totalSortiesModal = $fichesStock->sum('poids_pont');
+@endphp
+<div class="modal fade" id="modalStockDetail-{{ $stockItem->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header {{ $stockItem->isOuvert() ? 'bg-primary' : 'bg-secondary' }} text-white">
+        <h5 class="modal-title text-white">
+          <i class="bx bx-package me-2"></i>Détails du stock: {{ $stockItem->code_stock ?? 'N/A' }}
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <!-- Résumé du stock -->
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <div class="p-3 rounded bg-light">
+              <p class="mb-1"><strong>Date d'entrée:</strong> {{ $stockItem->date_mouvement ? $stockItem->date_mouvement->format('d/m/Y') : '-' }}</p>
+              <p class="mb-1"><strong>Date de fermeture:</strong> {{ $stockItem->date_fermeture ? $stockItem->date_fermeture->format('d/m/Y') : 'Non fermé' }}</p>
+              <p class="mb-0"><strong>Statut:</strong> 
+                @if($stockItem->isOuvert())
+                  <span class="badge bg-success">Ouvert</span>
+                @else
+                  <span class="badge bg-danger">Fermé</span>
+                @endif
+              </p>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="p-3 rounded bg-light">
+              <p class="mb-1"><strong>Total Entrées:</strong> <span class="text-primary fw-bold">{{ number_format($stockItem->total_entrees, 0, ',', ' ') }} kg</span></p>
+              <p class="mb-1"><strong>Total Sorties:</strong> <span class="text-success fw-bold">{{ number_format($totalSortiesModal, 0, ',', ' ') }} kg</span></p>
+              @php $ecartModal = $totalSortiesModal - $stockItem->total_entrees; @endphp
+              <p class="mb-0"><strong>Écart:</strong> 
+                <span class="{{ $ecartModal > 0 ? 'text-success' : 'text-danger' }} fw-bold">
+                  @if($ecartModal > 0)<i class="bx bx-trending-up"></i>@elseif($ecartModal < 0)<i class="bx bx-trending-down"></i>@endif
+                  {{ number_format($ecartModal, 0, ',', ' ') }} kg
+                </span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Entrée du stock -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="mb-0"><i class="bx bx-down-arrow-circle me-1 text-primary"></i>Entrées de stock</h6>
+          @if($stockItem->isOuvert())
+          <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalAddEntree-{{ $stockItem->id }}">
+            <i class="bx bx-plus me-1"></i>Ajouter une entrée
+          </button>
+          @endif
+        </div>
+        @php
+          $entreesSupp = $stockItem->entreesStock()->orderBy('date_entree', 'desc')->get();
+          $totalEntreesModal = (float)$stockItem->quantite + $entreesSupp->sum('quantite');
+        @endphp
+        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+          <table class="table table-sm table-hover">
+            <thead class="table-light sticky-top">
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th class="text-end">Quantité (kg)</th>
+                <th>Commentaire</th>
+                @if($stockItem->isOuvert())
+                <th class="text-center" style="width: 80px;">Actions</th>
+                @endif
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Entrée initiale -->
+              <tr>
+                <td>{{ $stockItem->date_mouvement ? $stockItem->date_mouvement->format('d/m/Y') : '-' }}</td>
+                <td><span class="badge bg-success">Entrée initiale</span></td>
+                <td class="text-end text-primary fw-bold">{{ number_format((float)$stockItem->quantite, 0, ',', ' ') }}</td>
+                <td class="text-muted">Création du stock</td>
+                @if($stockItem->isOuvert())
+                <td class="text-center text-muted">-</td>
+                @endif
+              </tr>
+              <!-- Entrées supplémentaires -->
+              @foreach($entreesSupp as $entree)
+              <tr>
+                <td>{{ $entree->date_entree ? $entree->date_entree->format('d/m/Y') : '-' }}</td>
+                <td><span class="badge bg-info">Entrée</span></td>
+                <td class="text-end text-primary fw-bold">{{ number_format((float)$entree->quantite, 0, ',', ' ') }}</td>
+                <td class="text-muted small">{{ $entree->commentaire ?? '-' }}</td>
+                @if($stockItem->isOuvert())
+                <td class="text-center">
+                  <button type="button" class="btn btn-sm btn-icon btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalEditEntree-{{ $entree->id }}" title="Modifier">
+                    <i class="bx bx-edit-alt"></i>
+                  </button>
+                  <button type="button" class="btn btn-sm btn-icon btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalDeleteEntree-{{ $entree->id }}" title="Supprimer">
+                    <i class="bx bx-trash"></i>
+                  </button>
+                </td>
+                @endif
+              </tr>
+              @endforeach
+            </tbody>
+            <tfoot class="table-primary">
+              <tr>
+                <td colspan="2"><strong>Total Entrées ({{ 1 + $entreesSupp->count() }})</strong></td>
+                <td class="text-end fw-bold">{{ number_format($totalEntreesModal, 0, ',', ' ') }} kg</td>
+                <td colspan="{{ $stockItem->isOuvert() ? 2 : 1 }}"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modals Modifier/Supprimer Entrées -->
+@if($stockItem->isOuvert())
+@foreach($entreesSupp as $entree)
+<!-- Modal Modifier Entrée -->
+<div class="modal fade" id="modalEditEntree-{{ $entree->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-white">
+        <h5 class="modal-title text-white">
+          <i class="bx bx-edit me-2"></i>Modifier l'entrée
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ route('ponts.stock.entree.update', ['id_pont' => $pont['id_pont'], 'stock_id' => $stockItem->id, 'entree_id' => $entree->id]) }}">
+        @csrf
+        @method('PUT')
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Quantité (kg) <span class="text-danger">*</span></label>
+            <input type="number" name="quantite" class="form-control" value="{{ $entree->quantite }}" min="0" step="0.01" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Date d'entrée <span class="text-danger">*</span></label>
+            <input type="date" name="date_entree" class="form-control" value="{{ $entree->date_entree ? $entree->date_entree->format('Y-m-d') : '' }}" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Commentaire</label>
+            <textarea name="commentaire" class="form-control" rows="2">{{ $entree->commentaire }}</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-warning">
+            <i class="bx bx-save me-1"></i> Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Supprimer Entrée -->
+<div class="modal fade" id="modalDeleteEntree-{{ $entree->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title text-white">
+          <i class="bx bx-trash me-2"></i>Supprimer l'entrée
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ route('ponts.stock.entree.delete', ['id_pont' => $pont['id_pont'], 'stock_id' => $stockItem->id, 'entree_id' => $entree->id]) }}">
+        @csrf
+        @method('DELETE')
+        <div class="modal-body">
+          <div class="alert alert-warning">
+            <i class="bx bx-error-circle me-2"></i>
+            Êtes-vous sûr de vouloir supprimer cette entrée ?
+          </div>
+          <p><strong>Date:</strong> {{ $entree->date_entree ? $entree->date_entree->format('d/m/Y') : '-' }}</p>
+          <p><strong>Quantité:</strong> {{ number_format((float)$entree->quantite, 0, ',', ' ') }} kg</p>
+          @if($entree->commentaire)
+          <p><strong>Commentaire:</strong> {{ $entree->commentaire }}</p>
+          @endif
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-danger">
+            <i class="bx bx-trash me-1"></i> Supprimer
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endforeach
+@endif
+
+<!-- Modal Ajouter Entrée -->
+@if($stockItem->isOuvert())
+<div class="modal fade" id="modalAddEntree-{{ $stockItem->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title text-white">
+          <i class="bx bx-plus-circle me-2"></i>Ajouter une entrée - {{ $stockItem->code_stock ?? 'Stock' }}
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ route('ponts.stock.entree', ['id_pont' => $pont['id_pont'], 'stock_id' => $stockItem->id]) }}">
+        @csrf
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Quantité (kg) <span class="text-danger">*</span></label>
+            <input type="number" name="quantite" class="form-control" placeholder="Ex: 5000" min="0" step="0.01" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Date d'entrée <span class="text-danger">*</span></label>
+            <input type="date" name="date_entree" class="form-control" value="{{ date('Y-m-d') }}" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Commentaire</label>
+            <textarea name="commentaire" class="form-control" rows="2" placeholder="Optionnel..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-success">
+            <i class="bx bx-save me-1"></i> Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endif
+@endforeach
+
+<!-- Modals Supprimer Stock Fermé -->
+@foreach($stocksFermes as $sf)
+@php
+  $sortiesStockModal = \App\Models\FicheSortie::where('stock_id', $sf->id)
+      ->whereNotNull('date_dechargement')
+      ->whereNotNull('poids_pont')
+      ->sum('poids_pont');
+@endphp
+@if($sortiesStockModal == 0)
+<div class="modal fade" id="modalDeleteStock-{{ $sf->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title text-white">
+          <i class="bx bx-trash me-2"></i>Supprimer le stock
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ route('ponts.stock.delete', ['id_pont' => $pont['id_pont'], 'stock_id' => $sf->id]) }}">
+        @csrf
+        @method('DELETE')
+        <div class="modal-body">
+          <div class="alert alert-danger">
+            <i class="bx bx-error-circle me-2"></i>
+            <strong>Attention !</strong> Cette action est irréversible.
+          </div>
+          <p><strong>Code Stock:</strong> {{ $sf->code_stock ?? 'N/A' }}</p>
+          <p><strong>Date d'entrée:</strong> {{ $sf->date_mouvement ? $sf->date_mouvement->format('d/m/Y') : '-' }}</p>
+          <p><strong>Date de fermeture:</strong> {{ $sf->date_fermeture ? $sf->date_fermeture->format('d/m/Y') : '-' }}</p>
+          <p><strong>Entrée:</strong> {{ number_format($sf->total_entrees, 0, ',', ' ') }} kg</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-danger">
+            <i class="bx bx-trash me-1"></i> Supprimer définitivement
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endif
+@endforeach
 @endsection
