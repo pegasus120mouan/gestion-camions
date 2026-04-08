@@ -75,10 +75,79 @@ Route::middleware('auth')->group(function () {
             }
         }
 
+        // Nombre de fiches de sortie non déchargées
+        $fichesNonDechargees = \App\Models\FicheSortie::whereNull('date_dechargement')->count();
+        $fichesDechargees = \App\Models\FicheSortie::whereNotNull('date_dechargement')->count();
+        $totalFiches = $fichesNonDechargees + $fichesDechargees;
+
+        // Dernières fiches de sortie
+        $dernieresFiches = \App\Models\FicheSortie::orderBy('created_at', 'desc')->take(6)->get();
+
+        // Dernières transactions (dépenses)
+        $dernieresDepenses = \App\Models\Depense::orderBy('created_at', 'desc')->take(6)->get();
+
+        // Statistiques de stock par pont
+        $stocksParPont = [];
+        $totalStockEntrees = 0;
+        $totalStockSorties = 0;
+        $totalStockDisponible = 0;
+
+        try {
+            $mesPontsUrl = (string) config('services.external_auth.mes_ponts_url');
+            $pontsResponse = \Illuminate\Support\Facades\Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout(10)
+                ->get($mesPontsUrl);
+            
+            if ($pontsResponse->successful()) {
+                $ponts = $pontsResponse->json('ponts') ?? [];
+                
+                foreach ($ponts as $pont) {
+                    $idPont = $pont['id_pont'] ?? 0;
+                    $nomPont = $pont['nom_pont'] ?? 'Inconnu';
+                    
+                    // Entrées manuelles
+                    $entrees = \App\Models\Stock::where('id_pont', $idPont)->where('type', 'entree')->sum('quantite');
+                    // Sorties manuelles
+                    $sortiesManuelles = \App\Models\Stock::where('id_pont', $idPont)->where('type', 'sortie')->sum('quantite');
+                    // Sorties fiches déchargées
+                    $sortiesFiches = \App\Models\FicheSortie::where('id_pont', $idPont)
+                        ->whereNotNull('date_dechargement')
+                        ->whereNotNull('poids_pont')
+                        ->sum('poids_pont');
+                    
+                    $sorties = $sortiesManuelles + $sortiesFiches;
+                    $disponible = max(0, $entrees - $sorties);
+                    
+                    if ($entrees > 0) {
+                        $stocksParPont[] = [
+                            'nom_pont' => $nomPont,
+                            'entrees' => $entrees,
+                            'sorties' => $sorties,
+                            'disponible' => $disponible,
+                        ];
+                        
+                        $totalStockEntrees += $entrees;
+                        $totalStockSorties += $sorties;
+                        $totalStockDisponible += $disponible;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
         return view('dashboard', [
             'nombreCamions' => $nombreCamions,
             'totalDepenses' => $totalDepenses,
             'nombreTickets' => $nombreTickets,
+            'stocksParPont' => $stocksParPont,
+            'totalStockEntrees' => $totalStockEntrees,
+            'totalStockSorties' => $totalStockSorties,
+            'totalStockDisponible' => $totalStockDisponible,
+            'fichesNonDechargees' => $fichesNonDechargees,
+            'fichesDechargees' => $fichesDechargees,
+            'totalFiches' => $totalFiches,
+            'dernieresFiches' => $dernieresFiches,
+            'dernieresDepenses' => $dernieresDepenses,
         ]);
     })->name('dashboard');
 
@@ -126,6 +195,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/ponts/{id_pont}/stock', [PontController::class, 'stock'])->name('ponts.stock');
     Route::post('/ponts/{id_pont}/stock', [PontController::class, 'storeStock'])->name('ponts.stock.store');
     Route::delete('/ponts/{id_pont}/stock/{stock_id}', [PontController::class, 'deleteStock'])->name('ponts.stock.delete');
+    Route::post('/ponts/{id_pont}/stock/{stock_id}/fermer', [PontController::class, 'fermerStock'])->name('ponts.stock.fermer');
 
     Route::get('/agents', [AgentController::class, 'index'])->name('agents.index');
     Route::get('/agents/{id_agent}', [AgentController::class, 'show'])->name('agents.show');

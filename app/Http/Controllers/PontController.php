@@ -39,26 +39,30 @@ class PontController extends Controller
             $ponts = [];
         }
 
-        // Calculer le stock disponible pour chaque pont
+        // Calculer le stock disponible pour chaque pont (stock ouvert uniquement)
         foreach ($ponts as &$pont) {
             $idPont = $pont['id_pont'] ?? 0;
             
-            // Entrées manuelles de stock
-            $totalEntrees = Stock::where('id_pont', $idPont)->where('type', 'entree')->sum('quantite');
+            // Trouver le stock ouvert pour ce pont
+            $stockOuvert = Stock::where('id_pont', $idPont)
+                ->where('type', 'entree')
+                ->where('statut', 'ouvert')
+                ->first();
             
-            // Sorties manuelles de stock
-            $totalSortiesManuelles = Stock::where('id_pont', $idPont)->where('type', 'sortie')->sum('quantite');
-            
-            // Sorties des fiches de sortie déchargées (poids_pont)
-            $totalSortiesFiches = \App\Models\FicheSortie::where('id_pont', $idPont)
-                ->whereNotNull('date_dechargement')
-                ->whereNotNull('poids_pont')
-                ->sum('poids_pont');
-            
-            $totalSorties = $totalSortiesManuelles + $totalSortiesFiches;
-            
-            // Stock disponible = entrées - sorties
-            $pont['stock_disponible'] = max(0, $totalEntrees - $totalSorties);
+            if ($stockOuvert) {
+                $entrees = (float)$stockOuvert->quantite;
+                
+                // Sorties liées à ce stock spécifique (via stock_id)
+                $sorties = \App\Models\FicheSortie::where('stock_id', $stockOuvert->id)
+                    ->whereNotNull('date_dechargement')
+                    ->whereNotNull('poids_pont')
+                    ->sum('poids_pont');
+                
+                $pont['stock_disponible'] = max(0, $entrees - $sorties);
+            } else {
+                // Pas de stock ouvert = 0
+                $pont['stock_disponible'] = 0;
+            }
         }
         unset($pont);
 
@@ -172,16 +176,41 @@ class PontController extends Controller
             }
         } catch (\Throwable $e) {}
 
+        $codePont = $pont['code_pont'] ?? 'PONT';
+        $codeStock = Stock::generateCodeStock($id_pont, $codePont);
+
         Stock::create([
             'id_pont' => $id_pont,
-            'code_pont' => $pont['code_pont'] ?? '',
+            'code_pont' => $codePont,
             'nom_pont' => $pont['nom_pont'] ?? '',
             'type' => 'entree',
             'quantite' => $validated['quantite'],
             'date_mouvement' => $validated['date'],
+            'code_stock' => $codeStock,
+            'statut' => 'ouvert',
         ]);
 
-        return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Mouvement de stock enregistré.');
+        return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Stock créé avec le code: ' . $codeStock);
+    }
+
+    public function fermerStock(Request $request, int $id_pont, int $stock_id)
+    {
+        $stock = Stock::where('id', $stock_id)->where('id_pont', $id_pont)->where('type', 'entree')->first();
+        
+        if (!$stock) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Stock non trouvé.']);
+        }
+
+        if ($stock->isFerme()) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Ce stock est déjà fermé.']);
+        }
+
+        $stock->update([
+            'statut' => 'ferme',
+            'date_fermeture' => now(),
+        ]);
+
+        return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Stock fermé avec succès.');
     }
 
     public function deleteStock(int $id_pont, int $stock_id)
@@ -189,6 +218,9 @@ class PontController extends Controller
         $stock = Stock::where('id', $stock_id)->where('id_pont', $id_pont)->first();
         
         if ($stock) {
+            if ($stock->isFerme()) {
+                return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Impossible de supprimer un stock fermé.']);
+            }
             $stock->delete();
             return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Mouvement supprimé.');
         }
@@ -198,10 +230,8 @@ class PontController extends Controller
 
     public function sorties(Request $request)
     {
-        $mesTicketsUrl = (string) config('services.external_auth.mes_tickets_url');
         $mesPontsUrl = (string) config('services.external_auth.mes_ponts_url');
         $timeout = (int) config('services.external_auth.timeout', 10);
-        $phpsessid = (string) $request->session()->get('external_auth.phpsessid', '');
 
         // Récupérer les ponts
         $ponts = [];
@@ -212,80 +242,44 @@ class PontController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        // Récupérer les tickets
-        $tickets = [];
-        try {
-            $response = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                ->get($mesTicketsUrl);
-            if ($response->successful()) {
-                $tickets = $response->json('tickets') ?? [];
-            }
-        } catch (\Throwable $e) {}
+        // Récupérer toutes les fiches de sortie déchargées (indépendamment du pont)
+        $fichesDechargees = \App\Models\FicheSortie::whereNotNull('date_dechargement')
+            ->whereNotNull('poids_pont')
+            ->orderBy('date_dechargement', 'desc')
+            ->get();
 
-        // Récupérer les fiches de sortie pour avoir l'origine (nom du pont)
-        $ticketIds = array_column($tickets, 'id_ticket');
-        $fichesSortie = [];
-        if (!empty($ticketIds)) {
-            $fiches = \App\Models\FicheSortie::whereIn('id_ticket', $ticketIds)->get()->keyBy('id_ticket');
-            foreach ($fiches as $idTicket => $fiche) {
-                $fichesSortie[$idTicket] = [
-                    'id_pont' => $fiche->id_pont,
-                    'nom_pont' => $fiche->nom_pont,
-                    'poids_pont' => $fiche->poids_pont,
-                ];
-            }
-        }
-
-        // Grouper les sorties par pont
+        // Grouper les sorties par pont pour le résumé
         $sortiesParPont = [];
-        foreach ($tickets as $ticket) {
-            $idTicket = $ticket['id_ticket'] ?? null;
-            $poidsUsine = (float) ($ticket['poids'] ?? 0);
-            
-            if (!$idTicket || !isset($fichesSortie[$idTicket])) {
-                continue;
-            }
-
-            $fiche = $fichesSortie[$idTicket];
-            $idPont = $fiche['id_pont'];
-            $nomPont = $fiche['nom_pont'];
+        foreach ($fichesDechargees as $fiche) {
+            $idPont = $fiche->id_pont;
+            $nomPont = $fiche->nom_pont;
 
             if (!isset($sortiesParPont[$idPont])) {
                 $sortiesParPont[$idPont] = [
                     'id_pont' => $idPont,
                     'nom_pont' => $nomPont,
-                    'total_poids_usine' => 0,
-                    'nb_tickets' => 0,
-                    'tickets' => [],
+                    'total_poids' => 0,
+                    'nb_fiches' => 0,
                 ];
             }
 
-            $sortiesParPont[$idPont]['total_poids_usine'] += $poidsUsine;
-            $sortiesParPont[$idPont]['nb_tickets']++;
-            $sortiesParPont[$idPont]['tickets'][] = [
-                'id_ticket' => $idTicket,
-                'numero_ticket' => $ticket['numero_ticket'] ?? '',
-                'matricule_vehicule' => $ticket['matricule_vehicule'] ?? '',
-                'poids_usine' => $poidsUsine,
-                'date_dechargement' => $ticket['date_dechargement'] ?? '',
-            ];
+            $sortiesParPont[$idPont]['total_poids'] += (float) $fiche->poids_pont;
+            $sortiesParPont[$idPont]['nb_fiches']++;
         }
 
-        // Calculer le stock actuel et la sortie pour chaque pont
+        // Calculer le stock actuel pour chaque pont
         foreach ($sortiesParPont as &$sortie) {
             $idPont = $sortie['id_pont'];
             $totalEntrees = Stock::where('id_pont', $idPont)->where('type', 'entree')->sum('quantite');
-            $totalSorties = Stock::where('id_pont', $idPont)->where('type', 'sortie')->sum('quantite');
-            $sortie['stock_actuel'] = $totalEntrees - $totalSorties;
-            $sortie['stock_apres_sortie'] = $sortie['stock_actuel'] - $sortie['total_poids_usine'];
+            $totalSortiesManuelles = Stock::where('id_pont', $idPont)->where('type', 'sortie')->sum('quantite');
+            $sortie['stock_initial'] = $totalEntrees - $totalSortiesManuelles;
+            $sortie['stock_disponible'] = $sortie['stock_initial'] - $sortie['total_poids'];
         }
         unset($sortie);
 
         return view('ponts.sorties', [
             'sortiesParPont' => array_values($sortiesParPont),
+            'fichesDechargees' => $fichesDechargees,
             'ponts' => $ponts,
             'external_error' => null,
         ]);

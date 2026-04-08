@@ -9,6 +9,7 @@ class FicheSortie extends Model
     protected $table = 'fiches_sortie';
 
     protected $fillable = [
+        'stock_id',
         'vehicule_id',
         'matricule_vehicule',
         'id_pont',

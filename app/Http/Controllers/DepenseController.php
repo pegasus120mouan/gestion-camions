@@ -88,6 +88,11 @@ class DepenseController extends Controller
             $query->where('usine', $request->input('usine'));
         }
 
+        // Filtre par chef chargeur
+        if ($request->filled('chef_chargeur')) {
+            $query->where('id_chef_chargeur', $request->input('chef_chargeur'));
+        }
+
         // Filtre par date (chargement ou déchargement)
         $typeDate = $request->input('type_date', 'chargement');
         $dateColumn = $typeDate === 'dechargement' ? 'date_dechargement' : 'date_chargement';
@@ -1098,15 +1103,30 @@ class DepenseController extends Controller
         
         // Vérifier si la fiche n'est pas déjà déchargée
         $dejaDecharge = $ficheSortie->date_dechargement !== null;
+
+        // Trouver le stock ouvert pour ce pont
+        $stockOuvert = null;
+        if ($ficheSortie->id_pont) {
+            $stockOuvert = \App\Models\Stock::where('id_pont', $ficheSortie->id_pont)
+                ->where('type', 'entree')
+                ->where('statut', 'ouvert')
+                ->first();
+        }
+
+        // Vérifier si un stock est ouvert pour ce pont
+        if (!$dejaDecharge && $ficheSortie->id_pont && !$stockOuvert) {
+            return redirect()->back()->withErrors(['error' => 'Aucun stock ouvert pour ce pont. Veuillez créer un stock avant de décharger.']);
+        }
         
         $ficheSortie->update([
             'date_dechargement' => $validated['date_dechargement'],
             'poids_pont' => $validated['poids_pont'],
+            'stock_id' => $stockOuvert ? $stockOuvert->id : $ficheSortie->stock_id,
         ]);
 
-        // Créer une sortie de stock si la fiche a un pont et n'était pas déjà déchargée
+        // Créer une sortie de stock PGF si la fiche a un pont et n'était pas déjà déchargée
         if (!$dejaDecharge && $ficheSortie->id_pont && $validated['poids_pont'] > 0) {
-            // Trouver le stock actif
+            // Trouver le stock actif PGF
             $stockActif = \App\Models\StockPgf::where('statut', 'actif')
                 ->orderBy('created_at', 'desc')
                 ->first();

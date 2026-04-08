@@ -229,7 +229,9 @@
               </ul>
             </li>
 
-            <!--  <li class="menu-item">
+           
+
+        <!--<li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-map" style="color: #ff9f43;"></i>
                 <div class="text-truncate" data-i18n="Weighbridges">Gestion Stocks PGF</div>
@@ -255,6 +257,8 @@
               </ul>
             </li>-->
 
+
+      
             <!-- Front Pages -->
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">

@@ -181,7 +181,7 @@
                 @forelse($fichesAvecMontant as $item)
                     <tr>
                         <td>{{ $item['fiche']->date_chargement ? \Carbon\Carbon::parse($item['fiche']->date_chargement)->format('d/m/Y') : '-' }}</td>
-                        <td>{{ $item['fiche']->matricule ?? '-' }}</td>
+                        <td>{{ $item['fiche']->matricule_vehicule ?? '-' }}</td>
                         <td class="text-right">{{ number_format($item['fiche']->poids_pont, 0, ',', ' ') }} Kg</td>
                         <td class="text-right">{{ number_format($item['montant'], 0, ',', ' ') }} FCFA</td>
                     </tr>

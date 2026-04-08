@@ -13,10 +13,37 @@ class Stock extends Model
         'type',
         'quantite',
         'date_mouvement',
+        'code_stock',
+        'statut',
+        'date_fermeture',
+        'commentaire',
     ];
 
     protected $casts = [
         'date_mouvement' => 'date',
+        'date_fermeture' => 'date',
         'quantite' => 'decimal:2',
     ];
+
+    public function isOuvert(): bool
+    {
+        return $this->statut === 'ouvert';
+    }
+
+    public function isFerme(): bool
+    {
+        return $this->statut === 'ferme';
+    }
+
+    public static function generateCodeStock(int $idPont, string $codePont): string
+    {
+        $year = date('Y');
+        $month = date('m');
+        $count = self::where('id_pont', $idPont)
+            ->where('type', 'entree')
+            ->whereYear('created_at', $year)
+            ->count() + 1;
+        
+        return sprintf('STK-%s-%s%s-%03d', strtoupper($codePont), $year, $month, $count);
+    }
 }

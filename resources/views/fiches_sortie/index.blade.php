@@ -48,6 +48,17 @@
               </select>
             </div>
             <div class="col-md-3">
+              <label class="form-label">Chef Chargeur</label>
+              <select name="chef_chargeur" class="form-select">
+                <option value="">Tous les chefs chargeurs</option>
+                @foreach($chefChargeurs ?? [] as $cc)
+                  <option value="{{ $cc->id }}" {{ request('chef_chargeur') == $cc->id ? 'selected' : '' }}>
+                    {{ $cc->nom }} {{ $cc->prenoms }}
+                  </option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-3">
               <label class="form-label">Type de date</label>
               <select name="type_date" class="form-select">
                 <option value="chargement" {{ request('type_date', 'chargement') == 'chargement' ? 'selected' : '' }}>Date chargement</option>

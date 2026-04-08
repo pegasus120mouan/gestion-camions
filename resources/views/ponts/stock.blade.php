@@ -24,109 +24,222 @@
       <div class="alert alert-danger">{{ $external_error }}</div>
     @endif
 
-    <!-- Résumé du stock -->
-    <div class="row mb-4">
-      <div class="col-md-3">
-        <div class="card bg-primary text-white">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <h6 class="text-white mb-1">Cumul des Entrées</h6>
-                <h3 class="mb-0">{{ number_format($stockTotal ?? 0, 0, ',', ' ') }} kg</h3>
-              </div>
-              <i class="bx bx-package" style="font-size: 3rem; opacity: 0.5;"></i>
+    @php
+      // Calculer les statistiques pour le stock ouvert uniquement
+      $stockOuvert = $stocks->where('type', 'entree')->where('statut', 'ouvert')->first();
+      $stockOuvertEntrees = $stockOuvert ? (float)$stockOuvert->quantite : 0;
+      
+      // Sorties liées à ce stock spécifique (via stock_id)
+      $sortiesFichesOuvert = 0;
+      if ($stockOuvert) {
+          $sortiesFichesOuvert = \App\Models\FicheSortie::where('stock_id', $stockOuvert->id)
+              ->whereNotNull('date_dechargement')
+              ->whereNotNull('poids_pont')
+              ->sum('poids_pont');
+      }
+      $ecartOuvert = $sortiesFichesOuvert - $stockOuvertEntrees;
+      $stockDisponibleOuvert = $stockOuvertEntrees - $sortiesFichesOuvert;
+    @endphp
+
+    <!-- Résumé du stock OUVERT -->
+    @if($stockOuvert)
+    <div class="card mb-4 border-primary">
+      <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <div>
+          <h5 class="mb-0 text-white">
+            <i class="bx bx-package me-2"></i>Stock Actif: {{ $stockOuvert->code_stock ?? 'N/A' }}
+          </h5>
+          <small>Ouvert le {{ $stockOuvert->date_mouvement ? $stockOuvert->date_mouvement->format('d/m/Y') : '-' }}</small>
+        </div>
+        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#fermerStockModal-{{ $stockOuvert->id }}">
+          <i class="bx bx-lock me-1"></i> Fermer ce stock
+        </button>
+      </div>
+      <div class="card-body">
+        <div class="row">
+          <div class="col-md-3">
+            <div class="p-3 rounded" style="background: linear-gradient(135deg, #696cff22 0%, #696cff11 100%);">
+              <h6 class="text-muted mb-1">Entrée</h6>
+              <h3 class="mb-0 text-primary">{{ number_format($stockOuvertEntrees, 0, ',', ' ') }} kg</h3>
             </div>
           </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card bg-success text-white">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <h6 class="text-white mb-1">Cumul des sorties</h6>
-                <h3 class="mb-0">{{ number_format($totalSorties ?? 0, 0, ',', ' ') }} kg</h3>
-              </div>
-              <i class="bx bx-down-arrow-circle" style="font-size: 3rem; opacity: 0.5;"></i>
+          <div class="col-md-3">
+            <div class="p-3 rounded" style="background: linear-gradient(135deg, #28c76f22 0%, #28c76f11 100%);">
+              <h6 class="text-muted mb-1">Sorties</h6>
+              <h3 class="mb-0 text-success">{{ number_format($sortiesFichesOuvert, 0, ',', ' ') }} kg</h3>
             </div>
           </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card bg-warning text-white">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <h6 class="text-white mb-1">Ecart</h6>
-                <h3 class="mb-0">{{ number_format(($totalSorties ?? 0) - ($stockTotal ?? 0), 0, ',', ' ') }} kg</h3>
-              </div>
-              <i class="bx bx-up-arrow-circle" style="font-size: 3rem; opacity: 0.5;"></i>
+          <div class="col-md-3">
+            <div class="p-3 rounded" style="background: linear-gradient(135deg, {{ $ecartOuvert > 0 ? '#28c76f22' : '#ea545522' }} 0%, {{ $ecartOuvert > 0 ? '#28c76f11' : '#ea545511' }} 100%);">
+              <h6 class="text-muted mb-1">Écart</h6>
+              <h3 class="mb-0 {{ $ecartOuvert > 0 ? 'text-success' : 'text-danger' }}">
+                @if($ecartOuvert > 0)
+                  <i class="bx bx-trending-up"></i>
+                @elseif($ecartOuvert < 0)
+                  <i class="bx bx-trending-down"></i>
+                @endif
+                {{ number_format($ecartOuvert, 0, ',', ' ') }} kg
+              </h3>
+              <small class="{{ $ecartOuvert > 0 ? 'text-success' : 'text-danger' }}">{{ $ecartOuvert > 0 ? 'Bénéfice' : ($ecartOuvert < 0 ? 'Perte' : 'Équilibré') }}</small>
             </div>
           </div>
-        </div>
-      </div>
-      <div class="col-md-3">
-        <div class="card bg-info text-white">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <h6 class="text-white mb-1">Stock disponible</h6>
-                <h3 class="mb-0">{{ number_format($stockDisponible ?? 0, 0, ',', ' ') }} kg</h3>
-              </div>
-              <i class="bx bx-transfer" style="font-size: 3rem; opacity: 0.5;"></i>
+          <div class="col-md-3">
+            <div class="p-3 rounded" style="background: linear-gradient(135deg, #00cfe822 0%, #00cfe811 100%);">
+              <h6 class="text-muted mb-1">Stock disponible</h6>
+              <h3 class="mb-0 text-info">{{ number_format(max(0, $stockDisponibleOuvert), 0, ',', ' ') }} kg</h3>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Tableau des mouvements de stock -->
+    <!-- Modal Fermer Stock -->
+    <div class="modal fade" id="fermerStockModal-{{ $stockOuvert->id }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-warning">
+            <h5 class="modal-title">
+              <i class="bx bx-lock me-2"></i>Fermer le stock {{ $stockOuvert->code_stock }}
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <form method="POST" action="{{ route('ponts.stock.fermer', ['id_pont' => $pont['id_pont'], 'stock_id' => $stockOuvert->id]) }}">
+            @csrf
+            <div class="modal-body">
+              <div class="alert alert-warning">
+                <i class="bx bx-info-circle me-1"></i>
+                <strong>Attention !</strong> Une fois fermé, aucune sortie ne pourra être effectuée sur ce stock.
+              </div>
+              <div class="mb-3">
+                <p><strong>Résumé du stock:</strong></p>
+                <ul class="list-unstyled">
+                  <li><i class="bx bx-right-arrow-alt text-primary"></i> Entrée: <strong>{{ number_format($stockOuvertEntrees, 0, ',', ' ') }} kg</strong></li>
+                  <li><i class="bx bx-right-arrow-alt text-success"></i> Sorties: <strong>{{ number_format($sortiesFichesOuvert, 0, ',', ' ') }} kg</strong></li>
+                  <li><i class="bx bx-right-arrow-alt text-warning"></i> Écart: <strong>{{ number_format($ecartOuvert, 0, ',', ' ') }} kg</strong></li>
+                  <li><i class="bx bx-right-arrow-alt text-info"></i> Stock restant: <strong>{{ number_format(max(0, $stockDisponibleOuvert), 0, ',', ' ') }} kg</strong></li>
+                </ul>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+              <button type="submit" class="btn btn-warning">
+                <i class="bx bx-lock me-1"></i> Confirmer la fermeture
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    @else
+    <div class="alert alert-info mb-4">
+      <i class="bx bx-info-circle me-1"></i>
+      Aucun stock ouvert. Cliquez sur "Ajouter un stock" pour créer une nouvelle entrée.
+    </div>
+    @endif
+
+    <!-- Historique des stocks (fermés) -->
+    @php
+      $stocksFermes = $stocks->where('type', 'entree')->where('statut', 'ferme');
+    @endphp
+    @if($stocksFermes->count() > 0)
+    <div class="card mb-4">
+      <div class="card-header bg-secondary text-white">
+        <h5 class="mb-0 text-white">
+          <i class="bx bx-history me-2"></i>Historique des stocks fermés
+        </h5>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Code Stock</th>
+              <th>Date Entrée</th>
+              <th>Date Fermeture</th>
+              <th class="text-end">Entrée (kg)</th>
+              <th class="text-end">Sorties (kg)</th>
+              <th class="text-end">Écart (kg)</th>
+            </tr>
+          </thead>
+          <tbody>
+            @foreach($stocksFermes as $sf)
+              @php
+                $entree = (float)$sf->quantite;
+                // Sorties liées à ce stock spécifique (via stock_id)
+                $sortiesStock = \App\Models\FicheSortie::where('stock_id', $sf->id)
+                    ->whereNotNull('date_dechargement')
+                    ->whereNotNull('poids_pont')
+                    ->sum('poids_pont');
+                $ecart = $sortiesStock - $entree;
+              @endphp
+              <tr>
+                <td><span class="badge bg-secondary">{{ $sf->code_stock ?? 'N/A' }}</span></td>
+                <td>{{ $sf->date_mouvement ? $sf->date_mouvement->format('d/m/Y') : '-' }}</td>
+                <td>{{ $sf->date_fermeture ? $sf->date_fermeture->format('d/m/Y') : '-' }}</td>
+                <td class="text-end text-primary fw-bold">{{ number_format($entree, 0, ',', ' ') }}</td>
+                <td class="text-end text-success">{{ number_format($sortiesStock, 0, ',', ' ') }}</td>
+                <td class="text-end {{ $ecart > 0 ? 'text-success' : 'text-danger' }} fw-bold">
+                  @if($ecart > 0)
+                    <i class="bx bx-trending-up"></i>
+                  @elseif($ecart < 0)
+                    <i class="bx bx-trending-down"></i>
+                  @endif
+                  {{ number_format($ecart, 0, ',', ' ') }}
+                </td>
+              </tr>
+            @endforeach
+          </tbody>
+        </table>
+      </div>
+    </div>
+    @endif
+
+    <!-- Tableau des mouvements de stock (entrées) -->
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">Mouvements de stock</h5>
-        <div class="d-flex gap-2">
-          <select class="form-select form-select-sm" style="width: auto;">
-            <option value="">Tous les types</option>
-            <option value="entree">Entrées</option>
-            <option value="sortie">Sorties</option>
-          </select>
-        </div>
+        <h5 class="mb-0">Mouvements de stock (Entrées)</h5>
       </div>
       <div class="table-responsive">
         <table class="table table-hover">
           <thead>
             <tr>
+              <th>Code</th>
               <th>Date</th>
-              <th>Type</th>
+              <th>Statut</th>
               <th>Quantité (kg)</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            @forelse($stocks as $s)
+            @forelse($stocks->where('type', 'entree') as $s)
               <tr>
+                <td><span class="badge {{ $s->isOuvert() ? 'bg-primary' : 'bg-secondary' }}">{{ $s->code_stock ?? 'N/A' }}</span></td>
                 <td>{{ $s->date_mouvement ? $s->date_mouvement->format('d-m-Y') : '-' }}</td>
                 <td>
-                  @if($s->type === 'entree')
-                    <span class="badge bg-success">Entrée</span>
+                  @if($s->isOuvert())
+                    <span class="badge bg-success">Ouvert</span>
                   @else
-                    <span class="badge bg-warning">Sortie</span>
+                    <span class="badge bg-danger">Fermé</span>
+                    <small class="text-muted d-block">{{ $s->date_fermeture ? $s->date_fermeture->format('d/m/Y') : '' }}</small>
                   @endif
                 </td>
                 <td>{{ number_format((float)$s->quantite, 0, ',', ' ') }}</td>
                 <td>
-                  <button class="btn btn-sm btn-outline-danger" onclick="if(confirm('Supprimer ce mouvement?')) document.getElementById('delete-stock-{{ $s->id }}').submit();">
-                    <i class="bx bx-trash"></i>
-                  </button>
-                  <form id="delete-stock-{{ $s->id }}" action="{{ route('ponts.stock.delete', ['id_pont' => $pont['id_pont'], 'stock_id' => $s->id]) }}" method="POST" style="display:none;">
-                    @csrf
-                    @method('DELETE')
-                  </form>
+                  @if($s->isOuvert())
+                    <button class="btn btn-sm btn-outline-danger" onclick="if(confirm('Supprimer ce mouvement?')) document.getElementById('delete-stock-{{ $s->id }}').submit();">
+                      <i class="bx bx-trash"></i>
+                    </button>
+                    <form id="delete-stock-{{ $s->id }}" action="{{ route('ponts.stock.delete', ['id_pont' => $pont['id_pont'], 'stock_id' => $s->id]) }}" method="POST" style="display:none;">
+                      @csrf
+                      @method('DELETE')
+                    </form>
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
                 </td>
               </tr>
             @empty
               <tr>
-                <td colspan="4" class="text-center py-4">
+                <td colspan="5" class="text-center py-4">
                   <i class="bx bx-package text-muted" style="font-size: 3rem;"></i>
                   <p class="text-muted mt-2 mb-0">Aucun mouvement de stock enregistré</p>
                 </td>
