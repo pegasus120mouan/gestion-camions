@@ -80,7 +80,7 @@
 
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0">Liste des fiches de sortie - Transporteur "Autre" ({{ isset($fichesSortie) ? $fichesSortie->count() : 0 }})</h5>
+        <h5 class="mb-0">Liste des fiches de sortie - Transporteur « {{ $transporteurNom ?? 'Autre Camion' }} » ({{ isset($fichesSortie) ? $fichesSortie->count() : 0 }})</h5>
         <button type="button" class="btn btn-info" data-bs-toggle="modal" data-bs-target="#modalHistorique">
           <i class="bx bx-history"></i> Historique des paiements
         </button>
@@ -309,7 +309,7 @@
               </div>
             @empty
               <tr>
-                <td colspan="11" class="text-center">Aucune fiche de sortie pour le transporteur "Autre"</td>
+                <td colspan="11" class="text-center">Aucune fiche de sortie pour le transporteur « {{ $transporteurNom ?? 'Autre Camion' }} »</td>
               </tr>
             @endforelse
           </tbody>

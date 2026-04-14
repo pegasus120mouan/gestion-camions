@@ -213,7 +213,7 @@
                     $codeTransporteurVehicule = \App\Models\CodeTransporteurVehicule::with('codeTransporteur')
                         ->where('matricule_vehicule', $matriculeVehicule)
                         ->first();
-                    $transporteurNom = 'Autre';
+                    $transporteurNom = 'Non renseigné';
                     if ($codeTransporteurVehicule && $codeTransporteurVehicule->codeTransporteur) {
                         $transporteurNom = $codeTransporteurVehicule->codeTransporteur->nom;
                     }
@@ -274,9 +274,12 @@
                     
                     if ($idAgent && $idUsine) {
                         // Déterminer le type basé sur le transporteur
-                        $typeTransporteur = 'transporteur'; // par défaut: Camion Agent
+                        $typeTransporteur = 'transporteur'; // par défaut: camion Pisteur (ex. Camion Agent)
                         if ($transporteurNom === 'Camion PGF') {
                             $typeTransporteur = 'pgf';
+                        } elseif (strcasecmp(trim($transporteurNom), 'Autre Camion') === 0
+                            || strcasecmp(trim($transporteurNom), 'Autre') === 0) {
+                            $typeTransporteur = 'autre_camion';
                         }
                         
                         // Chercher le prix correspondant

@@ -23,9 +23,11 @@ use App\Http\Controllers\ChargeurController;
 use App\Http\Controllers\MontantChefChargeurController;
 use App\Http\Controllers\MontantFournisseurController;
 use App\Http\Controllers\MontantTransporteurController;
+use App\Http\Controllers\MontantAgentController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\ParcController;
+use App\Http\Controllers\PisteurController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/index.html', function () {
@@ -157,6 +159,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/utilisateurs/chauffeurs', [UtilisateurController::class, 'chauffeurs'])->name('utilisateurs.chauffeurs');
 
     Route::resource('camions', CamionController::class)->except(['create']);
+    Route::post('/vehicules/{vehicule_id}/etat', [CamionController::class, 'updateVehiculeEtat'])->name('vehicules.etat.update');
     Route::get('/camions-pgf', [CamionController::class, 'camionsPgf'])->name('camions.camions_pgf');
     Route::post('/camions/assigner-groupe', [CamionController::class, 'assignerGroupe'])->name('camions.assigner_groupe');
     Route::delete('/camions/{vehicule_id}/retirer-groupe', [CamionController::class, 'retirerGroupe'])->name('camions.retirer_groupe');
@@ -282,6 +285,21 @@ Route::middleware('auth')->group(function () {
     Route::post('/chargeurs', [ChargeurController::class, 'store'])->name('chargeurs.store');
     Route::put('/chargeurs/{chargeur}', [ChargeurController::class, 'update'])->name('chargeurs.update');
     Route::delete('/chargeurs/{chargeur}', [ChargeurController::class, 'destroy'])->name('chargeurs.destroy');
+
+    // Pisteurs
+    Route::get('/pisteurs', [PisteurController::class, 'index'])->name('pisteurs.index');
+    Route::post('/pisteurs', [PisteurController::class, 'store'])->name('pisteurs.store');
+    Route::get('/pisteurs/{pisteur}', [PisteurController::class, 'show'])->name('pisteurs.show');
+    Route::put('/pisteurs/{pisteur}', [PisteurController::class, 'update'])->name('pisteurs.update');
+    Route::delete('/pisteurs/{pisteur}', [PisteurController::class, 'destroy'])->name('pisteurs.destroy');
+    Route::post('/pisteurs/{pisteur}/prix', [PisteurController::class, 'storePrix'])->name('pisteurs.prix.store');
+    Route::put('/pisteurs/{pisteur}/prix/{prix}', [PisteurController::class, 'updatePrix'])->name('pisteurs.prix.update');
+    Route::delete('/pisteurs/{pisteur}/prix/{prix}', [PisteurController::class, 'destroyPrix'])->name('pisteurs.prix.destroy');
+
+    // Montant Agent (Pisteur)
+    Route::get('/gestion-financiere/montant-agent', [MontantAgentController::class, 'index'])->name('gestionfinanciere.montant_agent');
+    Route::get('/gestion-financiere/agent-financier/{id_agent}', [MontantAgentController::class, 'show'])->name('gestionfinanciere.agent.show');
+    Route::post('/gestion-financiere/agent-financier/{id_agent}/paiement', [MontantAgentController::class, 'storePaiement'])->name('gestionfinanciere.paiement_agent.store');
 
     // Montant Chef Chargeur
     Route::get('/gestion-financiere/montant-chef-chargeur', [MontantChefChargeurController::class, 'index'])->name('gestionfinanciere.montant_chef_chargeur');

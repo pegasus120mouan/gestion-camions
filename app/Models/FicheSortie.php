@@ -33,11 +33,13 @@ class FicheSortie extends Model
         'prix_unitaire_transport',
         'poids_unitaire_regime',
         'montant_paye_transporteur',
+        'montant_agent',
     ];
 
     protected $casts = [
         'date_chargement' => 'date',
         'date_dechargement' => 'date',
         'poids_pont' => 'decimal:2',
+        'montant_agent' => 'decimal:2',
     ];
 }

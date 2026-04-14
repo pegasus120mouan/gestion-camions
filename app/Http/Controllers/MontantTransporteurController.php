@@ -13,13 +13,14 @@ class MontantTransporteurController extends Controller
 {
     public function index(Request $request)
     {
-        // Uniquement le transporteur "Autre"
-        $transporteur = CodeTransporteur::where('nom', 'Autre')->first();
+        // Uniquement le transporteur « Autre Camion »
+        $transporteur = CodeTransporteur::where('nom', 'Autre Camion')->first();
 
         if (!$transporteur) {
             return view('gestion_financiere.montant_transporteur', [
                 'transporteursData' => collect(),
                 'vehicules' => [],
+                'transporteurNom' => 'Autre Camion',
             ]);
         }
 
@@ -87,7 +88,7 @@ class MontantTransporteurController extends Controller
             'montantDu' => $montantGlobal,
             'montantPaye' => $montantPaye,
             'resteAPayer' => $resteAPayer,
-            'transporteurNom' => 'Autre',
+            'transporteurNom' => $transporteur->nom,
             'vehicules' => $vehicules,
         ]);
     }
@@ -216,8 +217,8 @@ class MontantTransporteurController extends Controller
 
     public function historiquePaiements(Request $request)
     {
-        // Récupérer le transporteur "Autre"
-        $transporteur = CodeTransporteur::where('nom', 'Autre')->first();
+        // Récupérer le transporteur « Autre Camion »
+        $transporteur = CodeTransporteur::where('nom', 'Autre Camion')->first();
         
         $vehicules = [];
         $paiements = collect();

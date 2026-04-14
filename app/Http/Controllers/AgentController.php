@@ -148,11 +148,17 @@ class AgentController extends Controller
             ->orderBy('nom_usine')
             ->get();
 
+        $prixAutreCamion = PrixAgent::where('id_agent', $id_agent)
+            ->where('type', 'autre_camion')
+            ->orderBy('nom_usine')
+            ->get();
+
         return view('agents.show', [
             'agent' => $agent,
             'usines' => $usines,
             'prixTransporteur' => $prixTransporteur,
             'prixPgf' => $prixPgf,
+            'prixAutreCamion' => $prixAutreCamion,
         ]);
     }
 
@@ -161,7 +167,7 @@ class AgentController extends Controller
         $validated = $request->validate([
             'id_usine' => ['required', 'integer'],
             'nom_usine' => ['required', 'string'],
-            'type' => ['required', 'in:transporteur,pgf'],
+            'type' => ['required', 'in:transporteur,pgf,autre_camion'],
             'prix' => ['required', 'numeric', 'min:0'],
             'date_debut' => ['nullable', 'date'],
             'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],

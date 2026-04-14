@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CamionEtat;
 use App\Models\Depense;
 use App\Models\FicheSortie;
+use App\Services\MontantAgentFicheService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -384,6 +386,10 @@ class DepenseController extends Controller
     public function index(Request $request, int $vehiculeId)
     {
         $matricule = (string) $request->query('matricule', '');
+        $etatVehicule = CamionEtat::query()
+            ->where('vehicule_id', $vehiculeId)
+            ->value('etat');
+        $vehiculeEnPanne = in_array($etatVehicule, ['en_panne', 'inactif'], true);
 
         $depenses = Depense::where('vehicule_id', $vehiculeId)
             ->orderBy('date_depense', 'desc')
@@ -479,6 +485,7 @@ class DepenseController extends Controller
             'chefChargeurs' => $chefChargeurs,
             'services' => $services,
             'fournisseurs' => $fournisseurs,
+            'vehicule_en_panne' => $vehiculeEnPanne,
             'external_error' => null,
         ]);
     }
@@ -542,6 +549,14 @@ class DepenseController extends Controller
         if (!$authUser || $authUser->role !== 'proprietaire') {
             return redirect()->route('vehicules.depenses', ['vehicule_id' => $vehiculeId])
                 ->withErrors(['error' => "Accès réservé aux propriétaires."]);
+        }
+
+        $etatVehicule = CamionEtat::query()
+            ->where('vehicule_id', $vehiculeId)
+            ->value('etat');
+        if (in_array($etatVehicule, ['en_panne', 'inactif'], true)) {
+            return redirect()->route('vehicules.depenses', ['vehicule_id' => $vehiculeId])
+                ->withErrors(['error' => "Ce camion est en panne. Impossible de créer une fiche de sortie."]);
         }
 
         $depenses = Depense::where('vehicule_id', $vehiculeId)
@@ -660,6 +675,16 @@ class DepenseController extends Controller
 
     public function storeFicheSortie(Request $request, int $vehiculeId)
     {
+        $etatVehicule = CamionEtat::query()
+            ->where('vehicule_id', $vehiculeId)
+            ->value('etat');
+        if (in_array($etatVehicule, ['en_panne', 'inactif'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => "Ce camion est en panne. Impossible de créer une fiche de sortie.",
+            ], 422);
+        }
+
         $validated = $request->validate([
             'id_pont' => ['required', 'integer'],
             'id_agent' => ['required', 'integer'],
@@ -801,6 +826,13 @@ class DepenseController extends Controller
             'pont_display' => ['nullable', 'string'],
             'agent_display' => ['nullable', 'string'],
         ]);
+
+        $etatVehicule = CamionEtat::query()
+            ->where('vehicule_id', $validated['vehicule_id'])
+            ->value('etat');
+        if (in_array($etatVehicule, ['en_panne', 'inactif'], true)) {
+            return back()->withErrors(['error' => "Ce camion est en panne. Impossible de créer une fiche de sortie."]);
+        }
 
         // Si matricule_vehicule est vide, récupérer depuis l'API
         $matricule = $validated['matricule_vehicule'] ?? '';
@@ -1127,13 +1159,19 @@ class DepenseController extends Controller
         if (!$dejaDecharge && !$stockOuvert) {
             return redirect()->back()->withErrors(['error' => 'Aucun stock ouvert pour le parc "' . $parc->nom . '". Veuillez créer un stock avant de décharger.']);
         }
-        
+
+        $montantAgent = app(MontantAgentFicheService::class)->calculerMontantPourFiche(
+            $ficheSortie,
+            (float) $validated['poids_pont']
+        );
+
         $ficheSortie->update([
             'date_dechargement' => $validated['date_dechargement'],
             'poids_pont' => $validated['poids_pont'],
             'stock_id' => $stockOuvert ? $stockOuvert->id : $ficheSortie->stock_id,
             'parc_id' => $parc->id,
             'nom_parc' => $parc->nom,
+            'montant_agent' => $montantAgent !== null ? round($montantAgent, 2) : null,
         ]);
 
         // Créer une sortie de stock PGF si la fiche a un pont et n'était pas déjà déchargée

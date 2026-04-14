@@ -32,17 +32,30 @@
               <th>Matricule</th>
               <th>Type</th>
               <th>Date d'ajout</th>
+              <th>Statut</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody class="table-border-bottom-0">
             @forelse($camions_pgf as $index => $v)
+              @php
+                $vehiculeId = (int) ($v['vehicules_id'] ?? 0);
+                $estEnCours = !empty($vehicules_en_cours[$vehiculeId]);
+                $etatCamion = $estEnCours
+                  ? 'en_cours'
+                  : ($etats_par_vehicule[$vehiculeId] ?? 'actif');
+                $estEnPanne = $etatCamion === 'en_panne' || $etatCamion === 'inactif';
+              @endphp
               <tr>
                 <td>{{ $index + 1 }}</td>
                 <td>
-                  <a href="{{ route('vehicules.depenses', ['vehicule_id' => $v['vehicules_id'], 'matricule' => $v['matricule_vehicule']]) }}">
-                    <strong>{{ $v['matricule_vehicule'] ?? '-' }}</strong>
-                  </a>
+                  @if($estEnPanne)
+                    <span class="text-muted"><strong>{{ $v['matricule_vehicule'] ?? '-' }}</strong></span>
+                  @else
+                    <a href="{{ route('vehicules.depenses', ['vehicule_id' => $v['vehicules_id'], 'matricule' => $v['matricule_vehicule']]) }}">
+                      <strong>{{ $v['matricule_vehicule'] ?? '-' }}</strong>
+                    </a>
+                  @endif
                 </td>
                 <td>
                   @php $typeVehicule = strtolower($v['type_vehicule'] ?? ''); @endphp
@@ -56,19 +69,42 @@
                 </td>
                 <td>{{ $v['created_at'] ?? '-' }}</td>
                 <td>
-                  <form action="{{ route('camions.retirer_groupe', ['vehicule_id' => $v['vehicules_id']]) }}" method="POST" class="d-inline" onsubmit="return confirm('Retirer ce camion du groupe PGF ?');">
-                    @csrf
-                    @method('DELETE')
-                    <input type="hidden" name="groupe_id" value="{{ $groupe_pgf->id }}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">
-                      <i class="bx bx-trash"></i> Retirer
-                    </button>
-                  </form>
+                  @if($etatCamion === 'en_cours')
+                    <span class="badge bg-label-warning">En cours d'utilisation</span>
+                  @elseif($etatCamion === 'actif')
+                    <span class="badge bg-label-success">Actif</span>
+                  @else
+                    <span class="badge bg-label-danger">En panne</span>
+                  @endif
+                </td>
+                <td>
+                  <div class="d-flex gap-2 flex-wrap">
+                    <form method="POST" action="{{ route('vehicules.etat.update', ['vehicule_id' => $vehiculeId]) }}" class="d-flex gap-1">
+                      @csrf
+                      <input type="hidden" name="matricule" value="{{ $v['matricule_vehicule'] ?? '' }}">
+                      <select name="etat" class="form-select form-select-sm" style="min-width: 140px;" {{ $estEnCours ? 'disabled' : '' }}>
+                        <option value="actif" {{ (($etats_par_vehicule[$vehiculeId] ?? 'actif') === 'actif') ? 'selected' : '' }}>Actif</option>
+                        <option value="en_panne" {{ (($etats_par_vehicule[$vehiculeId] ?? 'actif') === 'en_panne') ? 'selected' : '' }}>En panne</option>
+                      </select>
+                      <button type="submit" class="btn btn-sm btn-outline-warning" {{ $estEnCours ? 'disabled' : '' }}>
+                        Enregistrer
+                      </button>
+                    </form>
+
+                    <form action="{{ route('camions.retirer_groupe', ['vehicule_id' => $v['vehicules_id']]) }}" method="POST" class="d-inline" onsubmit="return confirm('Retirer ce camion du groupe PGF ?');">
+                      @csrf
+                      @method('DELETE')
+                      <input type="hidden" name="groupe_id" value="{{ $groupe_pgf->id }}">
+                      <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="bx bx-trash"></i> Retirer
+                      </button>
+                    </form>
+                  </div>
                 </td>
               </tr>
             @empty
               <tr>
-                <td colspan="5" class="text-center">Aucun camion dans le groupe PGF</td>
+                <td colspan="6" class="text-center">Aucun camion dans le groupe PGF</td>
               </tr>
             @endforelse
           </tbody>

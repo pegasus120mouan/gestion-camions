@@ -30,6 +30,7 @@
                 <th>Immatriculation</th>
                 <th>Type véhicule</th>
                 <th>Date création</th>
+                <th>Etat</th>
                 <th>Dépenses</th>
                 <th class="text-end">Actions</th>
               </tr>
@@ -42,11 +43,23 @@
             @endphp
             <tbody class="table-border-bottom-0">
               @forelse($paginatedCamions as $v)
+                @php
+                  $vehiculeId = (int) ($v['vehicules_id'] ?? 0);
+                  $estEnCours = !empty($vehicules_en_cours[$vehiculeId]);
+                  $etatCamion = $estEnCours
+                    ? 'en_cours'
+                    : ($etats_par_vehicule[$vehiculeId] ?? 'actif');
+                  $estEnPanne = $etatCamion === 'en_panne' || $etatCamion === 'inactif';
+                @endphp
                 <tr>
                   <td>
-                    <a href="{{ route('vehicules.depenses', ['vehicule_id' => $v['vehicules_id'] ?? 0, 'matricule' => $v['matricule_vehicule'] ?? '']) }}">
-                      {{ $v['matricule_vehicule'] ?? '' }}
-                    </a>
+                    @if($estEnCours || $estEnPanne)
+                      <span class="text-muted">{{ $v['matricule_vehicule'] ?? '' }}</span>
+                    @else
+                      <a href="{{ route('vehicules.depenses', ['vehicule_id' => $v['vehicules_id'] ?? 0, 'matricule' => $v['matricule_vehicule'] ?? '']) }}">
+                        {{ $v['matricule_vehicule'] ?? '' }}
+                      </a>
+                    @endif
                   </td>
                   <td>
                     @php $typeVehicule = strtolower($v['type_vehicule'] ?? ''); @endphp
@@ -70,6 +83,15 @@
                     {{ $dateCreated ?: '-' }}
                   </td>
                   <td>
+                    @if($etatCamion === 'en_cours')
+                      <span class="badge bg-label-warning">En cours d'utilisation</span>
+                    @elseif($etatCamion === 'actif')
+                      <span class="badge bg-label-success">Actif</span>
+                    @else
+                      <span class="badge bg-label-danger">En panne</span>
+                    @endif
+                  </td>
+                  <td>
                     @php
                       $vehiculeId = $v['vehicules_id'] ?? 0;
                       $depenseTotal = \App\Models\Depense::where('vehicule_id', $vehiculeId)->sum('montant');
@@ -77,14 +99,33 @@
                     {{ number_format($depenseTotal, 0, ',', ' ') }} FCFA
                   </td>
                   <td class="text-end">
-                    <a class="btn btn-sm btn-outline-primary" href="{{ route('vehicules.depenses', ['vehicule_id' => $v['vehicules_id'] ?? 0, 'matricule' => $v['matricule_vehicule'] ?? '']) }}">
-                      <i class="bx bx-show"></i> Détails
-                    </a>
+                    <div class="d-flex justify-content-end align-items-center gap-2 flex-wrap">
+                      <form method="POST" action="{{ route('vehicules.etat.update', ['vehicule_id' => $v['vehicules_id'] ?? 0]) }}" class="d-flex gap-1">
+                        @csrf
+                        <input type="hidden" name="matricule" value="{{ $v['matricule_vehicule'] ?? '' }}">
+                        <select name="etat" class="form-select form-select-sm" style="min-width: 110px;" {{ $estEnCours ? 'disabled' : '' }}>
+                          <option value="actif" {{ (($etats_par_vehicule[(int)($v['vehicules_id'] ?? 0)] ?? 'actif') === 'actif') ? 'selected' : '' }}>Actif</option>
+                          <option value="en_panne" {{ (($etats_par_vehicule[(int)($v['vehicules_id'] ?? 0)] ?? 'actif') === 'en_panne') ? 'selected' : '' }}>En panne</option>
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-outline-warning" {{ $estEnCours ? 'disabled' : '' }}>
+                          Enregistrer
+                        </button>
+                      </form>
+                      @if($estEnCours || $estEnPanne)
+                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled>
+                          <i class="bx bx-show"></i> Détails
+                        </button>
+                      @else
+                        <a class="btn btn-sm btn-outline-primary" href="{{ route('vehicules.depenses', ['vehicule_id' => $v['vehicules_id'] ?? 0, 'matricule' => $v['matricule_vehicule'] ?? '']) }}">
+                          <i class="bx bx-show"></i> Détails
+                        </a>
+                      @endif
+                    </div>
                   </td>
                 </tr>
               @empty
                 <tr>
-                  <td colspan="5" class="text-center">Aucun camion</td>
+                  <td colspan="6" class="text-center">Aucun camion</td>
                 </tr>
               @endforelse
             </tbody>

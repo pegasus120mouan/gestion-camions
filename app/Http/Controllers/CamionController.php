@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CamionEtat;
 use App\Models\Camion;
+use App\Models\FicheSortie;
 use App\Models\Groupe;
 use App\Models\GroupeVehicule;
 use App\Models\User;
@@ -29,6 +31,8 @@ class CamionController extends Controller
                 'camions' => new LengthAwarePaginator([], 0, 20),
                 'chauffeurs' => collect(),
                 'external_camions' => [],
+                'etats_par_vehicule' => [],
+                'vehicules_en_cours' => [],
                 'external_error' => "Impossible de joindre le service camions.",
             ]);
         }
@@ -40,6 +44,8 @@ class CamionController extends Controller
                 'camions' => new LengthAwarePaginator([], 0, 20),
                 'chauffeurs' => collect(),
                 'external_camions' => [],
+                'etats_par_vehicule' => [],
+                'vehicules_en_cours' => [],
                 'external_error' => $message,
             ]);
         }
@@ -60,12 +66,70 @@ class CamionController extends Controller
             $vehicules = array_values($vehicules); // Réindexer le tableau
         }
 
+        $vehiculeIds = array_map(static fn ($v) => (int) ($v['vehicules_id'] ?? 0), $vehicules);
+        $vehiculeIds = array_values(array_filter($vehiculeIds));
+        $etatsParVehicule = [];
+        foreach (array_chunk($vehiculeIds, 500) as $vehiculeIdsChunk) {
+            $etatsParVehicule += CamionEtat::query()
+                ->whereIn('vehicule_id', $vehiculeIdsChunk)
+                ->pluck('etat', 'vehicule_id')
+                ->toArray();
+        }
+        foreach ($etatsParVehicule as $vehiculeId => $etat) {
+            if ($etat === 'inactif') {
+                $etatsParVehicule[$vehiculeId] = 'en_panne';
+            }
+        }
+
+        $vehiculesEnCours = [];
+        foreach (array_chunk($vehiculeIds, 500) as $vehiculeIdsChunk) {
+            $enCoursChunk = FicheSortie::query()
+                ->whereIn('vehicule_id', $vehiculeIdsChunk)
+                ->whereNull('date_dechargement')
+                ->pluck('vehicule_id')
+                ->map(static fn ($id) => (int) $id)
+                ->toArray();
+
+            foreach ($enCoursChunk as $vehiculeIdEnCours) {
+                $vehiculesEnCours[$vehiculeIdEnCours] = true;
+            }
+        }
+
         return view('camions.index', [
             'camions' => new LengthAwarePaginator([], 0, 20),
             'chauffeurs' => collect(),
             'external_camions' => $vehicules,
+            'etats_par_vehicule' => $etatsParVehicule,
+            'vehicules_en_cours' => $vehiculesEnCours,
             'external_error' => null,
         ]);
+    }
+
+    public function updateVehiculeEtat(Request $request, int $vehiculeId)
+    {
+        $estEnCours = FicheSortie::query()
+            ->where('vehicule_id', $vehiculeId)
+            ->whereNull('date_dechargement')
+            ->exists();
+
+        if ($estEnCours) {
+            return back()->with('error', "Etat verrouille : camion en cours d'utilisation.");
+        }
+
+        $validated = $request->validate([
+            'etat' => ['required', 'in:actif,en_panne'],
+            'matricule' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        CamionEtat::updateOrCreate(
+            ['vehicule_id' => $vehiculeId],
+            [
+                'matricule' => $validated['matricule'] ?? null,
+                'etat' => $validated['etat'],
+            ]
+        );
+
+        return back()->with('success', 'Etat du camion mis a jour.');
     }
 
     public function show(Request $request, Camion $camion)
@@ -301,6 +365,36 @@ class CamionController extends Controller
             $camionsPgf = array_values($camionsPgf);
         }
 
+        $vehiculeIds = array_map(static fn ($v) => (int) ($v['vehicules_id'] ?? 0), $camionsPgf);
+        $vehiculeIds = array_values(array_filter($vehiculeIds));
+
+        $etatsParVehicule = [];
+        foreach (array_chunk($vehiculeIds, 500) as $vehiculeIdsChunk) {
+            $etatsParVehicule += CamionEtat::query()
+                ->whereIn('vehicule_id', $vehiculeIdsChunk)
+                ->pluck('etat', 'vehicule_id')
+                ->toArray();
+        }
+        foreach ($etatsParVehicule as $vehiculeId => $etat) {
+            if ($etat === 'inactif') {
+                $etatsParVehicule[$vehiculeId] = 'en_panne';
+            }
+        }
+
+        $vehiculesEnCours = [];
+        foreach (array_chunk($vehiculeIds, 500) as $vehiculeIdsChunk) {
+            $enCoursChunk = FicheSortie::query()
+                ->whereIn('vehicule_id', $vehiculeIdsChunk)
+                ->whereNull('date_dechargement')
+                ->pluck('vehicule_id')
+                ->map(static fn ($id) => (int) $id)
+                ->toArray();
+
+            foreach ($enCoursChunk as $vehiculeIdEnCours) {
+                $vehiculesEnCours[$vehiculeIdEnCours] = true;
+            }
+        }
+
         // Récupérer tous les groupes pour le modal d'assignation
         $groupes = Groupe::all();
 
@@ -309,6 +403,8 @@ class CamionController extends Controller
             'all_vehicules' => $vehicules,
             'groupes' => $groupes,
             'groupe_pgf' => $groupePgf,
+            'etats_par_vehicule' => $etatsParVehicule,
+            'vehicules_en_cours' => $vehiculesEnCours,
         ]);
     }
 

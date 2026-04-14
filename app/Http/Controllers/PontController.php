@@ -240,19 +240,12 @@ class PontController extends Controller
         $stock = Stock::where('id', $stock_id)->where('id_pont', $id_pont)->first();
         
         if ($stock) {
-            // Vérifier s'il y a des sorties liées à ce stock
-            $hasSorties = \App\Models\FicheSortie::where('stock_id', $stock->id)
-                ->whereNotNull('date_dechargement')
-                ->whereNotNull('poids_pont')
-                ->exists();
-            
-            if ($hasSorties) {
-                return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Impossible de supprimer un stock avec des sorties.']);
-            }
-            
+            // Détacher les fiches de sortie (stock_id nullable, conservées dans l'historique)
+            \App\Models\FicheSortie::where('stock_id', $stock->id)->update(['stock_id' => null]);
+
             // Supprimer les entrées supplémentaires liées
             $stock->entreesStock()->delete();
-            
+
             $stock->delete();
             return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Stock supprimé avec succès.');
         }

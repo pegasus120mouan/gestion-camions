@@ -10,9 +10,15 @@
         @endif
       </div>
       <div>
-        <button type="button" class="btn btn-outline-secondary me-2" data-bs-toggle="modal" data-bs-target="#modalFicheSortie">
-          <i class="bx bx-file"></i> Fiche de sortie
-        </button>
+        @if(!empty($vehicule_en_panne))
+          <button type="button" class="btn btn-outline-secondary me-2" disabled title="Camion en panne">
+            <i class="bx bx-file"></i> Fiche de sortie
+          </button>
+        @else
+          <button type="button" class="btn btn-outline-secondary me-2" data-bs-toggle="modal" data-bs-target="#modalFicheSortie">
+            <i class="bx bx-file"></i> Fiche de sortie
+          </button>
+        @endif
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNouvelleDepense">
           Nouvelle depense
         </button>
@@ -21,6 +27,9 @@
 
     @if(session('success'))
       <div class="alert alert-success">{{ session('success') }}</div>
+    @endif
+    @if(!empty($vehicule_en_panne))
+      <div class="alert alert-warning">Ce camion est en panne. La creation de fiche de sortie est desactivee.</div>
     @endif
 
     <div class="card">

@@ -286,6 +286,12 @@
                 <div class="text-truncate" data-i18n="User interface">Gestion financière</div>
               </a>
               <ul class="menu-sub">
+
+              <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.montant_agent') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Montant Pisteur</div>
+                  </a>
+                </li>
                   <li class="menu-item">
                   <a href="{{ route('gestionfinanciere.montant_chef_chargeur') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Accordion">Montant chef chargeur</div>
@@ -406,7 +412,7 @@
            <li class="menu-item">
               <a href="{{ route('agents.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-user" style="color: #7367f0;"></i>
-                <div class="text-truncate" data-i18n="Agents">Agents</div>
+                <div class="text-truncate" data-i18n="Agents">Gestion Pisteurs</div>
               </a>
             </li>
             <li class="menu-item">
@@ -421,12 +427,18 @@
                 <div class="text-truncate" data-i18n="Chargeurs">Chargeurs</div>
               </a>
             </li>
-            <li class="menu-item">
+           <!--  <li class="menu-item {{ request()->routeIs('pisteurs.*') ? 'active' : '' }}">
+              <a href="{{ route('pisteurs.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-leaf" style="color: #3d6fb9;"></i>
+                <div class="text-truncate" data-i18n="Pisteurs">Pisteurs</div>
+              </a>
+            </li>-->
+         <!--   Application Planteurs <li class="menu-item">
               <a href="{{ route('planteurs.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-leaf" style="color: #28c76f;"></i>
                 <div class="text-truncate" data-i18n="Planteurs">Planteurs</div>
               </a>
-            </li>
+            </li>-->
 
 
            <li class="menu-item">

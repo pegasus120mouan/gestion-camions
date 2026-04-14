@@ -66,7 +66,7 @@
         <div class="card mb-4">
           <!-- Prix Agents Transporteur -->
           <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 text-white"><i class="bx bx-money me-2"></i>Prix Agents Transporteur</h5>
+            <h5 class="mb-0 text-white"><i class="bx bx-money me-2"></i>Prix avec Camion Pisteur</h5>
             <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddPrixTransporteur">
               <i class="bx bx-plus me-1"></i>Ajouter
             </button>
@@ -115,7 +115,7 @@
         <!-- Prix Agents Transporteur PGF -->
         <div class="card mb-4">
           <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 text-white"><i class="bx bx-money me-2"></i>Prix Agents Transporteur PGF</h5>
+            <h5 class="mb-0 text-white"><i class="bx bx-money me-2"></i>Prix avec Camion PGF</h5>
             <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddPrixPgf">
               <i class="bx bx-plus me-1"></i>Ajouter
             </button>
@@ -140,6 +140,55 @@
                     <td>{{ $prix->date_fin ? $prix->date_fin->format('d-m-Y') : '-' }}</td>
                     <td class="text-center">
                       <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditPrix{{ $prix->id }}">
+                        <i class="bx bx-edit"></i>
+                      </button>
+                      <form method="POST" action="{{ route('agents.prix.delete', ['id_agent' => $agent['id_agent'], 'prix_id' => $prix->id]) }}" class="d-inline" onsubmit="return confirm('Supprimer ce prix ?')">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                          <i class="bx bx-trash"></i>
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                @empty
+                  <tr>
+                    <td colspan="5" class="text-center text-muted py-3">Aucun prix configuré</td>
+                  </tr>
+                @endforelse
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Prix avec autre Camion -->
+        <div class="card mb-4">
+          <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 text-dark"><i class="bx bx-money me-2"></i>Prix avec autre Camion</h5>
+            <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddPrixAutreCamion">
+              <i class="bx bx-plus me-1"></i>Ajouter
+            </button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Usine</th>
+                  <th class="text-end">Prix (FCFA)</th>
+                  <th>Date début</th>
+                  <th>Date fin</th>
+                  <th class="text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @forelse($prixAutreCamion ?? [] as $prix)
+                  <tr>
+                    <td><strong>{{ $prix->nom_usine }}</strong></td>
+                    <td class="text-end">{{ number_format($prix->prix, 0, ',', ' ') }}</td>
+                    <td>{{ $prix->date_debut ? $prix->date_debut->format('d-m-Y') : '-' }}</td>
+                    <td>{{ $prix->date_fin ? $prix->date_fin->format('d-m-Y') : '-' }}</td>
+                    <td class="text-center">
+                      <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditPrixAutre{{ $prix->id }}">
                         <i class="bx bx-edit"></i>
                       </button>
                       <form method="POST" action="{{ route('agents.prix.delete', ['id_agent' => $agent['id_agent'], 'prix_id' => $prix->id]) }}" class="d-inline" onsubmit="return confirm('Supprimer ce prix ?')">
@@ -258,6 +307,52 @@
   </div>
 </div>
 
+<!-- Modal Ajouter Prix autre Camion -->
+<div class="modal fade" id="modalAddPrixAutreCamion" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ route('agents.prix.store', ['id_agent' => $agent['id_agent']]) }}">
+        @csrf
+        <input type="hidden" name="type" value="autre_camion">
+        <div class="modal-header bg-warning text-dark">
+          <h5 class="modal-title text-dark">Ajouter Prix autre Camion</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Usine <span class="text-danger">*</span></label>
+            <select name="id_usine" class="form-select" required onchange="this.form.nom_usine.value = this.options[this.selectedIndex].text">
+              <option value="">Sélectionner une usine</option>
+              @foreach($usines ?? [] as $usine)
+                <option value="{{ $usine['id_usine'] }}">{{ $usine['nom_usine'] }}</option>
+              @endforeach
+            </select>
+            <input type="hidden" name="nom_usine" value="">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Prix (FCFA) <span class="text-danger">*</span></label>
+            <input type="number" name="prix" class="form-control" required min="0" placeholder="Ex: 40">
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Date début</label>
+              <input type="date" name="date_debut" class="form-control">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Date fin</label>
+              <input type="date" name="date_fin" class="form-control">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-warning">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <!-- Modals pour modifier les prix -->
 @foreach($prixTransporteur ?? [] as $prix)
 <div class="modal fade" id="modalEditPrix{{ $prix->id }}" tabindex="-1" aria-hidden="true">
@@ -289,6 +384,43 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
           <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endforeach
+
+@foreach($prixAutreCamion ?? [] as $prix)
+<div class="modal fade" id="modalEditPrixAutre{{ $prix->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ route('agents.prix.update', ['id_agent' => $agent['id_agent'], 'prix_id' => $prix->id]) }}">
+        @csrf
+        @method('PUT')
+        <div class="modal-header bg-warning text-dark">
+          <h5 class="modal-title text-dark">Modifier Prix autre Camion - {{ $prix->nom_usine }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Prix (FCFA) <span class="text-danger">*</span></label>
+            <input type="number" name="prix" class="form-control" required min="0" value="{{ $prix->prix }}">
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Date début</label>
+              <input type="date" name="date_debut" class="form-control" value="{{ $prix->date_debut ? $prix->date_debut->format('Y-m-d') : '' }}">
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Date fin</label>
+              <input type="date" name="date_fin" class="form-control" value="{{ $prix->date_fin ? $prix->date_fin->format('Y-m-d') : '' }}">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-warning">Enregistrer</button>
         </div>
       </form>
     </div>

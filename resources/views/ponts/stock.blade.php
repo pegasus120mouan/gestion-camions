@@ -59,9 +59,14 @@
           </h5>
           <small>Ouvert le {{ $stockOuvert->date_mouvement ? $stockOuvert->date_mouvement->format('d/m/Y') : '-' }} | Parc: <strong>{{ $stockOuvert->nom_parc ?? '-' }}</strong></small>
         </div>
-        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#fermerStockModal-{{ $stockOuvert->id }}">
-          <i class="bx bx-lock me-1"></i> Fermer ce stock
-        </button>
+        <div class="d-flex flex-wrap gap-2 justify-content-end">
+          <button type="button" class="btn btn-outline-light border-white text-white" data-bs-toggle="modal" data-bs-target="#supprimerStockOuvertModal-{{ $stockOuvert->id }}" title="Supprimer ce stock">
+            <i class="bx bx-trash me-1"></i> Supprimer
+          </button>
+          <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#fermerStockModal-{{ $stockOuvert->id }}">
+            <i class="bx bx-lock me-1"></i> Fermer ce stock
+          </button>
+        </div>
       </div>
       <div class="card-body">
         <div class="row">
@@ -138,6 +143,47 @@
         </div>
       </div>
     </div>
+
+    <div class="modal fade" id="supprimerStockOuvertModal-{{ $stockOuvert->id }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title text-white">
+              <i class="bx bx-trash me-2"></i>Supprimer le stock {{ $stockOuvert->code_stock }}
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <form method="POST" action="{{ route('ponts.stock.delete', ['id_pont' => $pont['id_pont'], 'stock_id' => $stockOuvert->id]) }}">
+            @csrf
+            @method('DELETE')
+            <div class="modal-body">
+              <div class="alert alert-danger">
+                <i class="bx bx-error-circle me-2"></i>
+                <strong>Attention !</strong> Cette action est irréversible. Les entrées de ce stock seront supprimées.
+              </div>
+              @if($sortiesFichesOuvert > 0)
+              <div class="alert alert-warning mb-3">
+                <i class="bx bx-info-circle me-2"></i>
+                Ce stock a <strong>{{ number_format($sortiesFichesOuvert, 0, ',', ' ') }} kg</strong> de sorties déchargées enregistrées. Les fiches de sortie resteront dans l’historique mais ne seront plus liées à ce stock.
+              </div>
+              @endif
+              <p><strong>Code :</strong> {{ $stockOuvert->code_stock ?? 'N/A' }}</p>
+              <p><strong>Parc :</strong> {{ $stockOuvert->nom_parc ?? '-' }}</p>
+              <p><strong>Entrée totale :</strong> {{ number_format($stockOuvertEntrees, 0, ',', ' ') }} kg</p>
+              @if($sortiesFichesOuvert > 0)
+              <p><strong>Sorties (déchargées) :</strong> {{ number_format($sortiesFichesOuvert, 0, ',', ' ') }} kg</p>
+              @endif
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+              <button type="submit" class="btn btn-danger">
+                <i class="bx bx-trash me-1"></i> Supprimer définitivement
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
     @endforeach
 
     @if($stocksOuverts->isEmpty())
@@ -182,7 +228,6 @@
                     ->whereNotNull('poids_pont')
                     ->sum('poids_pont');
                 $ecart = $sortiesStock - $entree;
-                $hasSorties = $sortiesStock > 0;
               @endphp
               <tr>
                 <td>
@@ -204,15 +249,9 @@
                   {{ number_format($ecart, 0, ',', ' ') }}
                 </td>
                 <td class="text-center">
-                  @if($hasSorties)
-                    <button type="button" class="btn btn-sm btn-icon btn-outline-secondary" disabled title="Stock avec sorties - suppression impossible">
-                      <i class="bx bx-lock"></i>
-                    </button>
-                  @else
-                    <button type="button" class="btn btn-sm btn-icon btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalDeleteStock-{{ $sf->id }}" title="Supprimer ce stock">
-                      <i class="bx bx-trash"></i>
-                    </button>
-                  @endif
+                  <button type="button" class="btn btn-sm btn-icon btn-outline-danger" data-bs-toggle="modal" data-bs-target="#modalDeleteStock-{{ $sf->id }}" title="Supprimer ce stock">
+                    <i class="bx bx-trash"></i>
+                  </button>
                 </td>
               </tr>
             @endforeach
@@ -617,7 +656,6 @@
       ->whereNotNull('poids_pont')
       ->sum('poids_pont');
 @endphp
-@if($sortiesStockModal == 0)
 <div class="modal fade" id="modalDeleteStock-{{ $sf->id }}" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -635,6 +673,12 @@
             <i class="bx bx-error-circle me-2"></i>
             <strong>Attention !</strong> Cette action est irréversible.
           </div>
+          @if($sortiesStockModal > 0)
+          <div class="alert alert-warning">
+            <i class="bx bx-info-circle me-2"></i>
+            Des sorties déchargées (<strong>{{ number_format($sortiesStockModal, 0, ',', ' ') }} kg</strong>) sont liées à ce stock. Les fiches resteront enregistrées mais ne seront plus associées à ce stock.
+          </div>
+          @endif
           <p><strong>Code Stock:</strong> {{ $sf->code_stock ?? 'N/A' }}</p>
           <p><strong>Date d'entrée:</strong> {{ $sf->date_mouvement ? $sf->date_mouvement->format('d/m/Y') : '-' }}</p>
           <p><strong>Date de fermeture:</strong> {{ $sf->date_fermeture ? $sf->date_fermeture->format('d/m/Y') : '-' }}</p>
@@ -650,6 +694,5 @@
     </div>
   </div>
 </div>
-@endif
 @endforeach
 @endsection
