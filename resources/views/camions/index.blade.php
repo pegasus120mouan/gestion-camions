@@ -53,7 +53,7 @@
                 @endphp
                 <tr>
                   <td>
-                    @if($estEnCours || $estEnPanne)
+                    @if($estEnPanne)
                       <span class="text-muted">{{ $v['matricule_vehicule'] ?? '' }}</span>
                     @else
                       <a href="{{ route('vehicules.depenses', ['vehicule_id' => $v['vehicules_id'] ?? 0, 'matricule' => $v['matricule_vehicule'] ?? '']) }}">
@@ -111,7 +111,7 @@
                           Enregistrer
                         </button>
                       </form>
-                      @if($estEnCours || $estEnPanne)
+                      @if($estEnPanne)
                         <button type="button" class="btn btn-sm btn-outline-secondary" disabled>
                           <i class="bx bx-show"></i> Détails
                         </button>

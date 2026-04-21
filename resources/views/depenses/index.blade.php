@@ -14,6 +14,10 @@
           <button type="button" class="btn btn-outline-secondary me-2" disabled title="Camion en panne">
             <i class="bx bx-file"></i> Fiche de sortie
           </button>
+        @elseif(!empty($vehicule_en_cours))
+          <button type="button" class="btn btn-outline-secondary me-2" disabled title="Camion en cours d'utilisation">
+            <i class="bx bx-file"></i> Fiche de sortie
+          </button>
         @else
           <button type="button" class="btn btn-outline-secondary me-2" data-bs-toggle="modal" data-bs-target="#modalFicheSortie">
             <i class="bx bx-file"></i> Fiche de sortie
@@ -30,6 +34,9 @@
     @endif
     @if(!empty($vehicule_en_panne))
       <div class="alert alert-warning">Ce camion est en panne. La creation de fiche de sortie est desactivee.</div>
+    @endif
+    @if(!empty($vehicule_en_cours))
+      <div class="alert alert-warning">Ce camion est en cours d'utilisation. La creation de fiche de sortie est desactivee.</div>
     @endif
 
     <div class="card">
@@ -120,6 +127,7 @@
 </div>
 
 <!-- Modal Fiche de Sortie -->
+@if(empty($vehicule_en_panne) && empty($vehicule_en_cours))
 <div class="modal fade" id="modalFicheSortie" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
@@ -205,6 +213,7 @@
     </div>
   </div>
 </div>
+@endif
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {

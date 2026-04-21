@@ -75,6 +75,7 @@
               <th>Vehicule</th>
               <th>Service</th>
               <th>Fournisseur</th>
+              <th>Motif</th>
               <th>Montant</th>
             </tr>
           </thead>
@@ -96,16 +97,17 @@
                 </td>
                 <td>
                   @if($d->description)
-                    <a href="{{ route('gestionfinanciere.fournisseur.show', ['nom' => $d->description]) }}" class="btn btn-sm btn-outline-secondary d-inline-block text-center" style="min-width: 150px;">{{ $d->description }}</a>
+                    <a href="{{ route('gestionfinanciere.fournisseur.show', ['nom' => $d->description]) }}" class="btn btn-sm btn-outline-secondary fournisseur-btn" title="{{ $d->description }}">{{ $d->description }}</a>
                   @else
-                    <span class="btn btn-sm btn-outline-secondary d-inline-block text-center disabled" style="min-width: 150px;">-</span>
+                    <span class="btn btn-sm btn-outline-secondary fournisseur-btn disabled">-</span>
                   @endif
                 </td>
+                <td>{{ $d->commentaire ?: '-' }}</td>
                 <td>{{ number_format((float)($d->montant ?? 0), 0, ',', ' ') }} FCFA</td>
               </tr>
             @empty
               <tr>
-                <td colspan="5" class="text-center">Aucune depense</td>
+                <td colspan="6" class="text-center">Aucune depense</td>
               </tr>
             @endforelse
           </tbody>
@@ -132,6 +134,18 @@
     @endif
   </div>
 </div>
+
+<style>
+  .fournisseur-btn{
+    width: 220px;
+    display: inline-block;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+  }
+</style>
 
 <!-- Modal Nouvelle Dépense -->
 <div class="modal fade" id="modalNouvelleDepense" tabindex="-1" aria-hidden="true">

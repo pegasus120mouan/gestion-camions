@@ -28,13 +28,15 @@ use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\ParcController;
 use App\Http\Controllers\PisteurController;
+use App\Http\Controllers\HomeController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/index.html', function () {
     return redirect('/');
 });
 
-Route::get('/', [AuthController::class, 'showLogin'])->name('login');
+Route::get('/', [HomeController::class, 'index'])->name('home');
+Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 

@@ -12,6 +12,14 @@ use Illuminate\Support\Facades\Http;
 
 class DepenseController extends Controller
 {
+    private function vehiculeEstEnCoursUtilisation(int $vehiculeId): bool
+    {
+        return FicheSortie::query()
+            ->where('vehicule_id', $vehiculeId)
+            ->whereNull('date_dechargement')
+            ->exists();
+    }
+
     public function listeDepenses(Request $request)
     {
         $query = Depense::query();
@@ -390,6 +398,7 @@ class DepenseController extends Controller
             ->where('vehicule_id', $vehiculeId)
             ->value('etat');
         $vehiculeEnPanne = in_array($etatVehicule, ['en_panne', 'inactif'], true);
+        $vehiculeEnCours = $this->vehiculeEstEnCoursUtilisation($vehiculeId);
 
         $depenses = Depense::where('vehicule_id', $vehiculeId)
             ->orderBy('date_depense', 'desc')
@@ -486,6 +495,7 @@ class DepenseController extends Controller
             'services' => $services,
             'fournisseurs' => $fournisseurs,
             'vehicule_en_panne' => $vehiculeEnPanne,
+            'vehicule_en_cours' => $vehiculeEnCours,
             'external_error' => null,
         ]);
     }
@@ -557,6 +567,11 @@ class DepenseController extends Controller
         if (in_array($etatVehicule, ['en_panne', 'inactif'], true)) {
             return redirect()->route('vehicules.depenses', ['vehicule_id' => $vehiculeId])
                 ->withErrors(['error' => "Ce camion est en panne. Impossible de créer une fiche de sortie."]);
+        }
+
+        if ($this->vehiculeEstEnCoursUtilisation($vehiculeId)) {
+            return redirect()->route('vehicules.depenses', ['vehicule_id' => $vehiculeId])
+                ->withErrors(['error' => "Ce camion est en cours d'utilisation. Impossible de créer une fiche de sortie."]);
         }
 
         $depenses = Depense::where('vehicule_id', $vehiculeId)
@@ -682,6 +697,13 @@ class DepenseController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => "Ce camion est en panne. Impossible de créer une fiche de sortie.",
+            ], 422);
+        }
+
+        if ($this->vehiculeEstEnCoursUtilisation($vehiculeId)) {
+            return response()->json([
+                'success' => false,
+                'message' => "Ce camion est en cours d'utilisation. Impossible de créer une fiche de sortie.",
             ], 422);
         }
 
@@ -832,6 +854,10 @@ class DepenseController extends Controller
             ->value('etat');
         if (in_array($etatVehicule, ['en_panne', 'inactif'], true)) {
             return back()->withErrors(['error' => "Ce camion est en panne. Impossible de créer une fiche de sortie."]);
+        }
+
+        if ($this->vehiculeEstEnCoursUtilisation((int) $validated['vehicule_id'])) {
+            return back()->withErrors(['error' => "Ce camion est en cours d'utilisation. Impossible de créer une fiche de sortie."]);
         }
 
         // Si matricule_vehicule est vide, récupérer depuis l'API
