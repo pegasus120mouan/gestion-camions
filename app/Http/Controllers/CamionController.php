@@ -95,6 +95,27 @@ class CamionController extends Controller
             }
         }
 
+        // Filtrer par état (actif / en_panne / en_cours)
+        $etatFiltre = (string) $request->query('etat', '');
+        if (in_array($etatFiltre, ['actif', 'en_panne', 'en_cours'], true)) {
+            $vehicules = array_filter($vehicules, function ($v) use ($etatFiltre, $vehiculesEnCours, $etatsParVehicule) {
+                $vehiculeId = (int) ($v['vehicules_id'] ?? 0);
+                $estEnCours = !empty($vehiculesEnCours[$vehiculeId]);
+                $etat = $estEnCours ? 'en_cours' : ($etatsParVehicule[$vehiculeId] ?? 'actif');
+
+                if ($etatFiltre === 'en_cours') {
+                    return $etat === 'en_cours';
+                }
+                if ($etatFiltre === 'en_panne') {
+                    return $etat === 'en_panne' || $etat === 'inactif';
+                }
+
+                // actif
+                return $etat === 'actif';
+            });
+            $vehicules = array_values($vehicules);
+        }
+
         return view('camions.index', [
             'camions' => new LengthAwarePaginator([], 0, 20),
             'chauffeurs' => collect(),

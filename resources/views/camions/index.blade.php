@@ -7,13 +7,29 @@
     </div>
 
     <form method="GET" action="{{ route('camions.index') }}" class="mb-3">
-      <div class="input-group" style="max-width: 400px;">
-        <span class="input-group-text"><i class="bx bx-search"></i></span>
-        <input type="text" name="q" class="form-control" placeholder="Rechercher par immatriculation..." value="{{ request('q') }}">
-        <button type="submit" class="btn btn-primary">Rechercher</button>
-        @if(request('q'))
-          <a href="{{ route('camions.index') }}" class="btn btn-outline-secondary">Effacer</a>
-        @endif
+      <div class="row g-2 align-items-end" style="max-width: 720px;">
+        <div class="col-md-6">
+          <label class="form-label mb-1">Recherche</label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bx bx-search"></i></span>
+            <input type="text" name="q" class="form-control" placeholder="Immatriculation..." value="{{ request('q') }}">
+          </div>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label mb-1">État</label>
+          <select name="etat" class="form-select">
+            <option value="" {{ request('etat') === null || request('etat') === '' ? 'selected' : '' }}>Tous</option>
+            <option value="actif" {{ request('etat') === 'actif' ? 'selected' : '' }}>Actif</option>
+            <option value="en_cours" {{ request('etat') === 'en_cours' ? 'selected' : '' }}>En cours d'utilisation</option>
+            <option value="en_panne" {{ request('etat') === 'en_panne' ? 'selected' : '' }}>En panne</option>
+          </select>
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+          <button type="submit" class="btn btn-primary w-100">Rechercher</button>
+          @if(request('q') || request('etat'))
+            <a href="{{ route('camions.index') }}" class="btn btn-outline-secondary w-100">Effacer</a>
+          @endif
+        </div>
       </div>
     </form>
 
