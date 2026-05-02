@@ -165,14 +165,62 @@ class AgentController extends Controller
     public function storePrix(Request $request, int $id_agent)
     {
         $validated = $request->validate([
-            'id_usine' => ['required', 'integer'],
+            'id_usine' => ['required', 'string'],
             'nom_usine' => ['required', 'string'],
             'type' => ['required', 'in:transporteur,pgf,autre_camion'],
             'prix' => ['required', 'numeric', 'min:0'],
             'date_debut' => ['nullable', 'date'],
             'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
+            'toutes_usines' => ['nullable', 'in:0,1'],
         ]);
 
+        // Si "Toutes les usines" est sélectionné
+        if ($request->input('toutes_usines') === '1' || $validated['id_usine'] === 'all') {
+            // Récupérer toutes les usines depuis l'API
+            $timeout = (int) config('services.external_auth.timeout', 10);
+            $usines = [];
+            
+            try {
+                $usinesResponse = Http::acceptJson()
+                    ->withoutVerifying()
+                    ->timeout($timeout)
+                    ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
+                if ($usinesResponse->successful()) {
+                    $usines = $usinesResponse->json('usines') ?? [];
+                }
+            } catch (\Throwable $e) {}
+
+            $count = 0;
+            foreach ($usines as $usine) {
+                // Vérifier si ce prix n'existe pas déjà pour cette usine
+                $existe = PrixAgent::where('id_agent', $id_agent)
+                    ->where('id_usine', $usine['id_usine'])
+                    ->where('type', $validated['type'])
+                    ->where(function($q) use ($validated) {
+                        $q->whereNull('date_fin')
+                          ->orWhere('date_fin', '>=', $validated['date_debut'] ?? now());
+                    })
+                    ->exists();
+
+                if (!$existe) {
+                    PrixAgent::create([
+                        'id_agent' => $id_agent,
+                        'id_usine' => $usine['id_usine'],
+                        'nom_usine' => $usine['nom_usine'],
+                        'type' => $validated['type'],
+                        'prix' => $validated['prix'],
+                        'date_debut' => $validated['date_debut'],
+                        'date_fin' => $validated['date_fin'],
+                    ]);
+                    $count++;
+                }
+            }
+
+            return redirect()->route('agents.show', ['id_agent' => $id_agent])
+                ->with('success', "Prix ajouté pour {$count} usine(s) avec succès.");
+        }
+
+        // Sinon, créer pour une seule usine
         PrixAgent::create([
             'id_agent' => $id_agent,
             'id_usine' => $validated['id_usine'],

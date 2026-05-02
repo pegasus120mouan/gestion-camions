@@ -229,13 +229,15 @@
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Usine <span class="text-danger">*</span></label>
-            <select name="id_usine" class="form-select" required onchange="this.form.nom_usine.value = this.options[this.selectedIndex].text">
+            <select name="id_usine" class="form-select" required onchange="updateNomUsineTransporteur(this)">
               <option value="">Sélectionner une usine</option>
+              <option value="all" data-nom="TOUTES LES USINES">🏭 TOUTES LES USINES</option>
               @foreach($usines ?? [] as $usine)
-                <option value="{{ $usine['id_usine'] }}">{{ $usine['nom_usine'] }}</option>
+                <option value="{{ $usine['id_usine'] }}" data-nom="{{ $usine['nom_usine'] }}">{{ $usine['nom_usine'] }}</option>
               @endforeach
             </select>
             <input type="hidden" name="nom_usine" value="">
+            <input type="hidden" name="toutes_usines" value="0">
           </div>
           <div class="mb-3">
             <label class="form-label">Prix (FCFA) <span class="text-danger">*</span></label>
@@ -275,13 +277,15 @@
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Usine <span class="text-danger">*</span></label>
-            <select name="id_usine" class="form-select" required onchange="this.form.nom_usine.value = this.options[this.selectedIndex].text">
+            <select name="id_usine" class="form-select" required onchange="updateNomUsinePgf(this)">
               <option value="">Sélectionner une usine</option>
+              <option value="all" data-nom="TOUTES LES USINES">🏭 TOUTES LES USINES</option>
               @foreach($usines ?? [] as $usine)
-                <option value="{{ $usine['id_usine'] }}">{{ $usine['nom_usine'] }}</option>
+                <option value="{{ $usine['id_usine'] }}" data-nom="{{ $usine['nom_usine'] }}">{{ $usine['nom_usine'] }}</option>
               @endforeach
             </select>
             <input type="hidden" name="nom_usine" value="">
+            <input type="hidden" name="toutes_usines" value="0">
           </div>
           <div class="mb-3">
             <label class="form-label">Prix (FCFA) <span class="text-danger">*</span></label>
@@ -306,6 +310,22 @@
     </div>
   </div>
 </div>
+
+<script>
+function updateNomUsineTransporteur(select) {
+    var form = select.closest('form');
+    var selectedOption = select.options[select.selectedIndex];
+    form.nom_usine.value = selectedOption.dataset.nom || '';
+    form.toutes_usines.value = select.value === 'all' ? '1' : '0';
+}
+
+function updateNomUsinePgf(select) {
+    var form = select.closest('form');
+    var selectedOption = select.options[select.selectedIndex];
+    form.nom_usine.value = selectedOption.dataset.nom || '';
+    form.toutes_usines.value = select.value === 'all' ? '1' : '0';
+}
+</script>
 
 <!-- Modal Ajouter Prix autre Camion -->
 <div class="modal fade" id="modalAddPrixAutreCamion" tabindex="-1" aria-hidden="true">
