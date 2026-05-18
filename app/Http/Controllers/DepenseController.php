@@ -481,6 +481,9 @@ class DepenseController extends Controller
         $services = \App\Models\Service::orderBy('nom_service')->get();
         $fournisseurs = \App\Models\Fournisseur::with('service')->orderBy('nom')->get();
 
+        // Charger les produits
+        $produits = \App\Models\Produit::orderBy('nom')->get();
+
         return view('depenses.index', [
             'depenses' => $depenses,
             'vehicule' => [
@@ -494,6 +497,7 @@ class DepenseController extends Controller
             'chefChargeurs' => $chefChargeurs,
             'services' => $services,
             'fournisseurs' => $fournisseurs,
+            'produits' => $produits,
             'vehicule_en_panne' => $vehiculeEnPanne,
             'vehicule_en_cours' => $vehiculeEnCours,
             'external_error' => null,
@@ -713,6 +717,7 @@ class DepenseController extends Controller
             'date_chargement' => ['required', 'date'],
             'poids_pont' => ['nullable', 'numeric', 'min:0'],
             'usine' => ['nullable', 'string', 'max:255'],
+            'produit_id' => ['nullable', 'integer', 'exists:produits,id'],
             'id_chef_chargeur' => ['nullable', 'integer'],
             'carburant' => ['nullable', 'integer', 'min:0'],
             'frais_route' => ['nullable', 'integer', 'min:0'],
@@ -744,6 +749,13 @@ class DepenseController extends Controller
             $numeroAgent = trim($matches[2]);
         }
 
+        // Récupérer le nom du produit si un produit est sélectionné
+        $nomProduit = null;
+        if (!empty($validated['produit_id'])) {
+            $produit = \App\Models\Produit::find($validated['produit_id']);
+            $nomProduit = $produit ? $produit->nom : null;
+        }
+
         $ficheSortie = \App\Models\FicheSortie::create([
             'vehicule_id' => $vehiculeId,
             'matricule_vehicule' => $matricule,
@@ -751,6 +763,8 @@ class DepenseController extends Controller
             'nom_pont' => $nomPont,
             'code_pont' => $codePont,
             'usine' => $validated['usine'] ?? null,
+            'produit_id' => $validated['produit_id'] ?? null,
+            'nom_produit' => $nomProduit,
             'id_agent' => $validated['id_agent'],
             'nom_agent' => $nomAgent,
             'numero_agent' => $numeroAgent,

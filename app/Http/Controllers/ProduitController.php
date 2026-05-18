@@ -33,7 +33,15 @@ class ProduitController extends Controller
             return response()->json(['data' => $produit]);
         }
 
-        return redirect()->route('produits.edit', $produit);
+        // Récupérer les fiches de sortie associées à ce produit
+        $fichesSortie = \App\Models\FicheSortie::where('produit_id', $produit->id)
+            ->orderBy('date_chargement', 'desc')
+            ->paginate(20);
+
+        return view('produits.show', [
+            'produit' => $produit,
+            'fichesSortie' => $fichesSortie,
+        ]);
     }
 
     public function edit(Request $request, Produit $produit)
@@ -54,6 +62,9 @@ class ProduitController extends Controller
             'tare' => ['required', 'numeric', 'min:0'],
         ]);
 
+        // Normaliser le nom : première lettre majuscule, reste minuscule
+        $validated['nom'] = $this->normaliserNom($validated['nom']);
+
         $produit = Produit::create($validated);
 
         if ($request->wantsJson()) {
@@ -70,6 +81,11 @@ class ProduitController extends Controller
             'tare' => ['sometimes', 'required', 'numeric', 'min:0'],
         ]);
 
+        // Normaliser le nom si présent
+        if (isset($validated['nom'])) {
+            $validated['nom'] = $this->normaliserNom($validated['nom']);
+        }
+
         $produit->update($validated);
 
         if ($request->wantsJson()) {
@@ -77,6 +93,15 @@ class ProduitController extends Controller
         }
 
         return redirect()->back();
+    }
+
+    /**
+     * Normalise le nom du produit : première lettre majuscule, reste minuscule
+     * Exemple: "HEVEA" ou "hevea" ou "HeVeA" => "Hevea"
+     */
+    private function normaliserNom(string $nom): string
+    {
+        return mb_convert_case(trim($nom), MB_CASE_TITLE, 'UTF-8');
     }
 
     public function destroy(Produit $produit)

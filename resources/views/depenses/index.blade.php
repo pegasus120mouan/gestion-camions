@@ -182,6 +182,17 @@
           </div>
 
           <div class="mb-3">
+            <label class="form-label">Produit</label>
+            <select name="produit_id" class="form-select">
+              <option value="">-- Sélectionner un produit --</option>
+              @foreach($produits ?? [] as $produit)
+                <option value="{{ $produit->id }}" data-nom="{{ $produit->nom }}">{{ $produit->nom }}</option>
+              @endforeach
+            </select>
+            <input type="hidden" name="nom_produit" id="nom_produit_hidden" value="">
+          </div>
+
+          <div class="mb-3">
             <label class="form-label">Chef des chargeurs</label>
             <select name="id_chef_chargeur" class="form-select">
               <option value="">-- Sélectionner un chef des chargeurs --</option>
@@ -218,18 +229,14 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   // Mapping ponts
-  var pontsMap = {
-    @foreach($ponts ?? [] as $pont)
-      "{{ $pont['nom_pont'] }} ({{ $pont['code_pont'] }})": {{ $pont['id_pont'] }},
-    @endforeach
-  };
+  var pontsMap = {!! json_encode(collect($ponts ?? [])->mapWithKeys(function($pont) {
+      return [$pont['nom_pont'] . ' (' . $pont['code_pont'] . ')' => $pont['id_pont']];
+  })->toArray()) !!};
 
   // Mapping agents
-  var agentsMap = {
-    @foreach($agents ?? [] as $agent)
-      "{{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})": {{ $agent['id_agent'] }},
-    @endforeach
-  };
+  var agentsMap = {!! json_encode(collect($agents ?? [])->mapWithKeys(function($agent) {
+      return [$agent['nom_complet'] . ' (' . $agent['numero_agent'] . ')' => $agent['id_agent']];
+  })->toArray()) !!};
 
   var pontInput = document.getElementById('pont_input');
   var agentSearch = document.getElementById('agent_search');

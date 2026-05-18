@@ -27,7 +27,11 @@
           <tbody class="table-border-bottom-0">
             @forelse($produits as $p)
               <tr>
-                <td>{{ $p->nom }}</td>
+                <td>
+                  <a href="{{ route('produits.show', $p) }}" class="text-primary fw-bold text-decoration-none">
+                    {{ $p->nom }}
+                  </a>
+                </td>
                 <td class="text-end">{{ $p->tare }}</td>
                 <td class="text-end">
                   <a class="btn btn-sm btn-outline-primary" href="{{ route('produits.edit', $p) }}">Modifier</a>

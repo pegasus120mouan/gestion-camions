@@ -18,6 +18,8 @@ class FicheSortie extends Model
         'nom_pont',
         'code_pont',
         'usine',
+        'produit_id',
+        'nom_produit',
         'id_agent',
         'nom_agent',
         'numero_agent',

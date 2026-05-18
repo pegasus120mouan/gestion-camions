@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Pesee;
 use Carbon\Carbon;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -22,6 +23,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Utiliser Bootstrap 5 pour la pagination
+        Paginator::useBootstrapFive();
+
         View::composer('layout.main', function ($view) {
             $peseesTodayCount = Pesee::query()
                 ->whereDate('pese_le', Carbon::today())
