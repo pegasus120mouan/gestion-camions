@@ -82,7 +82,7 @@
               {{ $stockOuvert->code_stock ?? 'N/A' }}
             </a>
           </h5>
-          <small>Ouvert le {{ $stockOuvert->date_mouvement ? $stockOuvert->date_mouvement->format('d/m/Y') : '-' }} | Parc: <strong>{{ $stockOuvert->nom_parc ?? '-' }}</strong></small>
+          <small>Ouvert le {{ $stockOuvert->date_mouvement ? $stockOuvert->date_mouvement->format('d/m/Y') : '-' }} | Parc: <strong>{{ $stockOuvert->nom_parc ?? '-' }}</strong> | Produit: <strong>{{ $stockOuvert->nom_produit ?? '-' }}</strong></small>
         </div>
         <div class="d-flex flex-wrap gap-2 justify-content-end">
           <button type="button" class="btn btn-outline-light border-white text-white" data-bs-toggle="modal" data-bs-target="#supprimerStockOuvertModal-{{ $stockOuvert->id }}" title="Supprimer ce stock">
@@ -151,6 +151,7 @@
               <div class="mb-3">
                 <p><strong>Résumé du stock:</strong></p>
                 <ul class="list-unstyled">
+                  <li><i class="bx bx-right-arrow-alt text-secondary"></i> Parc: <strong>{{ $stockOuvert->nom_parc ?? '-' }}</strong> | Produit: <strong>{{ $stockOuvert->nom_produit ?? '-' }}</strong></li>
                   <li><i class="bx bx-right-arrow-alt text-primary"></i> Entrée: <strong>{{ number_format($stockOuvertEntrees, 0, ',', ' ') }} kg</strong></li>
                   <li><i class="bx bx-right-arrow-alt text-success"></i> Sorties: <strong>{{ number_format($sortiesFichesOuvert, 0, ',', ' ') }} kg</strong></li>
                   <li><i class="bx bx-right-arrow-alt text-warning"></i> Écart: <strong>{{ number_format($ecartOuvert, 0, ',', ' ') }} kg</strong></li>
@@ -194,6 +195,7 @@
               @endif
               <p><strong>Code :</strong> {{ $stockOuvert->code_stock ?? 'N/A' }}</p>
               <p><strong>Parc :</strong> {{ $stockOuvert->nom_parc ?? '-' }}</p>
+              <p><strong>Produit :</strong> {{ $stockOuvert->nom_produit ?? '-' }}</p>
               <p><strong>Entrée totale :</strong> {{ number_format($stockOuvertEntrees, 0, ',', ' ') }} kg</p>
               @if($sortiesFichesOuvert > 0)
               <p><strong>Sorties (déchargées) :</strong> {{ number_format($sortiesFichesOuvert, 0, ',', ' ') }} kg</p>
@@ -565,6 +567,8 @@
         <div class="row mb-4">
           <div class="col-md-6">
             <div class="p-3 rounded bg-light">
+              <p class="mb-1"><strong>Parc:</strong> {{ $stockItem->nom_parc ?? '-' }}</p>
+              <p class="mb-1"><strong>Produit:</strong> <span class="badge bg-info">{{ $stockItem->nom_produit ?? '-' }}</span></p>
               <p class="mb-1"><strong>Date d'entrée:</strong> {{ $stockItem->date_mouvement ? $stockItem->date_mouvement->format('d/m/Y') : '-' }}</p>
               <p class="mb-1"><strong>Date de fermeture:</strong> {{ $stockItem->date_fermeture ? $stockItem->date_fermeture->format('d/m/Y') : 'Non fermé' }}</p>
               <p class="mb-0"><strong>Statut:</strong> 

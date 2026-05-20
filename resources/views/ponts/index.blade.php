@@ -37,8 +37,11 @@
                   <strong>{{ number_format((float)($p['stock_disponible'] ?? 0), 0, ',', ' ') }} kg</strong>
                 </td>
                 <td class="text-end">
-                  @if(($p['solde'] ?? 0) > 0)
-                    <span class="fw-bold text-success">{{ number_format((float)($p['solde'] ?? 0), 0, ',', ' ') }} FCFA</span>
+                  @php $solde = $p['solde'] ?? 0; @endphp
+                  @if($solde > 0)
+                    <span class="fw-bold text-success">{{ number_format((float)$solde, 0, ',', ' ') }} FCFA</span>
+                  @elseif($solde < 0)
+                    <span class="fw-bold text-danger">{{ number_format((float)$solde, 0, ',', ' ') }} FCFA</span>
                   @else
                     <span class="text-muted">0 FCFA</span>
                   @endif

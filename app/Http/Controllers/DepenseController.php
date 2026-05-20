@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CamionEtat;
 use App\Models\Depense;
 use App\Models\FicheSortie;
+use App\Models\Stock;
 use App\Services\MontantAgentFicheService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -18,6 +19,104 @@ class DepenseController extends Controller
             ->where('vehicule_id', $vehiculeId)
             ->whereNull('date_dechargement')
             ->exists();
+    }
+
+    private function calculerStockDisponible(Stock $stock, ?int $excludeFicheId = null): float
+    {
+        $entrees = (float) $stock->total_entrees;
+
+        $query = FicheSortie::query()
+            ->where('stock_id', $stock->id)
+            ->whereNotNull('date_dechargement')
+            ->whereNotNull('poids_pont');
+
+        if ($excludeFicheId) {
+            $query->where('id', '!=', $excludeFicheId);
+        }
+
+        $sorties = (float) $query->sum('poids_pont');
+
+        return max(0, $entrees - $sorties);
+    }
+
+    private function resoudreStockPourDechargement(FicheSortie $fiche, int $parcId): ?Stock
+    {
+        if ($fiche->stock_id) {
+            $stockLie = Stock::query()
+                ->where('id', $fiche->stock_id)
+                ->where('parc_id', $parcId)
+                ->where('type', 'entree')
+                ->where('statut', 'ouvert')
+                ->first();
+
+            if ($stockLie) {
+                return $stockLie;
+            }
+        }
+
+        $query = Stock::query()
+            ->where('parc_id', $parcId)
+            ->where('type', 'entree')
+            ->where('statut', 'ouvert');
+
+        if ($fiche->produit_id) {
+            $stockProduit = (clone $query)->where('produit_id', $fiche->produit_id)->first();
+            if ($stockProduit) {
+                return $stockProduit;
+            }
+        }
+
+        return $query->orderBy('id')->first();
+    }
+
+    /**
+     * Stock ouvert (actif) sur un parc actif du pont, pour le produit donné.
+     */
+    private function trouverStockActifPourPontEtProduit(int $idPont, int $produitId): ?Stock
+    {
+        return Stock::query()
+            ->where('id_pont', $idPont)
+            ->where('produit_id', $produitId)
+            ->where('type', 'entree')
+            ->where('statut', 'ouvert')
+            ->whereHas('parc', function ($query) use ($idPont) {
+                $query->where('id_pont', $idPont)->where('statut', 'actif');
+            })
+            ->orderBy('id')
+            ->first();
+    }
+
+    public function verifierStockPontProduit(Request $request)
+    {
+        $validated = $request->validate([
+            'id_pont' => ['required', 'integer'],
+            'produit_id' => ['required', 'integer', 'exists:produits,id'],
+        ]);
+
+        $stock = $this->trouverStockActifPourPontEtProduit(
+            (int) $validated['id_pont'],
+            (int) $validated['produit_id']
+        );
+
+        if (!$stock) {
+            return response()->json([
+                'valid' => false,
+                'message' => "Aucun parc actif avec un stock ouvert pour ce produit sur ce pont.",
+            ]);
+        }
+
+        return response()->json([
+            'valid' => true,
+            'message' => sprintf(
+                'Stock disponible — Parc %s (%s)',
+                $stock->nom_parc ?? '-',
+                $stock->nom_produit ?? '-'
+            ),
+            'stock_id' => $stock->id,
+            'parc_id' => $stock->parc_id,
+            'nom_parc' => $stock->nom_parc,
+            'nom_produit' => $stock->nom_produit,
+        ]);
     }
 
     public function listeDepenses(Request $request)
@@ -717,7 +816,7 @@ class DepenseController extends Controller
             'date_chargement' => ['required', 'date'],
             'poids_pont' => ['nullable', 'numeric', 'min:0'],
             'usine' => ['nullable', 'string', 'max:255'],
-            'produit_id' => ['nullable', 'integer', 'exists:produits,id'],
+            'produit_id' => ['required', 'integer', 'exists:produits,id'],
             'id_chef_chargeur' => ['nullable', 'integer'],
             'carburant' => ['nullable', 'integer', 'min:0'],
             'frais_route' => ['nullable', 'integer', 'min:0'],
@@ -725,6 +824,20 @@ class DepenseController extends Controller
             'agent_display' => ['nullable', 'string'],
             'matricule_vehicule' => ['required', 'string', 'max:50'],
         ]);
+
+        $stockActif = $this->trouverStockActifPourPontEtProduit(
+            (int) $validated['id_pont'],
+            (int) $validated['produit_id']
+        );
+
+        if (!$stockActif) {
+            $message = "Aucun parc actif avec un stock ouvert pour ce produit sur ce pont.";
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withErrors(['error' => $message]);
+        }
 
         // Utiliser le matricule du formulaire
         $matricule = $validated['matricule_vehicule'];
@@ -759,12 +872,15 @@ class DepenseController extends Controller
         $ficheSortie = \App\Models\FicheSortie::create([
             'vehicule_id' => $vehiculeId,
             'matricule_vehicule' => $matricule,
+            'stock_id' => $stockActif->id,
+            'parc_id' => $stockActif->parc_id,
+            'nom_parc' => $stockActif->nom_parc,
             'id_pont' => $validated['id_pont'],
             'nom_pont' => $nomPont,
             'code_pont' => $codePont,
             'usine' => $validated['usine'] ?? null,
-            'produit_id' => $validated['produit_id'] ?? null,
-            'nom_produit' => $nomProduit,
+            'produit_id' => $validated['produit_id'],
+            'nom_produit' => $nomProduit ?? $stockActif->nom_produit,
             'id_agent' => $validated['id_agent'],
             'nom_agent' => $nomAgent,
             'numero_agent' => $numeroAgent,
@@ -1174,48 +1290,52 @@ class DepenseController extends Controller
     {
         $validated = $request->validate([
             'date_dechargement' => ['required', 'date'],
-            'poids_pont' => ['required', 'numeric', 'min:0'],
-            'parc_id' => ['required', 'exists:parcs,id'],
+            'poids_pont' => ['required', 'numeric', 'min:0.01'],
+            'parc_id' => ['nullable', 'exists:parcs,id'],
         ]);
 
         $ficheSortie = FicheSortie::findOrFail($ficheId);
-        
-        // Vérifier si la fiche n'est pas déjà déchargée
+
         $dejaDecharge = $ficheSortie->date_dechargement !== null;
 
-        // Récupérer le parc sélectionné
-        $parc = \App\Models\Parc::find($validated['parc_id']);
+        $parcId = (int) ($validated['parc_id'] ?? $ficheSortie->parc_id ?? 0);
+        if ($parcId <= 0 && $ficheSortie->stock_id) {
+            $parcId = (int) (Stock::query()->where('id', $ficheSortie->stock_id)->value('parc_id') ?? 0);
+        }
+
+        if ($parcId <= 0) {
+            return redirect()->back()->withErrors(['error' => 'Aucun parc associé à cette fiche. Sélectionnez un parc.']);
+        }
+
+        $parc = \App\Models\Parc::find($parcId);
         if (!$parc || $parc->id_pont != $ficheSortie->id_pont) {
             return redirect()->back()->withErrors(['error' => 'Parc invalide pour ce pont.']);
         }
 
-        // Trouver le stock ouvert pour ce parc
-        $stockOuvert = \App\Models\Stock::where('parc_id', $parc->id)
-            ->where('type', 'entree')
-            ->where('statut', 'ouvert')
-            ->first();
+        $stockOuvert = $this->resoudreStockPourDechargement($ficheSortie, $parc->id);
 
-        // Vérifier si un stock est ouvert pour ce parc
-        if (!$dejaDecharge && !$stockOuvert) {
-            return redirect()->back()->withErrors(['error' => 'Aucun stock ouvert pour le parc "' . $parc->nom . '". Veuillez créer un stock avant de décharger.']);
+        if (!$stockOuvert) {
+            return redirect()->back()->withErrors(['error' => 'Aucun stock ouvert pour le parc "' . $parc->nom . '" avec ce produit.']);
         }
+
+        $poidsDecharge = (float) $validated['poids_pont'];
 
         $montantAgent = app(MontantAgentFicheService::class)->calculerMontantPourFiche(
             $ficheSortie,
-            (float) $validated['poids_pont']
+            $poidsDecharge
         );
 
         $ficheSortie->update([
             'date_dechargement' => $validated['date_dechargement'],
-            'poids_pont' => $validated['poids_pont'],
-            'stock_id' => $stockOuvert ? $stockOuvert->id : $ficheSortie->stock_id,
+            'poids_pont' => $poidsDecharge,
+            'stock_id' => $stockOuvert->id,
             'parc_id' => $parc->id,
             'nom_parc' => $parc->nom,
             'montant_agent' => $montantAgent !== null ? round($montantAgent, 2) : null,
         ]);
 
         // Créer une sortie de stock PGF si la fiche a un pont et n'était pas déjà déchargée
-        if (!$dejaDecharge && $ficheSortie->id_pont && $validated['poids_pont'] > 0) {
+        if (!$dejaDecharge && $ficheSortie->id_pont && $poidsDecharge > 0) {
             // Trouver le stock actif PGF
             $stockActif = \App\Models\StockPgf::where('statut', 'actif')
                 ->orderBy('created_at', 'desc')
@@ -1228,7 +1348,7 @@ class DepenseController extends Controller
                     'id_pont' => $ficheSortie->id_pont,
                     'nom_pont' => $ficheSortie->nom_pont,
                     'code_pont' => $ficheSortie->code_pont,
-                    'quantite' => $validated['poids_pont'],
+                    'quantite' => $poidsDecharge,
                     'date_sortie' => $validated['date_dechargement'],
                     'commentaire' => 'Sortie automatique - Fiche de sortie #' . $ficheSortie->id . ' - Véhicule: ' . $ficheSortie->matricule_vehicule,
                 ]);

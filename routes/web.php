@@ -240,6 +240,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/fiches-sortie/{fiche_id}/pdf', [DepenseController::class, 'exportFicheSortiePdf'])->name('fiches_sortie.pdf');
     Route::get('/fiches-sortie/{fiche_id}', [DepenseController::class, 'showFicheSortie'])->name('fiches_sortie.show');
     Route::get('/api/tickets-conformes', [DepenseController::class, 'getTicketsConformesApi'])->name('api.tickets_conformes');
+    Route::get('/api/verifier-stock-pont-produit', [DepenseController::class, 'verifierStockPontProduit'])->name('api.verifier_stock_pont_produit');
     Route::post('/fiches-sortie', [DepenseController::class, 'storeFicheSortieFromList'])->name('fiches_sortie.store');
     Route::post('/fiches-sortie/{fiche_id}/associer-ticket', [DepenseController::class, 'associerTicket'])->name('fiches_sortie.associer_ticket');
     Route::post('/fiches-sortie/{fiche_id}/prix-transport', [DepenseController::class, 'updatePrixTransport'])->name('fiches_sortie.update_prix_transport');

@@ -161,16 +161,25 @@
               @endphp
               @foreach($parcsForPont as $parc)
                 @php
-                  // Vérifier si ce parc a un stock ouvert
                   $stockOuvert = \App\Models\Stock::where('parc_id', $parc->id)
+                      ->where('type', 'entree')
                       ->where('statut', 'ouvert')
+                      ->when($f->produit_id, fn($q) => $q->where('produit_id', $f->produit_id))
                       ->first();
-                  $stockDispo = $stockOuvert ? $stockOuvert->total_entrees - \App\Models\FicheSortie::where('stock_id', $stockOuvert->id)->whereNotNull('poids_pont')->sum('poids_pont') : 0;
+                  $stockDispo = 0;
+                  if ($stockOuvert) {
+                    $sortiesStock = \App\Models\FicheSortie::where('stock_id', $stockOuvert->id)
+                      ->whereNotNull('date_dechargement')
+                      ->whereNotNull('poids_pont')
+                      ->sum('poids_pont');
+                    $stockDispo = max(0, (float) $stockOuvert->total_entrees - (float) $sortiesStock);
+                  }
+                  $selectedParc = (int) old('parc_id', $f->parc_id ?? 0) === (int) $parc->id;
                 @endphp
                 @if($stockOuvert)
-                  <option value="{{ $parc->id }}">{{ $parc->nom }} (Stock dispo: {{ number_format(max(0, $stockDispo), 0, ',', ' ') }} kg)</option>
+                  <option value="{{ $parc->id }}" {{ $selectedParc ? 'selected' : '' }}>{{ $parc->nom }} (Stock dispo: {{ number_format($stockDispo, 0, ',', ' ') }} kg)</option>
                 @else
-                  <option value="{{ $parc->id }}" disabled>{{ $parc->nom }} (Pas de stock ouvert)</option>
+                  <option value="{{ $parc->id }}" disabled>{{ $parc->nom }} (Pas de stock ouvert{{ $f->nom_produit ? ' pour ' . $f->nom_produit : '' }})</option>
                 @endif
               @endforeach
             </select>
@@ -182,9 +191,13 @@
             <label class="form-label">Date de déchargement <span class="text-danger">*</span></label>
             <input type="date" name="date_dechargement" class="form-control" value="{{ date('Y-m-d') }}" required />
           </div>
+          @if($f->nom_produit)
+            <p class="mb-2"><strong>Produit:</strong> {{ $f->nom_produit }}</p>
+          @endif
           <div class="mb-3">
-            <label class="form-label">Poids (kg)</label>
-            <input type="number" name="poids_pont" class="form-control" value="{{ $f->poids_pont }}" placeholder="Poids en kg" />
+            <label class="form-label">Poids (kg) <span class="text-danger">*</span></label>
+            <input type="number" name="poids_pont" class="form-control" value="{{ $f->poids_pont }}" placeholder="Poids en kg" min="0.01" step="0.01" required />
+            <small class="text-muted">Le poids sera déduit du stock ouvert du parc sélectionné.</small>
           </div>
         </div>
         <div class="modal-footer">

@@ -400,19 +400,55 @@
         @csrf
         @method('PUT')
         <div class="modal-body">
+          @php
+            $stockFiche = $f->stock_id ? \App\Models\Stock::find($f->stock_id) : null;
+            if (!$stockFiche && $f->parc_id && $f->produit_id) {
+              $stockFiche = \App\Models\Stock::where('parc_id', $f->parc_id)
+                ->where('produit_id', $f->produit_id)
+                ->where('type', 'entree')
+                ->where('statut', 'ouvert')
+                ->first();
+            }
+            $stockDispoFiche = 0;
+            if ($stockFiche) {
+              $sortiesStock = \App\Models\FicheSortie::where('stock_id', $stockFiche->id)
+                ->whereNotNull('date_dechargement')
+                ->whereNotNull('poids_pont')
+                ->when($f->date_dechargement, fn($q) => $q->where('id', '!=', $f->id))
+                ->sum('poids_pont');
+              $stockDispoFiche = max(0, (float) $stockFiche->total_entrees - (float) $sortiesStock);
+            }
+          @endphp
           <div class="mb-3">
             <p><strong>Date de chargement:</strong> {{ $f->date_chargement ? $f->date_chargement->format('d/m/Y') : '-' }}</p>
             <p><strong>Pont:</strong> {{ $f->nom_pont ?? '-' }}</p>
             <p><strong>Agent:</strong> {{ $f->nom_agent ?? '-' }}</p>
+            @if($f->nom_parc)
+              <p><strong>Parc:</strong> {{ $f->nom_parc }}</p>
+            @endif
+            @if($f->nom_produit)
+              <p><strong>Produit:</strong> {{ $f->nom_produit }}</p>
+            @endif
+            @if($stockFiche)
+              <p class="mb-0"><strong>Stock disponible:</strong>
+                <span class="text-success fw-bold">{{ number_format($stockDispoFiche, 0, ',', ' ') }} kg</span>
+              </p>
+            @endif
           </div>
+          @if($f->parc_id)
+            <input type="hidden" name="parc_id" value="{{ $f->parc_id }}">
+          @endif
           <hr>
           <div class="mb-3">
             <label class="form-label">Date de déchargement <span class="text-danger">*</span></label>
-            <input type="date" name="date_dechargement" class="form-control" value="{{ $f->date_dechargement ? $f->date_dechargement->format('Y-m-d') : '' }}" required>
+            <input type="date" name="date_dechargement" class="form-control" value="{{ $f->date_dechargement ? $f->date_dechargement->format('Y-m-d') : date('Y-m-d') }}" required>
           </div>
           <div class="mb-3">
             <label class="form-label">Poids (kg) <span class="text-danger">*</span></label>
-            <input type="number" name="poids_pont" class="form-control" value="{{ $f->poids_pont ?? '' }}" placeholder="Poids en kg" min="0" required>
+            <input type="number" name="poids_pont" class="form-control" value="{{ $f->poids_pont ?? '' }}" placeholder="Poids en kg" min="0.01" step="0.01" required>
+            @if($stockFiche)
+              <small class="text-muted">Le poids sera déduit du stock du parc {{ $f->nom_parc ?? $stockFiche->nom_parc }}. Si le déchargement dépasse le stock disponible, l'écart est enregistré comme gain.</small>
+            @endif
           </div>
         </div>
         <div class="modal-footer">

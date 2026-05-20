@@ -182,14 +182,15 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label">Produit</label>
-            <select name="produit_id" class="form-select">
+            <label class="form-label">Produit <span class="text-danger">*</span></label>
+            <select name="produit_id" id="produit_select" class="form-select" required>
               <option value="">-- Sélectionner un produit --</option>
               @foreach($produits ?? [] as $produit)
                 <option value="{{ $produit->id }}" data-nom="{{ $produit->nom }}">{{ $produit->nom }}</option>
               @endforeach
             </select>
             <input type="hidden" name="nom_produit" id="nom_produit_hidden" value="">
+            <div id="stock_pont_produit_alert" class="mt-2" style="display: none;"></div>
           </div>
 
           <div class="mb-3">
@@ -215,7 +216,7 @@
 
           <div class="d-flex justify-content-end gap-2">
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" id="btnEnregistrerFiche" disabled title="Sélectionnez un pont et un produit avec stock disponible">
               <i class="bx bx-save"></i> Enregistrer la fiche
             </button>
           </div>
@@ -245,17 +246,98 @@ document.addEventListener('DOMContentLoaded', function() {
   var idAgentHidden = document.getElementById('id_agent_hidden');
   var pontDisplayHidden = document.getElementById('pont_display_hidden');
   var agentDisplayHidden = document.getElementById('agent_display_hidden');
+  var produitSelect = document.getElementById('produit_select');
+  var nomProduitHidden = document.getElementById('nom_produit_hidden');
+  var stockAlert = document.getElementById('stock_pont_produit_alert');
+  var stockPontProduitValide = false;
+  var btnEnregistrerFiche = document.getElementById('btnEnregistrerFiche');
+  var verifierStockUrl = '{{ route('api.verifier_stock_pont_produit') }}';
+
+  function mettreAJourBoutonEnregistrer() {
+    if (!btnEnregistrerFiche) return;
+    var peutEnregistrer = stockPontProduitValide
+      && idPontHidden && idPontHidden.value
+      && produitSelect && produitSelect.value
+      && idAgentHidden && idAgentHidden.value;
+    btnEnregistrerFiche.disabled = !peutEnregistrer;
+    btnEnregistrerFiche.title = peutEnregistrer
+      ? ''
+      : 'Aucun parc actif avec un stock ouvert pour ce produit sur ce pont.';
+  }
+
+  function afficherAlerteStock(message, type) {
+    if (!stockAlert) return;
+    stockAlert.style.display = 'block';
+    stockAlert.className = 'mt-2 alert alert-' + type + ' py-2 mb-0';
+    stockAlert.textContent = message;
+  }
+
+  function masquerAlerteStock() {
+    if (!stockAlert) return;
+    stockAlert.style.display = 'none';
+    stockAlert.textContent = '';
+  }
+
+  function verifierStockPontProduit() {
+    var idPont = idPontHidden ? idPontHidden.value : '';
+    var produitId = produitSelect ? produitSelect.value : '';
+
+    if (!idPont || !produitId) {
+      stockPontProduitValide = false;
+      masquerAlerteStock();
+      mettreAJourBoutonEnregistrer();
+      return;
+    }
+
+    var params = new URLSearchParams({
+      id_pont: idPont,
+      produit_id: produitId
+    });
+
+    fetch(verifierStockUrl + '?' + params.toString(), {
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        stockPontProduitValide = !!data.valid;
+        if (data.valid) {
+          afficherAlerteStock(data.message, 'success');
+        } else {
+          afficherAlerteStock(data.message || 'Aucun parc actif avec un stock ouvert pour ce produit sur ce pont.', 'warning');
+        }
+        mettreAJourBoutonEnregistrer();
+      })
+      .catch(function() {
+        stockPontProduitValide = false;
+        afficherAlerteStock('Impossible de verifier le stock. Reessayez.', 'danger');
+        mettreAJourBoutonEnregistrer();
+      });
+  }
+
+  mettreAJourBoutonEnregistrer();
 
   if (pontInput) {
     pontInput.addEventListener('change', function() {
       var val = this.value;
       idPontHidden.value = pontsMap[val] || '';
       pontDisplayHidden.value = val;
+      verifierStockPontProduit();
     });
     pontInput.addEventListener('input', function() {
       var val = this.value;
       idPontHidden.value = pontsMap[val] || '';
       pontDisplayHidden.value = val;
+      verifierStockPontProduit();
+    });
+  }
+
+  if (produitSelect) {
+    produitSelect.addEventListener('change', function() {
+      var opt = this.options[this.selectedIndex];
+      if (nomProduitHidden) {
+        nomProduitHidden.value = opt && opt.dataset.nom ? opt.dataset.nom : '';
+      }
+      verifierStockPontProduit();
     });
   }
 
@@ -293,6 +375,7 @@ document.addEventListener('DOMContentLoaded', function() {
         idAgentHidden.value = this.dataset.id;
         agentDisplayHidden.value = this.dataset.display;
         agentDropdown.style.display = 'none';
+        mettreAJourBoutonEnregistrer();
       });
     });
     
@@ -318,6 +401,15 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!idAgentHidden.value) {
         alert('Veuillez selectionner un agent valide dans la liste.');
         agentSearch.focus();
+        return false;
+      }
+      if (!produitSelect || !produitSelect.value) {
+        alert('Veuillez selectionner un produit.');
+        if (produitSelect) produitSelect.focus();
+        return false;
+      }
+      if (!stockPontProduitValide) {
+        alert('Aucun parc actif avec un stock ouvert pour ce produit sur ce pont. Verifiez le pont et le produit.');
         return false;
       }
 
