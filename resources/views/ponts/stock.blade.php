@@ -31,6 +31,9 @@
           <i class="bx bx-plus me-1"></i> Ajouter un stock
         </button>
       @endif
+      <button type="button" class="btn btn-danger ms-2" data-bs-toggle="modal" data-bs-target="#addDepenseModal">
+        <i class="bx bx-plus me-1"></i> Ajouter une dépense
+      </button>
     </div>
 
     @if(!empty($external_error))
@@ -46,8 +49,8 @@
               <i class="bx bx-wallet fs-3 text-white"></i>
             </div>
             <div>
-              <h6 class="text-muted mb-0">Solde disponible</h6>
-              <h3 class="mb-0 fw-bold {{ ($solde ?? 0) > 0 ? 'text-success' : 'text-muted' }}">
+              <h6 class="text-muted mb-0">Solde</h6>
+              <h3 class="mb-0 fw-bold {{ ($solde ?? 0) >= 0 ? 'text-success' : 'text-danger' }}">
                 {{ number_format($solde ?? 0, 0, ',', ' ') }} FCFA
               </h3>
             </div>
@@ -283,6 +286,55 @@
     </div>
     @endif
 
+    <!-- Section Dépenses du Pont -->
+    <div class="card mb-4">
+      <div class="card-header bg-danger text-white">
+        <h5 class="mb-0 text-white"><i class="bx bx-money-withdraw me-2"></i>Dépenses du Pont</h5>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead class="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Libellé</th>
+              <th class="text-end">Montant</th>
+              <th class="text-center">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @forelse($depensesPont ?? [] as $dep)
+              <tr>
+                <td>{{ $dep->date_depense ? $dep->date_depense->format('d/m/Y') : '-' }}</td>
+                <td><strong>{{ $dep->libelle }}</strong></td>
+                <td class="text-end"><strong class="text-danger">{{ number_format((float)$dep->montant, 0, ',', ' ') }} FCFA</strong></td>
+                <td class="text-center">
+                  <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteDepenseModal{{ $dep->id }}">
+                    <i class="bx bx-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            @empty
+              <tr>
+                <td colspan="4" class="text-center py-4">
+                  <i class="bx bx-receipt text-muted" style="font-size: 2rem;"></i>
+                  <p class="text-muted mt-2 mb-0">Aucune dépense enregistrée</p>
+                </td>
+              </tr>
+            @endforelse
+          </tbody>
+          @if(($depensesPont ?? collect())->count() > 0)
+          <tfoot class="table-danger">
+            <tr>
+              <td colspan="2" class="text-end fw-bold">Total Dépenses:</td>
+              <td class="text-end fw-bold text-danger">{{ number_format($totalDepensesPont ?? 0, 0, ',', ' ') }} FCFA</td>
+              <td></td>
+            </tr>
+          </tfoot>
+          @endif
+        </table>
+      </div>
+    </div>
+
     <!-- Tableau des mouvements de stock (entrées) -->
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
@@ -294,6 +346,7 @@
             <tr>
               <th>Code</th>
               <th>Date</th>
+              <th>Produit</th>
               <th>Statut</th>
               <th>Quantité (kg)</th>
               <th class="text-end">Montant</th>
@@ -305,6 +358,7 @@
               <tr>
                 <td><span class="badge {{ $s->isOuvert() ? 'bg-primary' : 'bg-secondary' }}">{{ $s->code_stock ?? 'N/A' }}</span></td>
                 <td>{{ $s->date_mouvement ? $s->date_mouvement->format('d-m-Y') : '-' }}</td>
+                <td><span class="badge bg-info">{{ $s->nom_produit ?? '-' }}</span></td>
                 <td>
                   @if($s->isOuvert())
                     <span class="badge bg-success">Ouvert</span>
@@ -334,7 +388,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="6" class="text-center py-4">
+                <td colspan="7" class="text-center py-4">
                   <i class="bx bx-package text-muted" style="font-size: 3rem;"></i>
                   <p class="text-muted mt-2 mb-0">Aucun mouvement de stock enregistré</p>
                 </td>
@@ -446,6 +500,15 @@
             @endif
           </div>
           <div class="mb-3">
+            <label class="form-label">Produit <span class="text-danger">*</span></label>
+            <select name="produit_id" class="form-select" required>
+              <option value="">-- Sélectionner un produit --</option>
+              @foreach(\App\Models\Produit::orderBy('nom')->get() as $produit)
+                <option value="{{ $produit->id }}">{{ $produit->nom }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="mb-3">
             <label class="form-label">Quantité (kg) <span class="text-danger">*</span></label>
             <input type="number" name="quantite" id="stock_quantite" class="form-control" placeholder="Ex: 5000" min="0" required onchange="calculerMontantStock()" oninput="calculerMontantStock()" />
           </div>
@@ -460,7 +523,7 @@
               <input type="text" id="montant_total_display" class="form-control fw-bold" style="background-color: #e9ecef; color: #495057;" readonly />
               <span class="input-group-text">FCFA</span>
             </div>
-            <small class="text-muted">Solde disponible: <strong class="text-success">{{ number_format($solde ?? 0, 0, ',', ' ') }} FCFA</strong></small>
+            <small class="text-muted">Solde: <strong class="{{ ($solde ?? 0) >= 0 ? 'text-success' : 'text-danger' }}">{{ number_format($solde ?? 0, 0, ',', ' ') }} FCFA</strong></small>
           </div>
           <div class="mb-3">
             <label class="form-label">Date</label>
@@ -548,7 +611,8 @@
                 <th>Date</th>
                 <th>Type</th>
                 <th class="text-end">Quantité (kg)</th>
-                <th>Commentaire</th>
+                <th class="text-end">Prix unit.</th>
+                <th class="text-end">Montant</th>
                 @if($stockItem->isOuvert())
                 <th class="text-center" style="width: 80px;">Actions</th>
                 @endif
@@ -560,7 +624,8 @@
                 <td>{{ $stockItem->date_mouvement ? $stockItem->date_mouvement->format('d/m/Y') : '-' }}</td>
                 <td><span class="badge bg-success">Entrée initiale</span></td>
                 <td class="text-end text-primary fw-bold">{{ number_format((float)$stockItem->quantite, 0, ',', ' ') }}</td>
-                <td class="text-muted">Création du stock</td>
+                <td class="text-end">{{ $stockItem->prix_unitaire > 0 ? number_format((float)$stockItem->prix_unitaire, 0, ',', ' ') . ' F/kg' : '-' }}</td>
+                <td class="text-end fw-bold text-danger">{{ $stockItem->montant_total > 0 ? number_format((float)$stockItem->montant_total, 0, ',', ' ') . ' F' : '-' }}</td>
                 @if($stockItem->isOuvert())
                 <td class="text-center text-muted">-</td>
                 @endif
@@ -571,7 +636,8 @@
                 <td>{{ $entree->date_entree ? $entree->date_entree->format('d/m/Y') : '-' }}</td>
                 <td><span class="badge bg-info">Entrée</span></td>
                 <td class="text-end text-primary fw-bold">{{ number_format((float)$entree->quantite, 0, ',', ' ') }}</td>
-                <td class="text-muted small">{{ $entree->commentaire ?? '-' }}</td>
+                <td class="text-end">{{ $entree->prix_unitaire > 0 ? number_format((float)$entree->prix_unitaire, 0, ',', ' ') . ' F/kg' : '-' }}</td>
+                <td class="text-end fw-bold text-danger">{{ $entree->montant_total > 0 ? number_format((float)$entree->montant_total, 0, ',', ' ') . ' F' : '-' }}</td>
                 @if($stockItem->isOuvert())
                 <td class="text-center">
                   <button type="button" class="btn btn-sm btn-icon btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalEditEntree-{{ $entree->id }}" title="Modifier">
@@ -691,12 +757,24 @@
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
-      <form method="POST" action="{{ route('ponts.stock.entree', ['id_pont' => $pont['id_pont'], 'stock_id' => $stockItem->id]) }}">
+      <form method="POST" action="{{ route('ponts.stock.entree', ['id_pont' => $pont['id_pont'], 'stock_id' => $stockItem->id]) }}" id="formAddEntree{{ $stockItem->id }}">
         @csrf
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Quantité (kg) <span class="text-danger">*</span></label>
-            <input type="number" name="quantite" class="form-control" placeholder="Ex: 5000" min="0" step="0.01" required />
+            <input type="number" name="quantite" class="form-control entree-quantite" data-stock="{{ $stockItem->id }}" placeholder="Ex: 5000" min="0" step="0.01" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Prix unitaire (FCFA/kg)</label>
+            <input type="number" name="prix_unitaire" class="form-control entree-prix" data-stock="{{ $stockItem->id }}" placeholder="Ex: 150" min="0" step="1" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Montant total</label>
+            <div class="input-group">
+              <input type="text" class="form-control fw-bold entree-montant-display" data-stock="{{ $stockItem->id }}" style="background-color: #e9ecef;" readonly />
+              <span class="input-group-text">FCFA</span>
+            </div>
+            <small class="text-muted">Solde: <strong class="{{ ($solde ?? 0) >= 0 ? 'text-success' : 'text-danger' }}">{{ number_format($solde ?? 0, 0, ',', ' ') }} FCFA</strong></small>
           </div>
           <div class="mb-3">
             <label class="form-label">Date d'entrée <span class="text-danger">*</span></label>
@@ -786,5 +864,103 @@ function calculerMontantStock() {
   
   document.getElementById('montant_total_display').value = montantTotal.toLocaleString('fr-FR').replace(/,/g, ' ');
 }
+
+// Gestion des entrées supplémentaires
+document.addEventListener('DOMContentLoaded', function() {
+  // Calcul montant pour les entrées - quantité
+  document.querySelectorAll('.entree-quantite').forEach(function(input) {
+    input.addEventListener('input', function() {
+      let stockId = this.dataset.stock;
+      calculerMontantEntree(stockId);
+    });
+  });
+
+  // Calcul montant pour les entrées - prix
+  document.querySelectorAll('.entree-prix').forEach(function(input) {
+    input.addEventListener('input', function() {
+      let stockId = this.dataset.stock;
+      calculerMontantEntree(stockId);
+    });
+  });
+});
+
+function calculerMontantEntree(stockId) {
+  var quantite = parseFloat(document.querySelector('.entree-quantite[data-stock="' + stockId + '"]').value) || 0;
+  var prixInput = document.querySelector('.entree-prix[data-stock="' + stockId + '"]');
+  var prixUnitaire = parseFloat(prixInput ? prixInput.value : 0) || 0;
+  var montantTotal = quantite * prixUnitaire;
+  
+  var montantDisplay = document.querySelector('.entree-montant-display[data-stock="' + stockId + '"]');
+  if (montantDisplay) {
+    montantDisplay.value = montantTotal.toLocaleString('fr-FR').replace(/,/g, ' ');
+  }
+}
 </script>
+
+<!-- Modal Ajouter Dépense -->
+<div class="modal fade" id="addDepenseModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title text-white">
+          <i class="bx bx-money-withdraw me-2"></i>Ajouter une dépense
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ route('ponts.depense.store', ['id_pont' => $pont['id_pont']]) }}">
+        @csrf
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Libellé <span class="text-danger">*</span></label>
+            <input type="text" name="libelle" class="form-control" placeholder="Ex: Achat carburant" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Montant (FCFA) <span class="text-danger">*</span></label>
+            <input type="number" name="montant" class="form-control" placeholder="Ex: 50000" min="0" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Date <span class="text-danger">*</span></label>
+            <input type="date" name="date_depense" class="form-control" value="{{ date('Y-m-d') }}" required />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-danger">
+            <i class="bx bx-save me-1"></i> Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modals Supprimer Dépense -->
+@foreach($depensesPont ?? [] as $dep)
+<div class="modal fade" id="deleteDepenseModal{{ $dep->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-body text-center py-4">
+        <div class="mb-3">
+          <i class="bx bx-error-circle text-warning" style="font-size: 3rem;"></i>
+        </div>
+        <h5 class="mb-2">Supprimer cette dépense ?</h5>
+        <p class="text-muted mb-0 small">
+          <strong>{{ $dep->libelle }}</strong><br>
+          Montant: <strong class="text-danger">{{ number_format((float)$dep->montant, 0, ',', ' ') }} FCFA</strong>
+        </p>
+      </div>
+      <div class="modal-footer justify-content-center border-0 pt-0">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <form action="{{ route('ponts.depense.delete', ['id_pont' => $pont['id_pont'], 'depense_id' => $dep->id]) }}" method="POST" class="d-inline">
+          @csrf
+          @method('DELETE')
+          <button type="submit" class="btn btn-sm btn-danger">
+            <i class="bx bx-trash me-1"></i>Supprimer
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+@endforeach
 @endsection

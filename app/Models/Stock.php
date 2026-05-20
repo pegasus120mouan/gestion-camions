@@ -10,6 +10,8 @@ class Stock extends Model
         'id_pont',
         'parc_id',
         'nom_parc',
+        'produit_id',
+        'nom_produit',
         'code_pont',
         'nom_pont',
         'type',

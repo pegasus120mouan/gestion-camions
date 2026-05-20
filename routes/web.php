@@ -206,6 +206,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/ponts/{id_pont}/stock/{stock_id}/entree', [PontController::class, 'addEntreeStock'])->name('ponts.stock.entree');
     Route::put('/ponts/{id_pont}/stock/{stock_id}/entree/{entree_id}', [PontController::class, 'updateEntreeStock'])->name('ponts.stock.entree.update');
     Route::delete('/ponts/{id_pont}/stock/{stock_id}/entree/{entree_id}', [PontController::class, 'deleteEntreeStock'])->name('ponts.stock.entree.delete');
+    Route::post('/ponts/{id_pont}/depense', [PontController::class, 'storeDepense'])->name('ponts.depense.store');
+    Route::delete('/ponts/{id_pont}/depense/{depense_id}', [PontController::class, 'destroyDepense'])->name('ponts.depense.delete');
 
     Route::get('/agents', [AgentController::class, 'index'])->name('agents.index');
     Route::get('/agents/{id_agent}', [AgentController::class, 'show'])->name('agents.show');

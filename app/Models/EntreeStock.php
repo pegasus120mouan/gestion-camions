@@ -11,6 +11,8 @@ class EntreeStock extends Model
     protected $fillable = [
         'stock_id',
         'quantite',
+        'prix_unitaire',
+        'montant_total',
         'date_entree',
         'commentaire',
     ];
@@ -18,6 +20,8 @@ class EntreeStock extends Model
     protected $casts = [
         'date_entree' => 'date',
         'quantite' => 'decimal:2',
+        'prix_unitaire' => 'decimal:2',
+        'montant_total' => 'decimal:2',
     ];
 
     public function stock()

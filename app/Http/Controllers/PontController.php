@@ -65,10 +65,14 @@ class PontController extends Controller
             
             $pont['stock_disponible'] = $totalStockDisponible;
 
-            // Calculer le solde (total approvisionnements - total dépenses stocks)
+            // Calculer le solde (total approvisionnements - total dépenses stocks - total dépenses entrées - dépenses pont)
             $totalApprovisionnements = \App\Models\Approvisionnement::where('pont_id', $idPont)->sum('montant');
             $totalDepensesStocks = Stock::where('id_pont', $idPont)->where('type', 'entree')->sum('montant_total');
-            $pont['solde'] = $totalApprovisionnements - $totalDepensesStocks;
+            $totalDepensesEntrees = \App\Models\EntreeStock::whereHas('stock', function($q) use ($idPont) {
+                $q->where('id_pont', $idPont);
+            })->sum('montant_total');
+            $totalDepensesPont = \App\Models\DepensePont::where('id_pont', $idPont)->sum('montant');
+            $pont['solde'] = $totalApprovisionnements - $totalDepensesStocks - $totalDepensesEntrees - $totalDepensesPont;
         }
         unset($pont);
 
@@ -144,10 +148,19 @@ class PontController extends Controller
             ->orderBy('date_dechargement', 'desc')
             ->get();
 
-        // Calculer le solde (total approvisionnements - total dépenses stocks)
+        // Calculer le solde (total approvisionnements - total dépenses stocks - total dépenses entrées - dépenses pont)
         $totalApprovisionnements = \App\Models\Approvisionnement::where('pont_id', $id_pont)->sum('montant');
         $totalDepensesStocks = Stock::where('id_pont', $id_pont)->where('type', 'entree')->sum('montant_total');
-        $solde = $totalApprovisionnements - $totalDepensesStocks;
+        $totalDepensesEntrees = \App\Models\EntreeStock::whereHas('stock', function($q) use ($id_pont) {
+            $q->where('id_pont', $id_pont);
+        })->sum('montant_total');
+        $totalDepensesPont = \App\Models\DepensePont::where('id_pont', $id_pont)->sum('montant');
+        $solde = $totalApprovisionnements - $totalDepensesStocks - $totalDepensesEntrees - $totalDepensesPont;
+
+        // Récupérer les dépenses du pont
+        $depensesPont = \App\Models\DepensePont::where('id_pont', $id_pont)
+            ->orderBy('date_depense', 'desc')
+            ->get();
 
         return view('ponts.stock', [
             'pont' => $pont,
@@ -158,6 +171,8 @@ class PontController extends Controller
             'fichesDechargees' => $fichesDechargees,
             'nbMouvements' => $nbMouvements,
             'solde' => $solde,
+            'depensesPont' => $depensesPont,
+            'totalDepensesPont' => $totalDepensesPont,
             'external_error' => null,
             'parcs' => \App\Models\Parc::where('id_pont', $id_pont)->where('statut', 'actif')->get(),
         ]);
@@ -168,6 +183,7 @@ class PontController extends Controller
         $validated = $request->validate([
             'type' => ['required', 'in:entree,sortie'],
             'parc_id' => ['required', 'exists:parcs,id'],
+            'produit_id' => ['required', 'exists:produits,id'],
             'quantite' => ['required', 'numeric', 'min:0'],
             'prix_unitaire' => ['nullable', 'numeric', 'min:0'],
             'date' => ['required', 'date'],
@@ -212,15 +228,8 @@ class PontController extends Controller
         $prixUnitaire = $validated['prix_unitaire'] ?? 0;
         $montantTotal = $prixUnitaire * $validated['quantite'];
 
-        // Vérifier si le solde est suffisant
-        $soldeActuel = \App\Models\Approvisionnement::where('pont_id', $id_pont)->sum('montant');
-        $totalDepenses = Stock::where('id_pont', $id_pont)->where('type', 'entree')->sum('montant_total');
-        $soldeDisponible = $soldeActuel - $totalDepenses;
-
-        if ($montantTotal > 0 && $montantTotal > $soldeDisponible) {
-            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])
-                ->withErrors(['error' => 'Solde insuffisant. Solde disponible: ' . number_format($soldeDisponible, 0, ',', ' ') . ' FCFA, Montant requis: ' . number_format($montantTotal, 0, ',', ' ') . ' FCFA']);
-        }
+        // Récupérer le produit
+        $produit = \App\Models\Produit::find($validated['produit_id']);
 
         $codePont = $pont['code_pont'] ?? 'PONT';
         $codeStock = Stock::generateCodeStock($id_pont, $codePont);
@@ -229,6 +238,8 @@ class PontController extends Controller
             'id_pont' => $id_pont,
             'parc_id' => $parc->id,
             'nom_parc' => $parc->nom,
+            'produit_id' => $validated['produit_id'],
+            'nom_produit' => $produit ? $produit->nom : null,
             'code_pont' => $codePont,
             'nom_pont' => $pont['nom_pont'] ?? '',
             'type' => 'entree',
@@ -285,6 +296,7 @@ class PontController extends Controller
     {
         $validated = $request->validate([
             'quantite' => ['required', 'numeric', 'min:0'],
+            'prix_unitaire' => ['nullable', 'numeric', 'min:0'],
             'date_entree' => ['required', 'date'],
             'commentaire' => ['nullable', 'string', 'max:500'],
         ]);
@@ -299,9 +311,15 @@ class PontController extends Controller
             return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Impossible d\'ajouter une entrée à un stock fermé.']);
         }
 
+        // Calculer le montant total
+        $prixUnitaire = $validated['prix_unitaire'] ?? 0;
+        $montantTotal = $prixUnitaire * $validated['quantite'];
+
         \App\Models\EntreeStock::create([
             'stock_id' => $stock->id,
             'quantite' => $validated['quantite'],
+            'prix_unitaire' => $prixUnitaire,
+            'montant_total' => $montantTotal,
             'date_entree' => $validated['date_entree'],
             'commentaire' => $validated['commentaire'] ?? null,
         ]);
@@ -412,5 +430,60 @@ class PontController extends Controller
             'ponts' => $ponts,
             'external_error' => null,
         ]);
+    }
+
+    public function storeDepense(Request $request, int $id_pont)
+    {
+        $validated = $request->validate([
+            'libelle' => ['required', 'string', 'max:255'],
+            'montant' => ['required', 'numeric', 'min:0'],
+            'date_depense' => ['required', 'date'],
+            'categorie' => ['nullable', 'string', 'max:100'],
+            'description' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        // Récupérer les infos du pont
+        $mesPontsUrl = (string) config('services.external_auth.mes_ponts_url');
+        $timeout = (int) config('services.external_auth.timeout', 10);
+        $pont = null;
+
+        try {
+            $response = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($mesPontsUrl);
+            if ($response->successful()) {
+                $ponts = $response->json('ponts') ?? [];
+                foreach ($ponts as $p) {
+                    if (($p['id_pont'] ?? 0) == $id_pont) {
+                        $pont = $p;
+                        break;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        \App\Models\DepensePont::create([
+            'id_pont' => $id_pont,
+            'nom_pont' => $pont['nom_pont'] ?? '',
+            'code_pont' => $pont['code_pont'] ?? '',
+            'libelle' => $validated['libelle'],
+            'montant' => $validated['montant'],
+            'date_depense' => $validated['date_depense'],
+            'categorie' => $validated['categorie'] ?? null,
+            'description' => $validated['description'] ?? null,
+            'user_id' => auth()->id(),
+        ]);
+
+        return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Dépense ajoutée avec succès.');
+    }
+
+    public function destroyDepense(int $id_pont, int $depense_id)
+    {
+        $depense = \App\Models\DepensePont::where('id', $depense_id)->where('id_pont', $id_pont)->first();
+        
+        if ($depense) {
+            $depense->delete();
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Dépense supprimée avec succès.');
+        }
+
+        return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Dépense non trouvée.']);
     }
 }
