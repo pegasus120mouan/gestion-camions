@@ -39,7 +39,7 @@ class PontController extends Controller
             $ponts = [];
         }
 
-        // Calculer le stock disponible pour chaque pont (somme de tous les stocks ouverts de tous les parcs)
+        // Calculer le stock disponible et le solde pour chaque pont
         foreach ($ponts as &$pont) {
             $idPont = $pont['id_pont'] ?? 0;
             
@@ -64,6 +64,11 @@ class PontController extends Controller
             }
             
             $pont['stock_disponible'] = $totalStockDisponible;
+
+            // Calculer le solde (total approvisionnements - total dépenses stocks)
+            $totalApprovisionnements = \App\Models\Approvisionnement::where('pont_id', $idPont)->sum('montant');
+            $totalDepensesStocks = Stock::where('id_pont', $idPont)->where('type', 'entree')->sum('montant_total');
+            $pont['solde'] = $totalApprovisionnements - $totalDepensesStocks;
         }
         unset($pont);
 
@@ -139,6 +144,11 @@ class PontController extends Controller
             ->orderBy('date_dechargement', 'desc')
             ->get();
 
+        // Calculer le solde (total approvisionnements - total dépenses stocks)
+        $totalApprovisionnements = \App\Models\Approvisionnement::where('pont_id', $id_pont)->sum('montant');
+        $totalDepensesStocks = Stock::where('id_pont', $id_pont)->where('type', 'entree')->sum('montant_total');
+        $solde = $totalApprovisionnements - $totalDepensesStocks;
+
         return view('ponts.stock', [
             'pont' => $pont,
             'stocks' => $stocks,
@@ -147,6 +157,7 @@ class PontController extends Controller
             'stockDisponible' => $stockDisponible,
             'fichesDechargees' => $fichesDechargees,
             'nbMouvements' => $nbMouvements,
+            'solde' => $solde,
             'external_error' => null,
             'parcs' => \App\Models\Parc::where('id_pont', $id_pont)->where('statut', 'actif')->get(),
         ]);
@@ -158,6 +169,7 @@ class PontController extends Controller
             'type' => ['required', 'in:entree,sortie'],
             'parc_id' => ['required', 'exists:parcs,id'],
             'quantite' => ['required', 'numeric', 'min:0'],
+            'prix_unitaire' => ['nullable', 'numeric', 'min:0'],
             'date' => ['required', 'date'],
         ]);
 
@@ -196,6 +208,20 @@ class PontController extends Controller
             return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Un stock est déjà ouvert pour le parc "' . $parc->nom . '". Fermez-le avant d\'en créer un nouveau.']);
         }
 
+        // Calculer le montant total (prix_unitaire * quantité)
+        $prixUnitaire = $validated['prix_unitaire'] ?? 0;
+        $montantTotal = $prixUnitaire * $validated['quantite'];
+
+        // Vérifier si le solde est suffisant
+        $soldeActuel = \App\Models\Approvisionnement::where('pont_id', $id_pont)->sum('montant');
+        $totalDepenses = Stock::where('id_pont', $id_pont)->where('type', 'entree')->sum('montant_total');
+        $soldeDisponible = $soldeActuel - $totalDepenses;
+
+        if ($montantTotal > 0 && $montantTotal > $soldeDisponible) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])
+                ->withErrors(['error' => 'Solde insuffisant. Solde disponible: ' . number_format($soldeDisponible, 0, ',', ' ') . ' FCFA, Montant requis: ' . number_format($montantTotal, 0, ',', ' ') . ' FCFA']);
+        }
+
         $codePont = $pont['code_pont'] ?? 'PONT';
         $codeStock = Stock::generateCodeStock($id_pont, $codePont);
 
@@ -207,6 +233,8 @@ class PontController extends Controller
             'nom_pont' => $pont['nom_pont'] ?? '',
             'type' => 'entree',
             'quantite' => $validated['quantite'],
+            'prix_unitaire' => $prixUnitaire,
+            'montant_total' => $montantTotal,
             'date_mouvement' => $validated['date'],
             'code_stock' => $codeStock,
             'statut' => 'ouvert',

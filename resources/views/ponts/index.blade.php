@@ -18,6 +18,7 @@
               <th>Code</th>
               <th>Nom</th>
               <th>Stock disponible</th>
+              <th class="text-end">Solde</th>
               <th>Gerant</th>
               <th>Cooperatif</th>
               <th>Statut</th>
@@ -35,6 +36,13 @@
                 <td>
                   <strong>{{ number_format((float)($p['stock_disponible'] ?? 0), 0, ',', ' ') }} kg</strong>
                 </td>
+                <td class="text-end">
+                  @if(($p['solde'] ?? 0) > 0)
+                    <span class="fw-bold text-success">{{ number_format((float)($p['solde'] ?? 0), 0, ',', ' ') }} FCFA</span>
+                  @else
+                    <span class="text-muted">0 FCFA</span>
+                  @endif
+                </td>
                 <td>{{ $p['gerant'] ?? '' }}</td>
                 <td>{{ $p['cooperatif'] ?? '-' }}</td>
                 <td>
@@ -47,7 +55,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="6" class="text-center">Aucun pont</td>
+                <td colspan="7" class="text-center">Aucun pont</td>
               </tr>
             @endforelse
           </tbody>

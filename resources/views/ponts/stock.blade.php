@@ -37,6 +37,28 @@
       <div class="alert alert-danger">{{ $external_error }}</div>
     @endif
 
+    <!-- Solde du pont -->
+    <div class="card mb-4 border-warning">
+      <div class="card-body py-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center">
+            <div class="avatar avatar-lg me-3" style="background: linear-gradient(135deg, #ff9f43 0%, #ffb976 100%); border-radius: 10px;">
+              <i class="bx bx-wallet fs-3 text-white"></i>
+            </div>
+            <div>
+              <h6 class="text-muted mb-0">Solde disponible</h6>
+              <h3 class="mb-0 fw-bold {{ ($solde ?? 0) > 0 ? 'text-success' : 'text-muted' }}">
+                {{ number_format($solde ?? 0, 0, ',', ' ') }} FCFA
+              </h3>
+            </div>
+          </div>
+          <a href="{{ route('approvisionnements.index', ['pont' => $pont['nom_pont'] ?? '']) }}" class="btn btn-outline-warning">
+            <i class="bx bx-history me-1"></i> Voir les approvisionnements
+          </a>
+        </div>
+      </div>
+    </div>
+
     <!-- Résumé des stocks OUVERTS -->
     @foreach($stocksOuverts as $stockOuvert)
     @php
@@ -274,6 +296,7 @@
               <th>Date</th>
               <th>Statut</th>
               <th>Quantité (kg)</th>
+              <th class="text-end">Montant</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -291,15 +314,19 @@
                   @endif
                 </td>
                 <td>{{ number_format((float)$s->quantite, 0, ',', ' ') }}</td>
+                <td class="text-end">
+                  @if($s->montant_total > 0)
+                    <strong class="text-success">{{ number_format((float)$s->montant_total, 0, ',', ' ') }} FCFA</strong>
+                    <small class="text-muted d-block">{{ number_format((float)$s->prix_unitaire, 0, ',', ' ') }} FCFA/kg</small>
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
+                </td>
                 <td>
                   @if($s->isOuvert())
-                    <button class="btn btn-sm btn-outline-danger" onclick="if(confirm('Supprimer ce mouvement?')) document.getElementById('delete-stock-{{ $s->id }}').submit();">
+                    <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteStockModal{{ $s->id }}">
                       <i class="bx bx-trash"></i>
                     </button>
-                    <form id="delete-stock-{{ $s->id }}" action="{{ route('ponts.stock.delete', ['id_pont' => $pont['id_pont'], 'stock_id' => $s->id]) }}" method="POST" style="display:none;">
-                      @csrf
-                      @method('DELETE')
-                    </form>
                   @else
                     <span class="text-muted">-</span>
                   @endif
@@ -307,7 +334,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="5" class="text-center py-4">
+                <td colspan="6" class="text-center py-4">
                   <i class="bx bx-package text-muted" style="font-size: 3rem;"></i>
                   <p class="text-muted mt-2 mb-0">Aucun mouvement de stock enregistré</p>
                 </td>
@@ -317,6 +344,38 @@
         </table>
       </div>
     </div>
+
+    <!-- Modals de suppression des stocks -->
+    @foreach($stocks->where('type', 'entree')->where('statut', 'ouvert') as $s)
+    <div class="modal fade" id="deleteStockModal{{ $s->id }}" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-body text-center py-4">
+            <div class="mb-3">
+              <i class="bx bx-error-circle text-warning" style="font-size: 3rem;"></i>
+            </div>
+            <h5 class="mb-2">Supprimer ce stock ?</h5>
+            <p class="text-muted mb-0 small">
+              <strong>{{ $s->code_stock }}</strong><br>
+              @if($s->montant_total > 0)
+                Le montant de <strong class="text-success">{{ number_format((float)$s->montant_total, 0, ',', ' ') }} FCFA</strong> sera recrédité au solde.
+              @endif
+            </p>
+          </div>
+          <div class="modal-footer justify-content-center border-0 pt-0">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+            <form action="{{ route('ponts.stock.delete', ['id_pont' => $pont['id_pont'], 'stock_id' => $s->id]) }}" method="POST" class="d-inline">
+              @csrf
+              @method('DELETE')
+              <button type="submit" class="btn btn-sm btn-danger">
+                <i class="bx bx-trash me-1"></i>Supprimer
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    @endforeach
 
     <!-- Tableau des sorties (fiches déchargées) -->
     @if(isset($fichesDechargees) && $fichesDechargees->count() > 0)
@@ -388,7 +447,20 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Quantité (kg) <span class="text-danger">*</span></label>
-            <input type="number" name="quantite" class="form-control" placeholder="Ex: 5000" min="0" required />
+            <input type="number" name="quantite" id="stock_quantite" class="form-control" placeholder="Ex: 5000" min="0" required onchange="calculerMontantStock()" oninput="calculerMontantStock()" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Prix unitaire (FCFA/kg)</label>
+            <input type="text" id="prix_unitaire_display" class="form-control" placeholder="Ex: 150" onchange="calculerMontantStock()" oninput="formatPrixUnitaire(this); calculerMontantStock()" />
+            <input type="hidden" name="prix_unitaire" id="prix_unitaire_hidden" value="0" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Montant total</label>
+            <div class="input-group">
+              <input type="text" id="montant_total_display" class="form-control fw-bold" style="background-color: #e9ecef; color: #495057;" readonly />
+              <span class="input-group-text">FCFA</span>
+            </div>
+            <small class="text-muted">Solde disponible: <strong class="text-success">{{ number_format($solde ?? 0, 0, ',', ' ') }} FCFA</strong></small>
           </div>
           <div class="mb-3">
             <label class="form-label">Date</label>
@@ -695,4 +767,24 @@
   </div>
 </div>
 @endforeach
+
+<script>
+function formatPrixUnitaire(input) {
+  let value = input.value.replace(/\s/g, '').replace(/[^0-9]/g, '');
+  if (value) {
+    input.value = parseInt(value).toLocaleString('fr-FR').replace(/,/g, ' ');
+    document.getElementById('prix_unitaire_hidden').value = value;
+  } else {
+    document.getElementById('prix_unitaire_hidden').value = '0';
+  }
+}
+
+function calculerMontantStock() {
+  var quantite = parseFloat(document.getElementById('stock_quantite').value) || 0;
+  var prixUnitaire = parseFloat(document.getElementById('prix_unitaire_hidden').value) || 0;
+  var montantTotal = quantite * prixUnitaire;
+  
+  document.getElementById('montant_total_display').value = montantTotal.toLocaleString('fr-FR').replace(/,/g, ' ');
+}
+</script>
 @endsection

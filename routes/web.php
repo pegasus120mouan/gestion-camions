@@ -29,6 +29,7 @@ use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\ParcController;
 use App\Http\Controllers\PisteurController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\ApprovisionnementController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/index.html', function () {
@@ -340,4 +341,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/parcs', [ParcController::class, 'store'])->name('parcs.store');
     Route::put('/parcs/{parc}', [ParcController::class, 'update'])->name('parcs.update');
     Route::delete('/parcs/{parc}', [ParcController::class, 'destroy'])->name('parcs.destroy');
+
+    // Approvisionnements
+    Route::get('/approvisionnements', [ApprovisionnementController::class, 'index'])->name('approvisionnements.index');
+    Route::get('/approvisionnements/sorties', [ApprovisionnementController::class, 'sorties'])->name('approvisionnements.sorties');
+    Route::post('/approvisionnements', [ApprovisionnementController::class, 'store'])->name('approvisionnements.store');
+    Route::get('/approvisionnements/{approvisionnement}', [ApprovisionnementController::class, 'show'])->name('approvisionnements.show');
+    Route::put('/approvisionnements/{approvisionnement}', [ApprovisionnementController::class, 'update'])->name('approvisionnements.update');
+    Route::delete('/approvisionnements/{approvisionnement}', [ApprovisionnementController::class, 'destroy'])->name('approvisionnements.destroy');
 });

@@ -14,6 +14,8 @@ class Stock extends Model
         'nom_pont',
         'type',
         'quantite',
+        'prix_unitaire',
+        'montant_total',
         'date_mouvement',
         'code_stock',
         'statut',
@@ -25,6 +27,8 @@ class Stock extends Model
         'date_mouvement' => 'date',
         'date_fermeture' => 'date',
         'quantite' => 'decimal:2',
+        'prix_unitaire' => 'decimal:2',
+        'montant_total' => 'decimal:2',
     ];
 
     public function isOuvert(): bool
