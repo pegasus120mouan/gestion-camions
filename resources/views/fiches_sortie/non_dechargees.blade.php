@@ -83,6 +83,7 @@
               <th>Pont</th>
               <th>Agent</th>
               <th>Usine</th>
+              <th>Produit</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -99,6 +100,13 @@
                 <td>{{ $f->nom_agent }}</td>
                 <td>{{ $f->usine ?? '-' }}</td>
                 <td>
+                  @if($f->nom_produit)
+                    <span class="badge bg-info">{{ $f->nom_produit }}</span>
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
+                </td>
+                <td>
                   <div class="d-flex gap-1">
                     <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalDechargement{{ $f->id }}" title="Enregistrer déchargement">
                       <i class="bx bx-check-circle"></i> Décharger
@@ -114,7 +122,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="6" class="text-center py-4">
+                <td colspan="7" class="text-center py-4">
                   <i class="bx bx-check-circle text-success fs-1"></i>
                   <p class="mt-2 mb-0">Aucune fiche en attente de déchargement</p>
                 </td>

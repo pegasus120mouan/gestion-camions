@@ -69,10 +69,7 @@ class DepenseController extends Controller
         return $query->orderBy('id')->first();
     }
 
-    /**
-     * Stock ouvert (actif) sur un parc actif du pont, pour le produit donné.
-     */
-    private function trouverStockActifPourPontEtProduit(int $idPont, int $produitId): ?Stock
+    private function queryStockOuvertPontProduit(int $idPont, int $produitId)
     {
         return Stock::query()
             ->where('id_pont', $idPont)
@@ -81,9 +78,41 @@ class DepenseController extends Controller
             ->where('statut', 'ouvert')
             ->whereHas('parc', function ($query) use ($idPont) {
                 $query->where('id_pont', $idPont)->where('statut', 'actif');
-            })
+            });
+    }
+
+    private function stockEstActif(Stock $stock): bool
+    {
+        $etat = $stock->etat ?? 'actif';
+
+        return $etat === 'actif';
+    }
+
+    /**
+     * Stock ouvert et actif sur un parc actif du pont, pour le produit donné.
+     */
+    private function trouverStockActifPourPontEtProduit(int $idPont, int $produitId): ?Stock
+    {
+        $candidats = $this->queryStockOuvertPontProduit($idPont, $produitId)
             ->orderBy('id')
-            ->first();
+            ->get();
+
+        return $candidats->first(fn (Stock $stock) => $this->stockEstActif($stock));
+    }
+
+    private function messageStockIndisponiblePourFiche(int $idPont, int $produitId): string
+    {
+        $stocksOuverts = $this->queryStockOuvertPontProduit($idPont, $produitId)->get();
+
+        if ($stocksOuverts->isEmpty()) {
+            return 'Aucun parc actif avec un stock ouvert pour ce produit sur ce pont.';
+        }
+
+        if ($stocksOuverts->every(fn (Stock $s) => !$this->stockEstActif($s))) {
+            return 'Un stock existe pour ce produit mais il est désactivé. Activez-le depuis la gestion du stock du pont.';
+        }
+
+        return 'Aucun stock actif disponible pour ce produit sur ce pont.';
     }
 
     public function verifierStockPontProduit(Request $request)
@@ -93,22 +122,22 @@ class DepenseController extends Controller
             'produit_id' => ['required', 'integer', 'exists:produits,id'],
         ]);
 
-        $stock = $this->trouverStockActifPourPontEtProduit(
-            (int) $validated['id_pont'],
-            (int) $validated['produit_id']
-        );
+        $idPont = (int) $validated['id_pont'];
+        $produitId = (int) $validated['produit_id'];
+
+        $stock = $this->trouverStockActifPourPontEtProduit($idPont, $produitId);
 
         if (!$stock) {
             return response()->json([
                 'valid' => false,
-                'message' => "Aucun parc actif avec un stock ouvert pour ce produit sur ce pont.",
+                'message' => $this->messageStockIndisponiblePourFiche($idPont, $produitId),
             ]);
         }
 
         return response()->json([
             'valid' => true,
             'message' => sprintf(
-                'Stock disponible — Parc %s (%s)',
+                'Stock actif — Parc %s (%s)',
                 $stock->nom_parc ?? '-',
                 $stock->nom_produit ?? '-'
             ),
@@ -831,7 +860,10 @@ class DepenseController extends Controller
         );
 
         if (!$stockActif) {
-            $message = "Aucun parc actif avec un stock ouvert pour ce produit sur ce pont.";
+            $message = $this->messageStockIndisponiblePourFiche(
+                (int) $validated['id_pont'],
+                (int) $validated['produit_id']
+            );
             if ($request->ajax() || $request->wantsJson()) {
                 return response()->json(['success' => false, 'message' => $message], 422);
             }

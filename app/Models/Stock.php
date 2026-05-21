@@ -21,6 +21,7 @@ class Stock extends Model
         'date_mouvement',
         'code_stock',
         'statut',
+        'etat',
         'date_fermeture',
         'commentaire',
     ];
@@ -41,6 +42,21 @@ class Stock extends Model
     public function isFerme(): bool
     {
         return $this->statut === 'ferme';
+    }
+
+    public function isActif(): bool
+    {
+        return ($this->etat ?? 'actif') === 'actif';
+    }
+
+    public function isInactif(): bool
+    {
+        return ($this->etat ?? 'actif') === 'inactif';
+    }
+
+    public function accepteEntrees(): bool
+    {
+        return $this->isOuvert() && $this->isActif();
     }
 
     public static function generateCodeStock(int $idPont, string $codePont): string

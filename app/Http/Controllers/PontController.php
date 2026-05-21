@@ -2,12 +2,77 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\PontEtat;
 use App\Models\Stock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
 class PontController extends Controller
 {
+    private function etatEffectifPont(int $idPont, ?array $pontApi = null): string
+    {
+        $etatLocal = PontEtat::query()->where('id_pont', $idPont)->value('etat');
+        if ($etatLocal) {
+            return $etatLocal;
+        }
+
+        if ($pontApi) {
+            return PontEtat::etatDepuisApi($pontApi['statut'] ?? 'Actif');
+        }
+
+        return 'actif';
+    }
+
+    private function pontAccepteEntreesStock(int $idPont, ?array $pontApi = null): bool
+    {
+        return in_array($this->etatEffectifPont($idPont, $pontApi), ['actif', 'inactif'], true);
+    }
+
+    private function fetchPontFromApi(int $idPont): ?array
+    {
+        $mesPontsUrl = (string) config('services.external_auth.mes_ponts_url');
+        $timeout = (int) config('services.external_auth.timeout', 10);
+
+        try {
+            $response = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout($timeout)
+                ->get($mesPontsUrl);
+
+            if ($response->successful()) {
+                foreach ($response->json('ponts') ?? [] as $p) {
+                    if ((int) ($p['id_pont'] ?? 0) === $idPont) {
+                        return $p;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignorer
+        }
+
+        return null;
+    }
+
+    public function updatePontEtat(Request $request, int $id_pont)
+    {
+        $validated = $request->validate([
+            'etat' => ['required', 'in:actif,inactif,ferme'],
+            'nom_pont' => ['nullable', 'string', 'max:255'],
+            'code_pont' => ['nullable', 'string', 'max:100'],
+        ]);
+
+        PontEtat::updateOrCreate(
+            ['id_pont' => $id_pont],
+            [
+                'nom_pont' => $validated['nom_pont'] ?? null,
+                'code_pont' => $validated['code_pont'] ?? null,
+                'etat' => $validated['etat'],
+            ]
+        );
+
+        return back()->with('success', 'Statut du pont mis à jour.');
+    }
+
     public function index(Request $request)
     {
         $mesPontsUrl = (string) config('services.external_auth.mes_ponts_url');
@@ -39,9 +104,14 @@ class PontController extends Controller
             $ponts = [];
         }
 
+        $etatsParPont = PontEtat::query()->pluck('etat', 'id_pont')->toArray();
+
         // Calculer le stock disponible et le solde pour chaque pont
         foreach ($ponts as &$pont) {
-            $idPont = $pont['id_pont'] ?? 0;
+            $idPont = (int) ($pont['id_pont'] ?? 0);
+            $etatPont = $etatsParPont[$idPont] ?? PontEtat::etatDepuisApi($pont['statut'] ?? 'Actif');
+            $pont['etat_pont'] = $etatPont;
+            $pont['peut_entrer_stock'] = in_array($etatPont, ['actif', 'inactif'], true);
             
             // Trouver TOUS les stocks ouverts pour ce pont (un par parc)
             $stocksOuverts = Stock::where('id_pont', $idPont)
@@ -116,6 +186,10 @@ class PontController extends Controller
             return redirect()->route('ponts.index')->withErrors(['error' => 'Pont non trouvé.']);
         }
 
+        $etatPont = $this->etatEffectifPont($id_pont, $pont);
+        $pont['etat_pont'] = $etatPont;
+        $peutEntrerStock = $this->pontAccepteEntreesStock($id_pont, $pont);
+
         // Récupérer les stocks du pont depuis la base locale
         $stocks = Stock::where('id_pont', $id_pont)
             ->orderBy('date_mouvement', 'desc')
@@ -164,6 +238,8 @@ class PontController extends Controller
 
         return view('ponts.stock', [
             'pont' => $pont,
+            'etat_pont' => $etatPont,
+            'peut_entrer_stock' => $peutEntrerStock,
             'stocks' => $stocks,
             'stockTotal' => $stockTotal,
             'totalSorties' => $totalSorties,
@@ -180,6 +256,12 @@ class PontController extends Controller
 
     public function storeStock(Request $request, int $id_pont)
     {
+        $pontApi = $this->fetchPontFromApi($id_pont);
+        if (!$this->pontAccepteEntreesStock($id_pont, $pontApi)) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])
+                ->withErrors(['error' => 'Ce pont est fermé. Les entrées de stock ne sont pas autorisées.']);
+        }
+
         $validated = $request->validate([
             'type' => ['required', 'in:entree,sortie'],
             'parc_id' => ['required', 'exists:parcs,id'],
@@ -249,9 +331,37 @@ class PontController extends Controller
             'date_mouvement' => $validated['date'],
             'code_stock' => $codeStock,
             'statut' => 'ouvert',
+            'etat' => 'actif',
         ]);
 
         return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', 'Stock créé avec le code: ' . $codeStock);
+    }
+
+    public function toggleStockEtat(int $id_pont, int $stock_id)
+    {
+        $stock = Stock::where('id', $stock_id)
+            ->where('id_pont', $id_pont)
+            ->where('type', 'entree')
+            ->first();
+
+        if (!$stock) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])
+                ->withErrors(['error' => 'Stock non trouvé.']);
+        }
+
+        if ($stock->isFerme()) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])
+                ->withErrors(['error' => 'Impossible de modifier l\'état d\'un stock fermé.']);
+        }
+
+        $nouvelEtat = $stock->isActif() ? 'inactif' : 'actif';
+        $stock->update(['etat' => $nouvelEtat]);
+
+        $message = $nouvelEtat === 'actif'
+            ? 'Stock activé.'
+            : 'Stock désactivé. Les entrées sont suspendues.';
+
+        return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->with('success', $message);
     }
 
     public function fermerStock(Request $request, int $id_pont, int $stock_id)
@@ -294,6 +404,12 @@ class PontController extends Controller
 
     public function addEntreeStock(Request $request, int $id_pont, int $stock_id)
     {
+        $pontApi = $this->fetchPontFromApi($id_pont);
+        if (!$this->pontAccepteEntreesStock($id_pont, $pontApi)) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])
+                ->withErrors(['error' => 'Ce pont est fermé. Les entrées de stock ne sont pas autorisées.']);
+        }
+
         $validated = $request->validate([
             'quantite' => ['required', 'numeric', 'min:0'],
             'prix_unitaire' => ['nullable', 'numeric', 'min:0'],
@@ -309,6 +425,11 @@ class PontController extends Controller
 
         if ($stock->isFerme()) {
             return redirect()->route('ponts.stock', ['id_pont' => $id_pont])->withErrors(['error' => 'Impossible d\'ajouter une entrée à un stock fermé.']);
+        }
+
+        if ($stock->isInactif()) {
+            return redirect()->route('ponts.stock', ['id_pont' => $id_pont])
+                ->withErrors(['error' => 'Ce stock est désactivé. Réactivez-le pour ajouter une entrée.']);
         }
 
         // Calculer le montant total

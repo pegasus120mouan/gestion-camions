@@ -216,7 +216,7 @@
 
           <div class="d-flex justify-content-end gap-2">
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-            <button type="submit" class="btn btn-primary" id="btnEnregistrerFiche" disabled title="Sélectionnez un pont et un produit avec stock disponible">
+            <button type="submit" class="btn btn-primary" id="btnEnregistrerFiche" disabled title="Sélectionnez un pont et un produit avec un stock actif">
               <i class="bx bx-save"></i> Enregistrer la fiche
             </button>
           </div>
@@ -262,7 +262,7 @@ document.addEventListener('DOMContentLoaded', function() {
     btnEnregistrerFiche.disabled = !peutEnregistrer;
     btnEnregistrerFiche.title = peutEnregistrer
       ? ''
-      : 'Aucun parc actif avec un stock ouvert pour ce produit sur ce pont.';
+      : 'Aucun stock actif pour ce produit sur ce pont.';
   }
 
   function afficherAlerteStock(message, type) {
@@ -303,7 +303,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (data.valid) {
           afficherAlerteStock(data.message, 'success');
         } else {
-          afficherAlerteStock(data.message || 'Aucun parc actif avec un stock ouvert pour ce produit sur ce pont.', 'warning');
+          afficherAlerteStock(data.message || 'Aucun stock actif pour ce produit sur ce pont.', 'warning');
         }
         mettreAJourBoutonEnregistrer();
       })

@@ -26,10 +26,14 @@
           </thead>
           <tbody class="table-border-bottom-0">
             @forelse($ponts as $p)
+              @php
+                $etatPont = $p['etat_pont'] ?? 'actif';
+                $idPont = (int) ($p['id_pont'] ?? 0);
+              @endphp
               <tr>
                 <td>{{ $p['code_pont'] ?? '' }}</td>
                 <td>
-                  <a href="{{ route('ponts.stock', ['id_pont' => $p['id_pont'] ?? 0]) }}" class="text-primary fw-bold text-decoration-none">
+                  <a href="{{ route('ponts.stock', ['id_pont' => $idPont]) }}" class="text-primary fw-bold text-decoration-none">
                     {{ $p['nom_pont'] ?? '' }}
                   </a>
                 </td>
@@ -49,11 +53,23 @@
                 <td>{{ $p['gerant'] ?? '' }}</td>
                 <td>{{ $p['cooperatif'] ?? '-' }}</td>
                 <td>
-                  @if(($p['statut'] ?? '') === 'Actif')
+                  @if($etatPont === 'actif')
                     <span class="badge bg-success">Actif</span>
+                  @elseif($etatPont === 'inactif')
+                    <span class="badge bg-warning text-dark">Inactif</span>
                   @else
-                    <span class="badge bg-secondary">Inactif</span>
+                    <span class="badge bg-danger">Fermé</span>
                   @endif
+                  <form method="POST" action="{{ route('ponts.etat.update', ['id_pont' => $idPont]) }}" class="d-inline-block ms-1">
+                    @csrf
+                    <input type="hidden" name="nom_pont" value="{{ $p['nom_pont'] ?? '' }}" />
+                    <input type="hidden" name="code_pont" value="{{ $p['code_pont'] ?? '' }}" />
+                    <select name="etat" class="form-select form-select-sm d-inline-block w-auto" onchange="this.form.submit()" title="Changer le statut du pont">
+                      <option value="actif" @selected($etatPont === 'actif')>Actif</option>
+                      <option value="inactif" @selected($etatPont === 'inactif')>Inactif</option>
+                      <option value="ferme" @selected($etatPont === 'ferme')>Fermé</option>
+                    </select>
+                  </form>
                 </td>
               </tr>
             @empty

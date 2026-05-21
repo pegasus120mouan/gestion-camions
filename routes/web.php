@@ -198,10 +198,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/vehicules/{vehicule_id}/fiche-sortie', [DepenseController::class, 'storeFicheSortie'])->name('vehicules.fiche_sortie.store');
 
     Route::get('/ponts', [PontController::class, 'index'])->name('ponts.index');
+    Route::post('/ponts/{id_pont}/etat', [PontController::class, 'updatePontEtat'])->name('ponts.etat.update');
     Route::get('/ponts/sorties', [PontController::class, 'sorties'])->name('ponts.sorties');
     Route::get('/ponts/{id_pont}/stock', [PontController::class, 'stock'])->name('ponts.stock');
     Route::post('/ponts/{id_pont}/stock', [PontController::class, 'storeStock'])->name('ponts.stock.store');
     Route::delete('/ponts/{id_pont}/stock/{stock_id}', [PontController::class, 'deleteStock'])->name('ponts.stock.delete');
+    Route::post('/ponts/{id_pont}/stock/{stock_id}/etat', [PontController::class, 'toggleStockEtat'])->name('ponts.stock.etat');
     Route::post('/ponts/{id_pont}/stock/{stock_id}/fermer', [PontController::class, 'fermerStock'])->name('ponts.stock.fermer');
     Route::post('/ponts/{id_pont}/stock/{stock_id}/entree', [PontController::class, 'addEntreeStock'])->name('ponts.stock.entree');
     Route::put('/ponts/{id_pont}/stock/{stock_id}/entree/{entree_id}', [PontController::class, 'updateEntreeStock'])->name('ponts.stock.entree.update');

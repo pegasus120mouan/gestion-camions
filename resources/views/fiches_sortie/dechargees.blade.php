@@ -84,6 +84,7 @@
               <th>Pont</th>
               <th>Agent</th>
               <th>Usine</th>
+              <th>Produit</th>
               <th>Poids (kg)</th>
               <th>Actions</th>
             </tr>
@@ -101,6 +102,13 @@
                 <td>{{ $f->nom_pont }}</td>
                 <td>{{ $f->nom_agent }}</td>
                 <td>{{ $f->usine ?? '-' }}</td>
+                <td>
+                  @if($f->nom_produit)
+                    <span class="badge bg-info">{{ $f->nom_produit }}</span>
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
+                </td>
                 <td>
                   @if($f->poids_pont)
                     {{ number_format((float)$f->poids_pont, 0, ',', ' ') }}
@@ -121,7 +129,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="8" class="text-center py-4">
+                <td colspan="9" class="text-center py-4">
                   <i class="bx bx-package text-muted fs-1"></i>
                   <p class="mt-2 mb-0">Aucune fiche déchargée trouvée</p>
                 </td>

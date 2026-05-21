@@ -100,6 +100,7 @@
               <th>Pont</th>
               <th>Agent</th>
               <th>Usine</th>
+              <th>Produit</th>
               <th>Date déchargement</th>
               <th>Poids (kg)</th>
               <th>Actions</th>
@@ -117,6 +118,13 @@
                 <td>{{ $f->nom_pont }}</td>
                 <td>{{ $f->nom_agent }}</td>
                 <td>{{ $f->usine ?? '-' }}</td>
+                <td>
+                  @if($f->nom_produit)
+                    <span class="badge bg-info">{{ $f->nom_produit }}</span>
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
+                </td>
                 <td>
                   @if($f->date_dechargement)
                     {{ $f->date_dechargement->format('d-m-Y') }}
@@ -150,7 +158,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="8" class="text-center">Aucune fiche de sortie</td>
+                <td colspan="9" class="text-center">Aucune fiche de sortie</td>
               </tr>
             @endforelse
           </tbody>

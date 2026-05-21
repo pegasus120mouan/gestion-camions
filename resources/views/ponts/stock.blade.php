@@ -13,16 +13,21 @@
           <i class="bx bx-package text-primary me-2"></i>
           Gestion du Stock - {{ $pont['nom_pont'] ?? 'Pont' }}
         </h4>
-        <small class="text-muted">Code: {{ $pont['code_pont'] ?? '-' }} | Gérant: {{ $pont['gerant'] ?? '-' }}</small>
+        <small class="text-muted d-block">Code: {{ $pont['code_pont'] ?? '-' }} | Gérant: {{ $pont['gerant'] ?? '-' }}</small>
       </div>
       @php
+        $peutEntrerStock = $peut_entrer_stock ?? true;
         $stocksOuverts = $stocks->where('type', 'entree')->where('statut', 'ouvert');
         $parcsAvecStockOuvert = $stocksOuverts->pluck('parc_id')->toArray();
         $parcsDisponibles = ($parcs ?? collect())->filter(function($p) use ($parcsAvecStockOuvert) {
             return !in_array($p->id, $parcsAvecStockOuvert);
         });
       @endphp
-      @if($parcsDisponibles->isEmpty())
+      @if(!$peutEntrerStock)
+        <button type="button" class="btn btn-secondary" disabled title="Pont fermé — entrées de stock interdites">
+          <i class="bx bx-lock me-1"></i> Pont fermé
+        </button>
+      @elseif($parcsDisponibles->isEmpty())
         <button type="button" class="btn btn-secondary" disabled title="Tous les parcs ont un stock actif">
           <i class="bx bx-lock me-1"></i> Tous les parcs occupés
         </button>
@@ -38,6 +43,13 @@
 
     @if(!empty($external_error))
       <div class="alert alert-danger">{{ $external_error }}</div>
+    @endif
+
+    @if(!($peut_entrer_stock ?? true))
+      <div class="alert alert-warning">
+        <i class="bx bx-info-circle me-1"></i>
+        Ce pont est <strong>fermé</strong>. Les entrées de stock (nouveau stock ou entrées supplémentaires) ne sont pas autorisées.
+      </div>
     @endif
 
     <!-- Solde du pont -->
@@ -73,14 +85,17 @@
       $ecartOuvert = $sortiesFichesOuvert - $stockOuvertEntrees;
       $stockDisponibleOuvert = $stockOuvertEntrees - $sortiesFichesOuvert;
     @endphp
-    <div class="card mb-4 border-primary">
-      <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+    <div class="card mb-4 {{ $stockOuvert->isActif() ? 'border-primary' : 'border-secondary' }}">
+      <div class="card-header {{ $stockOuvert->isActif() ? 'bg-primary' : 'bg-secondary' }} text-white d-flex justify-content-between align-items-center">
         <div>
           <h5 class="mb-0 text-white">
-            <i class="bx bx-package me-2"></i>Stock Actif: 
+            <i class="bx bx-package me-2"></i>{{ $stockOuvert->isActif() ? 'Stock Actif' : 'Stock Inactif' }}: 
             <a href="#" data-bs-toggle="modal" data-bs-target="#modalStockDetail-{{ $stockOuvert->id }}" class="text-white text-decoration-underline" style="cursor: pointer;">
               {{ $stockOuvert->code_stock ?? 'N/A' }}
             </a>
+            @if($stockOuvert->isInactif())
+              <span class="badge bg-warning text-dark ms-2">Désactivé</span>
+            @endif
           </h5>
           <small>Ouvert le {{ $stockOuvert->date_mouvement ? $stockOuvert->date_mouvement->format('d/m/Y') : '-' }} | Parc: <strong>{{ $stockOuvert->nom_parc ?? '-' }}</strong> | Produit: <strong>{{ $stockOuvert->nom_produit ?? '-' }}</strong></small>
         </div>
@@ -88,8 +103,20 @@
           <button type="button" class="btn btn-outline-light border-white text-white" data-bs-toggle="modal" data-bs-target="#supprimerStockOuvertModal-{{ $stockOuvert->id }}" title="Supprimer ce stock">
             <i class="bx bx-trash me-1"></i> Supprimer
           </button>
+          <form method="POST" action="{{ route('ponts.stock.etat', ['id_pont' => $pont['id_pont'], 'stock_id' => $stockOuvert->id]) }}" class="d-inline">
+            @csrf
+            @if($stockOuvert->isActif())
+              <button type="submit" class="btn btn-light text-dark" title="Désactiver ce stock">
+                <i class="bx bx-pause me-1"></i> Désactiver
+              </button>
+            @else
+              <button type="submit" class="btn btn-success" title="Activer ce stock">
+                <i class="bx bx-play me-1"></i> Actif
+              </button>
+            @endif
+          </form>
           <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#fermerStockModal-{{ $stockOuvert->id }}">
-            <i class="bx bx-lock me-1"></i> Fermer ce stock
+            <i class="bx bx-lock me-1"></i> Fermer
           </button>
         </div>
       </div>
@@ -447,6 +474,7 @@
               <th>Véhicule</th>
               <th>Agent</th>
               <th>Usine</th>
+              <th>Produit</th>
               <th class="text-end">Poids (kg)</th>
             </tr>
           </thead>
@@ -457,6 +485,13 @@
                 <td><strong>{{ $fiche->matricule_vehicule }}</strong></td>
                 <td>{{ $fiche->nom_agent ?? '-' }}</td>
                 <td>{{ $fiche->usine ?? '-' }}</td>
+                <td>
+                  @if($fiche->nom_produit)
+                    <span class="badge bg-info">{{ $fiche->nom_produit }}</span>
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
+                </td>
                 <td class="text-end fw-bold text-danger">{{ number_format((float)$fiche->poids_pont, 0, ',', ' ') }}</td>
               </tr>
             @endforeach
@@ -598,10 +633,12 @@
         <!-- Entrée du stock -->
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h6 class="mb-0"><i class="bx bx-down-arrow-circle me-1 text-primary"></i>Entrées de stock</h6>
-          @if($stockItem->isOuvert())
+          @if($stockItem->isOuvert() && ($peut_entrer_stock ?? true) && $stockItem->isActif())
           <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalAddEntree-{{ $stockItem->id }}">
             <i class="bx bx-plus me-1"></i>Ajouter une entrée
           </button>
+          @elseif($stockItem->isOuvert() && $stockItem->isInactif())
+          <span class="badge bg-secondary">Stock désactivé</span>
           @endif
         </div>
         @php
