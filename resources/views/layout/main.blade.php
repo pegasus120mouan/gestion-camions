@@ -504,6 +504,11 @@
                   </a>
                 </li>
                 <li class="menu-item">
+                  <a href="{{ route('commis.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Basic">Commis</div>
+                  </a>
+                </li>
+                <li class="menu-item">
                   <a href="{{ route('utilisateurs.chauffeurs') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Basic">Chauffeurs</div>
                   </a>

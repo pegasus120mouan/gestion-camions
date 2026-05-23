@@ -11,6 +11,7 @@ use App\Http\Controllers\DepenseController;
 use App\Http\Controllers\PontController;
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\UtilisateurController;
+use App\Http\Controllers\CommisController;
 use App\Http\Controllers\FinancementController;
 use App\Http\Controllers\UsineController;
 use App\Http\Controllers\CodeTransporteurController;
@@ -181,6 +182,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/gestionfinanciere/sorties', [GestionFinanciereController::class, 'storeSortie'])->name('gestionfinanciere.sorties.store');
 
     Route::resource('utilisateurs', UtilisateurController::class)->except(['show']);
+
+    Route::get('/commis', [CommisController::class, 'index'])->name('commis.index');
+    Route::post('/commis', [CommisController::class, 'store'])->name('commis.store');
+    Route::put('/commis/{commi}', [CommisController::class, 'update'])->name('commis.update');
+    Route::delete('/commis/{commi}', [CommisController::class, 'destroy'])->name('commis.destroy');
 
     Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
     Route::get('/tickets/unipalm', [TicketController::class, 'unipalm'])->name('tickets.unipalm');
