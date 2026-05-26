@@ -45,6 +45,8 @@ return [
         'mes_financements_url' => env('EXTERNAL_AUTH_MES_FINANCEMENTS_URL', 'https://api.objetombrepegasus.online/api/camions/mes_financements.php'),
         'mes_usines_url' => env('EXTERNAL_AUTH_MES_USINES_URL', 'https://api.objetombrepegasus.online/api/camions/mes_usines.php'),
         'mes_vehicules_url' => env('EXTERNAL_AUTH_MES_VEHICULES_URL', 'https://api.objetombrepegasus.online/api/camions/mes_vehicules.php'),
+        'solde_chef_equipe_url' => env('EXTERNAL_AUTH_SOLDE_CHEF_EQUIPE_URL', 'https://api.objetombrepegasus.online/api/camions/solde_chef_equipe.php'),
+        'default_chef_equipe_token' => env('CHEF_EQUIPE_TOKEN', ''),
         'timeout' => (int) env('EXTERNAL_AUTH_TIMEOUT', 10),
     ],
 

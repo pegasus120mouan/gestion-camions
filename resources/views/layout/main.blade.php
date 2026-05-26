@@ -286,7 +286,11 @@
                 <div class="text-truncate" data-i18n="User interface">Gestion financière</div>
               </a>
               <ul class="menu-sub">
-
+                <li class="menu-item {{ request()->routeIs('solde_chef_equipe.*') ? 'active' : '' }}">
+                  <a href="{{ route('solde_chef_equipe.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Token chef d'équipe</div>
+                  </a>
+                </li>
               <li class="menu-item">
                   <a href="{{ route('gestionfinanciere.montant_agent') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Accordion">Montant Pisteur</div>
@@ -987,6 +991,8 @@
               @include('partials.fiches_sortie_stats')
             </div>
           @endif
+
+          @include('partials.solde_chef_equipe_banner')
 
           <!-- Content wrapper -->
             @yield('content')

@@ -10,12 +10,26 @@
                     <div class="d-flex align-items-start row">
                       <div class="col-sm-7">
                         <div class="card-body">
-                          <h5 class="card-title text-primary mb-3">Congratulations John! 🎉</h5>
-                          <p class="mb-6">
-                            You have done 72% more sales today.<br />Check your new badge in your profile.
-                          </p>
-
-                          <a href="javascript:;" class="btn btn-sm btn-outline-primary">View Badges</a>
+                          @if(!empty($soldeChef))
+                            <h5 class="card-title text-primary mb-2">Solde actuel</h5>
+                            @if(!empty($soldeChef['nom']))
+                              <p class="text-muted small mb-3">{{ trim($soldeChef['nom'] . ' ' . $soldeChef['prenoms']) }}</p>
+                            @endif
+                            <h2 class="mb-4 {{ ($soldeChef['reste_a_payer'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
+                              {{ number_format($soldeChef['reste_a_payer'], 0, ',', ' ') }} FCFA
+                            </h2>
+                            <p class="text-muted small mb-0">Reste à payer (votre solde disponible)</p>
+                          @elseif(!empty($soldeChefError))
+                            <h5 class="card-title text-warning mb-3">Solde chef d'équipe</h5>
+                            <p class="mb-4 text-muted">{{ $soldeChefError }}</p>
+                            <small class="text-muted">Vérifiez le token chef (utilisateur ou CHEF_EQUIPE_TOKEN dans .env).</small>
+                          @else
+                            <h5 class="card-title text-primary mb-3">Solde chef d'équipe</h5>
+                            <p class="mb-4 text-muted">
+                              Aucun token configuré.<br />
+                              Définissez <code>chef_equipe_token</code> sur l'utilisateur ou <code>CHEF_EQUIPE_TOKEN</code> dans .env.
+                            </p>
+                          @endif
                         </div>
                       </div>
                       <div class="col-sm-5 text-center text-sm-left">

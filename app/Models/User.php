@@ -27,6 +27,7 @@ class User extends Authenticatable
         'login',
         'contact',
         'matricule',
+        'chef_equipe_token',
         'avatar',
         'password',
         'code_pin',

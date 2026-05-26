@@ -31,6 +31,8 @@ use App\Http\Controllers\ParcController;
 use App\Http\Controllers\PisteurController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ApprovisionnementController;
+use App\Http\Controllers\SoldeChefEquipeController;
+use App\Services\SoldeChefEquipeService;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/index.html', function () {
@@ -142,7 +144,23 @@ Route::middleware('auth')->group(function () {
             }
         } catch (\Throwable $e) {}
 
+        $soldeChef = null;
+        $soldeChefError = null;
+        $chefToken = trim((string) (
+            session('chef_equipe_token')
+            ?? $authUser?->chef_equipe_token
+            ?? config('services.external_auth.default_chef_equipe_token', '')
+        ));
+        if ($chefToken !== '') {
+            $soldeChef = app(SoldeChefEquipeService::class)->getSoldeByToken($chefToken);
+            if (!$soldeChef) {
+                $soldeChefError = 'Impossible de charger le solde pour ce chef d\'équipe.';
+            }
+        }
+
         return view('dashboard', [
+            'soldeChef' => $soldeChef,
+            'soldeChefError' => $soldeChefError,
             'nombreCamions' => $nombreCamions,
             'totalDepenses' => $totalDepenses,
             'nombreTickets' => $nombreTickets,
@@ -157,6 +175,10 @@ Route::middleware('auth')->group(function () {
             'dernieresDepenses' => $dernieresDepenses,
         ]);
     })->name('dashboard');
+
+    Route::get('/solde-chef-equipe', [SoldeChefEquipeController::class, 'index'])->name('solde_chef_equipe.index');
+    Route::post('/solde-chef-equipe/token', [SoldeChefEquipeController::class, 'updateToken'])->name('solde_chef_equipe.token');
+    Route::get('/api/solde-chef-equipe', [SoldeChefEquipeController::class, 'show'])->name('api.solde_chef_equipe');
 
     Route::get('/utilisateurs/admins', [UtilisateurController::class, 'admins'])->name('utilisateurs.admins');
     Route::get('/utilisateurs/agents', [UtilisateurController::class, 'agents'])->name('utilisateurs.agents');

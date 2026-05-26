@@ -19,6 +19,12 @@ return [
     'default' => env('DB_CONNECTION', 'sqlite'),
 
     /*
+    | Connexion optionnelle vers la base camions / pegasus (chef_equipe, tickets…).
+    | Utilisée en secours si l'API HTTP solde_chef_equipe est indisponible.
+    */
+    'default_external_camions' => env('EXTERNAL_CAMIONS_DB_CONNECTION', ''),
+
+    /*
     |--------------------------------------------------------------------------
     | Database Connections
     |--------------------------------------------------------------------------
@@ -96,6 +102,20 @@ return [
             'prefix_indexes' => true,
             'search_path' => 'public',
             'sslmode' => env('DB_SSLMODE', 'prefer'),
+        ],
+
+        'pegasus' => [
+            'driver' => 'mysql',
+            'host' => env('EXTERNAL_CAMIONS_DB_HOST', '127.0.0.1'),
+            'port' => env('EXTERNAL_CAMIONS_DB_PORT', '3306'),
+            'database' => env('EXTERNAL_CAMIONS_DB_DATABASE', ''),
+            'username' => env('EXTERNAL_CAMIONS_DB_USERNAME', 'root'),
+            'password' => env('EXTERNAL_CAMIONS_DB_PASSWORD', ''),
+            'charset' => env('EXTERNAL_CAMIONS_DB_CHARSET', 'utf8mb4'),
+            'collation' => env('EXTERNAL_CAMIONS_DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'strict' => true,
+            'engine' => null,
         ],
 
         'sqlsrv' => [
