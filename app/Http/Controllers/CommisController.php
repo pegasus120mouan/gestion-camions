@@ -61,13 +61,21 @@ class CommisController extends Controller
                     ->orWhere('prenom', 'like', "%{$q}%")
                     ->orWhere('contact', 'like', "%{$q}%")
                     ->orWhere('nom_pont', 'like', "%{$q}%")
-                    ->orWhere('code_pont', 'like', "%{$q}%");
+                    ->orWhere('code_pont', 'like', "%{$q}%")
+                    ->orWhere('gerant', 'like', "%{$q}%");
             });
+        }
+
+        $ponts = $this->fetchPonts();
+        $gerantsParPont = [];
+        foreach ($ponts as $pont) {
+            $gerantsParPont[(int) ($pont['id_pont'] ?? 0)] = $pont['gerant'] ?? '';
         }
 
         return view('commis.index', [
             'commis' => $query->paginate(20)->withQueryString(),
-            'ponts' => $this->fetchPonts(),
+            'ponts' => $ponts,
+            'gerantsParPont' => $gerantsParPont,
             'external_error' => null,
         ]);
     }

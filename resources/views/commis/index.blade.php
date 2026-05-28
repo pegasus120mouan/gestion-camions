@@ -43,7 +43,7 @@
           </div>
           <div class="col-md-5">
             <label class="form-label">Recherche</label>
-            <input type="text" name="q" class="form-control" value="{{ request('q') }}" placeholder="Nom, prénom, contact, pont..." />
+            <input type="text" name="q" class="form-control" value="{{ request('q') }}" placeholder="Nom, prénom, contact, pont, gérant..." />
           </div>
           <div class="col-md-3 d-flex gap-2">
             <button type="submit" class="btn btn-primary">Filtrer</button>
@@ -63,6 +63,7 @@
               <th>Prénom</th>
               <th>Contact</th>
               <th>Pont</th>
+              <th>Gérant</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -81,6 +82,7 @@
                     <br><small class="text-muted">{{ $c->code_pont }}</small>
                   @endif
                 </td>
+                <td>{{ $c->gerant ?: ($gerantsParPont[$c->id_pont] ?? '-') }}</td>
                 <td>
                   <div class="d-flex gap-1">
                     <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEdit{{ $c->id }}">
@@ -94,7 +96,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="6" class="text-center">Aucun commis enregistré</td>
+                <td colspan="7" class="text-center">Aucun commis enregistré</td>
               </tr>
             @endforelse
           </tbody>
