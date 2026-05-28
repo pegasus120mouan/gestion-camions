@@ -6,10 +6,11 @@
 <div class="row">
   <div class="col-md-6 mb-3">
     <label class="form-label">Pont <span class="text-danger">*</span></label>
-    <select name="id_pont" class="form-select @error('id_pont') is-invalid @enderror" required>
+    <select name="id_pont" id="commis_pont_{{ $formSuffix }}" class="form-select @error('id_pont') is-invalid @enderror" required>
       <option value="">-- Sélectionner un pont --</option>
       @foreach($ponts as $pont)
         <option value="{{ $pont['id_pont'] ?? '' }}"
+          data-gerant="{{ $pont['gerant'] ?? '' }}"
           @selected(old('id_pont', $commi->id_pont ?? '') == ($pont['id_pont'] ?? ''))>
           {{ $pont['nom_pont'] ?? '' }} ({{ $pont['code_pont'] ?? '' }})
         </option>
@@ -32,6 +33,12 @@
       <div class="invalid-feedback">{{ $message }}</div>
     @enderror
   </div>
+</div>
+
+<div class="mb-3">
+  <label class="form-label">Gérant du pont</label>
+  <input type="text" id="commis_gerant_{{ $formSuffix }}" class="form-control" value="{{ $commi->gerant ?? '' }}" readonly />
+  <small class="text-muted">Sélectionné automatiquement selon le pont.</small>
 </div>
 
 <div class="row">
@@ -110,3 +117,19 @@
     </button>
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var pontSelect = document.getElementById('commis_pont_{{ $formSuffix }}');
+  var gerantInput = document.getElementById('commis_gerant_{{ $formSuffix }}');
+  if (!pontSelect || !gerantInput) return;
+
+  function syncGerant() {
+    var opt = pontSelect.options[pontSelect.selectedIndex];
+    gerantInput.value = (opt && opt.dataset && opt.dataset.gerant) ? opt.dataset.gerant : '';
+  }
+
+  pontSelect.addEventListener('change', syncGerant);
+  syncGerant();
+});
+</script>

@@ -93,6 +93,7 @@ class CommisController extends Controller
             'id_pont' => (int) $validated['id_pont'],
             'nom_pont' => $pont['nom_pont'] ?? '',
             'code_pont' => $pont['code_pont'] ?? '',
+            'gerant' => $pont['gerant'] ?? null,
             'nom' => $validated['nom'],
             'prenom' => $validated['prenom'],
             'contact' => $validated['contact'] ?? null,
@@ -131,6 +132,7 @@ class CommisController extends Controller
         $commi->id_pont = (int) $validated['id_pont'];
         $commi->nom_pont = $pont['nom_pont'] ?? '';
         $commi->code_pont = $pont['code_pont'] ?? '';
+        $commi->gerant = $pont['gerant'] ?? null;
         $commi->nom = $validated['nom'];
         $commi->prenom = $validated['prenom'];
         $commi->contact = $validated['contact'] ?? null;

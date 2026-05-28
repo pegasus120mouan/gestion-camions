@@ -13,6 +13,7 @@ class Commis extends Model
         'id_pont',
         'nom_pont',
         'code_pont',
+        'gerant',
         'nom',
         'prenom',
         'contact',
