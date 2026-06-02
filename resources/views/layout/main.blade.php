@@ -431,6 +431,12 @@
                 <div class="text-truncate" data-i18n="Chargeurs">Chargeurs</div>
               </a>
             </li>
+            <li class="menu-item {{ request()->routeIs('bilan-vehicule.*') ? 'active' : '' }}">
+              <a href="{{ route('bilan-vehicule.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-bar-chart-alt-2" style="color: #28c76f;"></i>
+                <div class="text-truncate" data-i18n="BilanVehicule">Bilan par camion</div>
+              </a>
+            </li>
            <!--  <li class="menu-item {{ request()->routeIs('pisteurs.*') ? 'active' : '' }}">
               <a href="{{ route('pisteurs.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-leaf" style="color: #3d6fb9;"></i>

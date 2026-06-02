@@ -1323,6 +1323,8 @@ class DepenseController extends Controller
         $validated = $request->validate([
             'date_dechargement' => ['required', 'date'],
             'poids_pont' => ['required', 'numeric', 'min:0.01'],
+            'prix_unitaire_camion' => ['nullable', 'numeric', 'min:0'],
+            'montant_camion' => ['nullable', 'numeric', 'min:0'],
             'parc_id' => ['nullable', 'exists:parcs,id'],
         ]);
 
@@ -1351,6 +1353,13 @@ class DepenseController extends Controller
         }
 
         $poidsDecharge = (float) $validated['poids_pont'];
+        $prixUnitaireCamion = $validated['prix_unitaire_camion'] ?? null;
+        $montantCamion = $validated['montant_camion'] ?? null;
+
+        // Calculer le montant camion si prix unitaire fourni
+        if ($prixUnitaireCamion !== null && $prixUnitaireCamion > 0) {
+            $montantCamion = $prixUnitaireCamion * $poidsDecharge;
+        }
 
         $montantAgent = app(MontantAgentFicheService::class)->calculerMontantPourFiche(
             $ficheSortie,
@@ -1360,6 +1369,8 @@ class DepenseController extends Controller
         $ficheSortie->update([
             'date_dechargement' => $validated['date_dechargement'],
             'poids_pont' => $poidsDecharge,
+            'prix_unitaire_camion' => $prixUnitaireCamion,
+            'montant_camion' => $montantCamion,
             'stock_id' => $stockOuvert->id,
             'parc_id' => $parc->id,
             'nom_parc' => $parc->nom,

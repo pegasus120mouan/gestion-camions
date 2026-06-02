@@ -453,10 +453,23 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Poids (kg) <span class="text-danger">*</span></label>
-            <input type="number" name="poids_pont" class="form-control" value="{{ $f->poids_pont ?? '' }}" placeholder="Poids en kg" min="0.01" step="0.01" required>
+            <input type="number" name="poids_pont" id="poids_pont_{{ $f->id }}" class="form-control" value="{{ $f->poids_pont ?? '' }}" placeholder="Poids en kg" min="0.01" step="0.01" required onchange="calculerMontantCamion({{ $f->id }})" oninput="calculerMontantCamion({{ $f->id }})">
             @if($stockFiche)
               <small class="text-muted">Le poids sera déduit du stock du parc {{ $f->nom_parc ?? $stockFiche->nom_parc }}. Si le déchargement dépasse le stock disponible, l'écart est enregistré comme gain.</small>
             @endif
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Prix unitaire (FCFA/kg)</label>
+            <input type="number" name="prix_unitaire_camion" id="prix_unitaire_camion_{{ $f->id }}" class="form-control" value="{{ $f->prix_unitaire_camion ?? '' }}" placeholder="Ex: 150" min="0" step="1" onchange="calculerMontantCamion({{ $f->id }})" oninput="calculerMontantCamion({{ $f->id }})">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Montant camion</label>
+            <div class="input-group">
+              <input type="text" id="montant_camion_display_{{ $f->id }}" class="form-control fw-bold text-success" style="background-color: #e9ecef;" readonly placeholder="0">
+              <span class="input-group-text">FCFA</span>
+            </div>
+            <input type="hidden" name="montant_camion" id="montant_camion_{{ $f->id }}" value="{{ $f->montant_camion ?? 0 }}">
+            <small class="text-muted">Montant = Prix unitaire × Poids</small>
           </div>
         </div>
         <div class="modal-footer">
@@ -510,5 +523,15 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+
+// Fonction pour calculer le montant camion
+function calculerMontantCamion(ficheId) {
+  var poids = parseFloat(document.getElementById('poids_pont_' + ficheId).value) || 0;
+  var prixUnitaire = parseFloat(document.getElementById('prix_unitaire_camion_' + ficheId).value) || 0;
+  var montant = poids * prixUnitaire;
+  
+  document.getElementById('montant_camion_' + ficheId).value = montant;
+  document.getElementById('montant_camion_display_' + ficheId).value = montant.toLocaleString('fr-FR').replace(/,/g, ' ');
+}
 </script>
 @endsection

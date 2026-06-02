@@ -27,6 +27,8 @@ class FicheSortie extends Model
         'date_chargement',
         'date_dechargement',
         'poids_pont',
+        'prix_unitaire_camion',
+        'montant_camion',
         'carburant',
         'frais_route',
         'paiement_chargeur',
@@ -42,6 +44,8 @@ class FicheSortie extends Model
         'date_chargement' => 'date',
         'date_dechargement' => 'date',
         'poids_pont' => 'decimal:2',
+        'prix_unitaire_camion' => 'decimal:2',
+        'montant_camion' => 'decimal:2',
         'montant_agent' => 'decimal:2',
     ];
 }

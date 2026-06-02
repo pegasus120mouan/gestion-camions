@@ -28,6 +28,7 @@ use App\Http\Controllers\MontantAgentController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\ParcController;
+use App\Http\Controllers\BilanVehiculeController;
 use App\Http\Controllers\PisteurController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ApprovisionnementController;
@@ -321,6 +322,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/chargeurs', [ChargeurController::class, 'store'])->name('chargeurs.store');
     Route::put('/chargeurs/{chargeur}', [ChargeurController::class, 'update'])->name('chargeurs.update');
     Route::delete('/chargeurs/{chargeur}', [ChargeurController::class, 'destroy'])->name('chargeurs.destroy');
+
+    // Bilan par véhicule
+    Route::get('/bilan-vehicule', [BilanVehiculeController::class, 'index'])->name('bilan-vehicule.index');
+    Route::get('/bilan-vehicule/{vehicule_id}', [BilanVehiculeController::class, 'show'])->name('bilan-vehicule.show');
 
     // Pisteurs
     Route::get('/pisteurs', [PisteurController::class, 'index'])->name('pisteurs.index');
