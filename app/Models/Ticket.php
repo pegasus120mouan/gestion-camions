@@ -13,6 +13,7 @@ class Ticket extends Model
         'id_usine',
         'date_ticket',
         'id_agent',
+        'particulier_agent_id',
         'numero_ticket',
         'vehicule_id',
         'matricule_vehicule',
@@ -45,5 +46,10 @@ class Ticket extends Model
     public function ficheSortie()
     {
         return $this->hasOne(FicheSortie::class, 'id_ticket', 'id_ticket');
+    }
+
+    public function particulierAgent()
+    {
+        return $this->belongsTo(ParticulierAgent::class, 'particulier_agent_id');
     }
 }

@@ -87,6 +87,8 @@ class PontController extends Controller
             return view('ponts.index', [
                 'ponts' => [],
                 'external_error' => "Impossible de joindre le service ponts.",
+                'search' => trim((string) $request->query('q', '')),
+                'pontNoms' => [],
             ]);
         }
 
@@ -96,6 +98,8 @@ class PontController extends Controller
             return view('ponts.index', [
                 'ponts' => [],
                 'external_error' => $message,
+                'search' => trim((string) $request->query('q', '')),
+                'pontNoms' => [],
             ]);
         }
 
@@ -146,9 +150,29 @@ class PontController extends Controller
         }
         unset($pont);
 
+        $pontNoms = collect($ponts)
+            ->pluck('nom_pont')
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        $search = trim((string) $request->query('q', ''));
+        if ($search !== '') {
+            $needle = mb_strtolower($search);
+            $ponts = array_values(array_filter($ponts, function ($pont) use ($needle) {
+                $nomPont = mb_strtolower((string) ($pont['nom_pont'] ?? ''));
+
+                return str_contains($nomPont, $needle);
+            }));
+        }
+
         return view('ponts.index', [
             'ponts' => $ponts,
             'external_error' => null,
+            'search' => $search,
+            'pontNoms' => $pontNoms,
         ]);
     }
 

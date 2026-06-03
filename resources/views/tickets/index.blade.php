@@ -21,6 +21,24 @@
       </button>
     </div>
 
+    @if(session('success'))
+      <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
+    @if($errors->any())
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <ul class="mb-0">
+          @foreach($errors->all() as $error)
+            <li>{{ $error }}</li>
+          @endforeach
+        </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
     <div class="card mb-4">
       <div class="card-body">
         <form method="GET" action="{{ route('tickets.index') }}" class="row g-3">
@@ -61,6 +79,7 @@
               <th>Date ticket</th>
               <th>N°Ticket</th>
               <th>Usine</th>
+              <th>Groupe</th>
               <th>Agent</th>
               <th>Vehicule</th>
               <th>Poids Usine</th>
@@ -89,11 +108,16 @@
                   </a>
                 </td>
                 <td>{{ $t['nom_usine'] ?? '-' }}</td>
+                <td>{{ $t['nom_groupe'] ?? '-' }}</td>
                 <td>{{ $t['nom_agent'] ?? '-' }}</td>
                 <td>
-                  <a href="{{ route('vehicules.depenses', ['vehicule_id' => $t['vehicule_id'] ?? 0, 'matricule' => $t['matricule_vehicule'] ?? '']) }}">
-                    {{ $t['matricule_vehicule'] ?? '' }}
-                  </a>
+                  @if(!empty($t['vehicule_id']))
+                    <a href="{{ route('vehicules.depenses', ['vehicule_id' => $t['vehicule_id'], 'matricule' => $t['matricule_vehicule'] ?? '']) }}">
+                      {{ $t['matricule_vehicule'] ?? '' }}
+                    </a>
+                  @else
+                    {{ $t['matricule_vehicule'] ?? '-' }}
+                  @endif
                 </td>
                 <td>{{ number_format((float)($t['poids'] ?? 0), 0, ',', ' ') }}</td>
                 <td>{{ number_format((float)($t['prix_unitaire_transport'] ?? 0), 0, ',', ' ') }}</td>
@@ -127,7 +151,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="10" class="text-center">Aucun ticket</td>
+                <td colspan="11" class="text-center">Aucun ticket</td>
               </tr>
             @endforelse
           </tbody>
@@ -220,6 +244,7 @@
                   @endphp
                   <div class="mb-2"><strong>Transporteur:</strong> <span class="badge bg-info">{{ $transporteurNom }}</span></div>
                   <div class="mb-2"><strong>Usine:</strong> {{ $t['nom_usine'] ?? '-' }}</div>
+                  <div class="mb-2"><strong>Groupe:</strong> {{ $t['nom_groupe'] ?? '-' }}</div>
                   <div class="mb-2"><strong>Agent:</strong> {{ $t['nom_agent'] ?? '-' }}</div>
                   <div class="mb-2"><strong>Origine:</strong> {{ $t['origine'] ?? '-' }}</div>
                 </div>
@@ -382,6 +407,7 @@
           <strong>Date:</strong> {{ isset($t['date_ticket']) ? \Carbon\Carbon::parse($t['date_ticket'])->format('d-m-Y') : '-' }}<br>
           <strong>N° Ticket:</strong> {{ $t['numero_ticket'] ?? '' }}<br>
           <strong>Usine:</strong> {{ $t['nom_usine'] ?? '-' }}<br>
+          <strong>Groupe:</strong> {{ $t['nom_groupe'] ?? '-' }}<br>
           <strong>Agent:</strong> {{ $t['nom_agent'] ?? '-' }}<br>
           <strong>Poids:</strong> {{ number_format((float)($t['poids'] ?? 0), 0, ',', ' ') }} kg
         </div>
@@ -498,36 +524,38 @@
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Véhicule <span class="text-danger">*</span></label>
-              <select name="vehicule_id" class="form-select" required>
-                <option value="">-- Sélectionner un véhicule --</option>
-                @foreach($vehiculesPgf ?? [] as $vehiculeItem)
-                  <option value="{{ $vehiculeItem['vehicules_id'] ?? '' }}" data-matricule="{{ $vehiculeItem['matricule_vehicule'] ?? '' }}">{{ $vehiculeItem['matricule_vehicule'] ?? '' }}</option>
-                @endforeach
-              </select>
-              <input type="hidden" name="matricule_vehicule" id="matricule_vehicule_hidden" />
+              <input type="text" name="matricule_vehicule" class="form-control" required placeholder="Ex: 9943KA03" value="{{ old('matricule_vehicule') }}" />
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">Poids (kg)</label>
-              <input type="number" name="poids" class="form-control" step="0.01" min="0" placeholder="Ex: 15000" />
+              <input type="number" name="poids" class="form-control" step="0.01" min="0" placeholder="Ex: 15000" value="{{ old('poids') }}" />
             </div>
           </div>
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Usine <span class="text-danger">*</span></label>
-              <select name="id_usine" class="form-select" required>
+              <select name="id_usine" id="ticket_id_usine" class="form-select" required>
                 <option value="">-- Sélectionner une usine --</option>
                 @foreach($usines ?? [] as $usineItem)
-                  <option value="{{ $usineItem['id_usine'] ?? '' }}">{{ $usineItem['nom_usine'] ?? '' }}</option>
+                  <option value="{{ $usineItem['id_usine'] ?? '' }}" @selected(old('id_usine') == ($usineItem['id_usine'] ?? ''))>{{ $usineItem['nom_usine'] ?? '' }}</option>
                 @endforeach
               </select>
             </div>
             <div class="col-md-6 mb-3">
-              <label class="form-label">Agent <span class="text-danger">*</span></label>
-              <select name="id_agent" class="form-select" required>
-                <option value="">-- Sélectionner un agent --</option>
-                @foreach($agentsPgf ?? [] as $agentItem)
-                  <option value="{{ $agentItem['id_agent'] ?? '' }}">{{ $agentItem['nom_complet'] ?? '' }} ({{ $agentItem['numero_agent'] ?? '' }})</option>
+              <label class="form-label">Groupe <span class="text-danger">*</span></label>
+              <select name="particulier_groupe_id" id="ticket_particulier_groupe_id" class="form-select" required>
+                <option value="">-- Sélectionner un groupe --</option>
+                @foreach($groupesParticuliers ?? [] as $groupeItem)
+                  <option value="{{ $groupeItem->id }}" @selected(old('particulier_groupe_id') == $groupeItem->id)>{{ $groupeItem->nom_groupe }}</option>
                 @endforeach
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col-md-12 mb-3">
+              <label class="form-label">Agent <span class="text-danger">*</span></label>
+              <select name="particulier_agent_id" id="ticket_particulier_agent_id" class="form-select" required disabled>
+                <option value="">-- Sélectionner d'abord un groupe --</option>
               </select>
             </div>
           </div>
@@ -544,49 +572,94 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
+var agentsParGroupe = @json(
+  ($groupesParticuliers ?? collect())->mapWithKeys(function ($groupe) {
+    return [$groupe->id => $groupe->agents->map(function ($agent) {
+      return [
+        'id' => $agent->id,
+        'label' => trim($agent->nom . ' ' . $agent->prenoms) . ($agent->contact ? ' (' . $agent->contact . ')' : ''),
+      ];
+    })->values()];
+  })
+);
+var oldParticulierGroupeId = @json(old('particulier_groupe_id'));
+var oldParticulierAgentId = @json(old('particulier_agent_id'));
+
+function remplirAgentsTicket(groupeId, selectedAgentId) {
+  var $agentSelect = $('#ticket_particulier_agent_id');
+  $agentSelect.empty();
+
+  if (!groupeId) {
+    $agentSelect.append('<option value="">-- Sélectionner d\'abord un groupe --</option>');
+    $agentSelect.prop('disabled', true);
+    $agentSelect.trigger('change.select2');
+    return;
+  }
+
+  var agents = agentsParGroupe[groupeId] || [];
+  $agentSelect.append('<option value="">-- Sélectionner un agent --</option>');
+
+  if (agents.length === 0) {
+    $agentSelect.append('<option value="" disabled>Aucun agent dans ce groupe</option>');
+    $agentSelect.prop('disabled', true);
+  } else {
+    agents.forEach(function(agent) {
+      var selected = selectedAgentId && String(selectedAgentId) === String(agent.id) ? ' selected' : '';
+      $agentSelect.append('<option value="' + agent.id + '"' + selected + '>' + agent.label + '</option>');
+    });
+    $agentSelect.prop('disabled', false);
+  }
+
+  $agentSelect.trigger('change.select2');
+}
+
 $(document).ready(function() {
-  // Initialiser Select2 pour les selects du modal à l'ouverture
   $('#modalAddTicket').on('shown.bs.modal', function() {
-    // Détruire les instances existantes si elles existent
-    if ($('#modalAddTicket select[name="vehicule_id"]').hasClass('select2-hidden-accessible')) {
-      $('#modalAddTicket select[name="vehicule_id"]').select2('destroy');
+    if ($('#ticket_id_usine').hasClass('select2-hidden-accessible')) {
+      $('#ticket_id_usine').select2('destroy');
     }
-    if ($('#modalAddTicket select[name="id_usine"]').hasClass('select2-hidden-accessible')) {
-      $('#modalAddTicket select[name="id_usine"]').select2('destroy');
+    if ($('#ticket_particulier_groupe_id').hasClass('select2-hidden-accessible')) {
+      $('#ticket_particulier_groupe_id').select2('destroy');
     }
-    if ($('#modalAddTicket select[name="id_agent"]').hasClass('select2-hidden-accessible')) {
-      $('#modalAddTicket select[name="id_agent"]').select2('destroy');
+    if ($('#ticket_particulier_agent_id').hasClass('select2-hidden-accessible')) {
+      $('#ticket_particulier_agent_id').select2('destroy');
     }
 
-    // Réinitialiser Select2
-    $('#modalAddTicket select[name="vehicule_id"]').select2({
-      theme: 'bootstrap-5',
-      dropdownParent: $('#modalAddTicket .modal-body'),
-      placeholder: '-- Sélectionner un véhicule --',
-      allowClear: true,
-      width: '100%'
-    });
-    $('#modalAddTicket select[name="id_usine"]').select2({
+    $('#ticket_id_usine').select2({
       theme: 'bootstrap-5',
       dropdownParent: $('#modalAddTicket .modal-body'),
       placeholder: '-- Sélectionner une usine --',
       allowClear: true,
       width: '100%'
     });
-    $('#modalAddTicket select[name="id_agent"]').select2({
+
+    $('#ticket_particulier_groupe_id').select2({
+      theme: 'bootstrap-5',
+      dropdownParent: $('#modalAddTicket .modal-body'),
+      placeholder: '-- Sélectionner un groupe --',
+      allowClear: true,
+      width: '100%'
+    });
+
+    $('#ticket_particulier_agent_id').select2({
       theme: 'bootstrap-5',
       dropdownParent: $('#modalAddTicket .modal-body'),
       placeholder: '-- Sélectionner un agent --',
       allowClear: true,
       width: '100%'
     });
+
+    remplirAgentsTicket(oldParticulierGroupeId, oldParticulierAgentId);
   });
 
-  // Mettre à jour le champ caché matricule quand on change de véhicule via Select2
-  $(document).on('select2:select', 'select[name="vehicule_id"]', function(e) {
-    var selectedOption = $(this).find(':selected');
-    $('#matricule_vehicule_hidden').val(selectedOption.data('matricule') || '');
+  $('#ticket_particulier_groupe_id').on('change', function() {
+    remplirAgentsTicket($(this).val(), null);
   });
+
+  @if($errors->any())
+    var modalAddTicket = new bootstrap.Modal(document.getElementById('modalAddTicket'));
+    modalAddTicket.show();
+  @endif
 });
 </script>
 @endsection

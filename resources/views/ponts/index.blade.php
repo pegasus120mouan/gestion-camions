@@ -6,6 +6,26 @@
       <h4 class="mb-0">Ponts de pesage</h4>
     </div>
 
+    <div class="card mb-4">
+      <div class="card-body">
+        <form method="GET" action="{{ route('ponts.index') }}" class="row g-3 align-items-end">
+          <div class="col-md-9">
+            <label class="form-label">Recherche par nom</label>
+            <input type="text" name="q" id="pont_search_input" class="form-control" value="{{ $search ?? request('q') }}" placeholder="Ex: AGBOVILLE, BEDIE..." list="ponts_noms_list" autocomplete="off" />
+            <datalist id="ponts_noms_list">
+              @foreach($pontNoms ?? [] as $nomPont)
+                <option value="{{ $nomPont }}"></option>
+              @endforeach
+            </datalist>
+          </div>
+          <div class="col-md-3 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Rechercher</button>
+            <a href="{{ route('ponts.index') }}" class="btn btn-outline-secondary">Réinitialiser</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div class="card">
       <div class="table-responsive text-nowrap">
         @if(!empty($external_error))
@@ -74,7 +94,13 @@
               </tr>
             @empty
               <tr>
-                <td colspan="7" class="text-center">Aucun pont</td>
+                <td colspan="7" class="text-center">
+                  @if(!empty($search))
+                    Aucun pont trouvé pour « {{ $search }} »
+                  @else
+                    Aucun pont
+                  @endif
+                </td>
               </tr>
             @endforelse
           </tbody>
@@ -85,8 +111,13 @@
     @if(count($ponts) > 0)
       <div class="card mt-4">
         <div class="card-body">
-          <h5 class="card-title">Resume</h5>
-          <p><strong>Total ponts:</strong> {{ count($ponts) }}</p>
+          <h5 class="card-title">Résumé</h5>
+          <p class="mb-0">
+            <strong>Total ponts affichés :</strong> {{ count($ponts) }}
+            @if(!empty($search))
+              <span class="text-muted">(filtre : « {{ $search }} »)</span>
+            @endif
+          </p>
         </div>
       </div>
     @endif

@@ -31,6 +31,26 @@
       </div>
     @endif
 
+    <div class="card mb-4">
+      <div class="card-body">
+        <form method="GET" action="{{ route('gestionfinanciere.montant_agent') }}" class="row g-3 align-items-end">
+          <div class="col-md-9">
+            <label class="form-label">Recherche par nom</label>
+            <input type="text" name="q" class="form-control" value="{{ $search ?? request('q') }}" placeholder="Ex: AKA EHOUMAN, AGT-26-PGF..." list="agents_noms_list" autocomplete="off" />
+            <datalist id="agents_noms_list">
+              @foreach($agentNoms ?? [] as $nomAgent)
+                <option value="{{ $nomAgent }}"></option>
+              @endforeach
+            </datalist>
+          </div>
+          <div class="col-md-3 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">Rechercher</button>
+            <a href="{{ route('gestionfinanciere.montant_agent') }}" class="btn btn-outline-secondary">Réinitialiser</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0"><i class="bx bx-user-check me-2"></i>Liste des agents</h5>
@@ -88,7 +108,13 @@
               </tr>
             @empty
               <tr>
-                <td colspan="5" class="text-center text-muted py-4">Aucun agent à afficher</td>
+                <td colspan="5" class="text-center text-muted py-4">
+                  @if(!empty($search))
+                    Aucun agent trouvé pour « {{ $search }} »
+                  @else
+                    Aucun agent à afficher
+                  @endif
+                </td>
               </tr>
             @endforelse
           </tbody>

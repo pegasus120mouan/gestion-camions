@@ -6,6 +6,8 @@ use App\Models\FicheSortie;
 use App\Models\Groupe;
 use App\Models\GroupeAgent;
 use App\Models\GroupeVehicule;
+use App\Models\ParticulierAgent;
+use App\Models\ParticulierGroupe;
 use App\Models\Ticket;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -31,7 +33,7 @@ class TicketController extends Controller
             $query->where('id_agent', $agent);
         }
 
-        $ticketsPaginated = $query->paginate(20)->withQueryString();
+        $ticketsPaginated = $query->with('particulierAgent.groupe')->paginate(20)->withQueryString();
 
         // Récupérer les usines et agents depuis l'API pour les noms
         $timeout = 10;
@@ -101,7 +103,11 @@ class TicketController extends Controller
                 'id_usine' => $ticket->id_usine,
                 'nom_usine' => $usinesById[$ticket->id_usine] ?? '-',
                 'id_agent' => $ticket->id_agent,
-                'nom_agent' => $agentsById[$ticket->id_agent] ?? '-',
+                'nom_agent' => $ticket->particulierAgent
+                    ? $ticket->particulierAgent->nom_complet
+                    : ($agentsById[$ticket->id_agent] ?? '-'),
+                'nom_groupe' => $ticket->particulierAgent?->groupe?->nom_groupe ?? '-',
+                'particulier_agent_id' => $ticket->particulier_agent_id,
                 'prix_unitaire' => $ticket->prix_unitaire,
                 'montant_paie' => $ticket->montant_paie,
                 'statut_ticket' => $ticket->statut_ticket,
@@ -204,6 +210,10 @@ class TicketController extends Controller
             $vehiculesPgf = array_values($vehiculesPgf);
         }
 
+        $groupesParticuliers = ParticulierGroupe::with('agents')
+            ->orderBy('nom_groupe')
+            ->get();
+
         return view('tickets.index', [
             'tickets' => $ticketsArray,
             'pagination' => $pagination,
@@ -213,6 +223,7 @@ class TicketController extends Controller
             'usines' => $usinesApi,
             'agents' => $agentsApi,
             'agentsPgf' => $agentsPgf,
+            'groupesParticuliers' => $groupesParticuliers,
             'external_error' => null,
         ]);
     }
@@ -222,23 +233,34 @@ class TicketController extends Controller
         $validated = $request->validate([
             'numero_ticket' => ['required', 'string', 'max:255'],
             'date_ticket' => ['required', 'date'],
-            'vehicule_id' => ['required', 'integer', 'min:1'],
-            'matricule_vehicule' => ['nullable', 'string', 'max:255'],
+            'matricule_vehicule' => ['required', 'string', 'max:255'],
             'poids' => ['nullable', 'numeric', 'min:0'],
             'id_usine' => ['required', 'integer', 'min:1'],
-            'id_agent' => ['required', 'integer', 'min:1'],
+            'particulier_groupe_id' => ['required', 'exists:particulier_groupes,id'],
+            'particulier_agent_id' => ['required', 'exists:particulier_agents,id'],
             'prix_unitaire' => ['nullable', 'numeric', 'min:0'],
             'statut_ticket' => ['nullable', 'in:soldé,non soldé'],
         ]);
 
-        $ticket = Ticket::create([
+        $agent = ParticulierAgent::where('id', $validated['particulier_agent_id'])
+            ->where('particulier_groupe_id', $validated['particulier_groupe_id'])
+            ->first();
+
+        if (!$agent) {
+            return back()->withInput()->withErrors([
+                'particulier_agent_id' => 'Cet agent n\'appartient pas au groupe sélectionné.',
+            ]);
+        }
+
+        Ticket::create([
             'numero_ticket' => $validated['numero_ticket'],
             'date_ticket' => $validated['date_ticket'],
-            'matricule_vehicule' => $validated['matricule_vehicule'] ?? '',
-            'vehicule_id' => $validated['vehicule_id'],
+            'matricule_vehicule' => trim($validated['matricule_vehicule']),
+            'vehicule_id' => null,
             'poids' => $validated['poids'] ?? null,
             'id_usine' => $validated['id_usine'],
-            'id_agent' => $validated['id_agent'],
+            'id_agent' => null,
+            'particulier_agent_id' => $agent->id,
             'id_utilisateur' => Auth::id() ?? 1,
             'prix_unitaire' => $validated['prix_unitaire'] ?? 0,
             'statut_ticket' => $validated['statut_ticket'] ?? 'non soldé',

@@ -33,6 +33,7 @@ use App\Http\Controllers\PisteurController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ApprovisionnementController;
 use App\Http\Controllers\SoldeChefEquipeController;
+use App\Http\Controllers\ParticulierController;
 use App\Services\SoldeChefEquipeService;
 use Illuminate\Support\Facades\Route;
 
@@ -304,6 +305,16 @@ Route::middleware('auth')->group(function () {
     Route::post('/groupes/{id}/agents', [GroupeController::class, 'addAgent'])->name('groupes.agent.add');
     Route::delete('/groupes/{id}/agents/{agent_id}', [GroupeController::class, 'removeAgent'])->name('groupes.agent.remove');
     Route::get('/groupes/{id}/tickets', [GroupeController::class, 'tickets'])->name('groupes.tickets');
+
+    // Groupes Particuliers
+    Route::get('/particuliers', [ParticulierController::class, 'index'])->name('particuliers.index');
+    Route::post('/particuliers', [ParticulierController::class, 'store'])->name('particuliers.store');
+    Route::get('/particuliers/agents', [ParticulierController::class, 'agentsIndex'])->name('particuliers.agents.index');
+    Route::post('/particuliers/agents', [ParticulierController::class, 'storeAgent'])->name('particuliers.agents.store');
+    Route::put('/particuliers/agents/{agent}', [ParticulierController::class, 'updateAgent'])->name('particuliers.agents.update');
+    Route::delete('/particuliers/agents/{agent}', [ParticulierController::class, 'destroyAgent'])->name('particuliers.agents.destroy');
+    Route::get('/particuliers/{id}', [ParticulierController::class, 'show'])->name('particuliers.show');
+    Route::delete('/particuliers/{id}', [ParticulierController::class, 'destroy'])->name('particuliers.destroy');
 
     // Chef des chargeurs
     Route::get('/chef-chargeurs', [ChefChargeurController::class, 'index'])->name('chef_chargeurs.index');

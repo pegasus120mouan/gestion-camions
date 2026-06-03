@@ -14,7 +14,7 @@ class MontantAgentController extends Controller
         private MontantAgentFicheService $montantAgentFiche
     ) {}
 
-    public function index()
+    public function index(Request $request)
     {
         $agents = $this->fetchAgentsFromApi();
         $data = [];
@@ -23,6 +23,8 @@ class MontantAgentController extends Controller
             return view('gestion_financiere.montant_agent', [
                 'data' => [],
                 'external_error' => 'Impossible de charger la liste des agents. Vérifiez l’API agents et la connexion réseau, puis rechargez la page.',
+                'search' => trim((string) $request->query('q', '')),
+                'agentNoms' => [],
             ]);
         }
 
@@ -51,9 +53,42 @@ class MontantAgentController extends Controller
             );
         });
 
+        $agentNoms = collect($data)
+            ->map(function ($item) {
+                $agent = $item['agent'];
+                $nom = trim((string) ($agent['nom_complet'] ?? ''));
+                if ($nom === '') {
+                    $nom = trim(($agent['nom_agent'] ?? '') . ' ' . ($agent['prenom_agent'] ?? ''));
+                }
+
+                return $nom;
+            })
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        $search = trim((string) $request->query('q', ''));
+        if ($search !== '') {
+            $needle = mb_strtolower($search);
+            $data = array_values(array_filter($data, function ($item) use ($needle) {
+                $agent = $item['agent'];
+                $nomComplet = mb_strtolower(trim((string) ($agent['nom_complet'] ?? '')));
+                if ($nomComplet === '') {
+                    $nomComplet = mb_strtolower(trim(($agent['nom_agent'] ?? '') . ' ' . ($agent['prenom_agent'] ?? '')));
+                }
+                $numeroAgent = mb_strtolower((string) ($agent['numero_agent'] ?? ''));
+
+                return str_contains($nomComplet, $needle) || str_contains($numeroAgent, $needle);
+            }));
+        }
+
         return view('gestion_financiere.montant_agent', [
             'data' => $data,
             'external_error' => null,
+            'search' => $search,
+            'agentNoms' => $agentNoms,
         ]);
     }
 
