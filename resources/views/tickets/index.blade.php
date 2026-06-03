@@ -84,6 +84,7 @@
               <th>Vehicule</th>
               <th>Poids Usine</th>
               <th>Prix U</th>
+              <th>Montant</th>
               <th>Conformité</th>
               <th>Actions</th>
             </tr>
@@ -120,7 +121,20 @@
                   @endif
                 </td>
                 <td>{{ number_format((float)($t['poids'] ?? 0), 0, ',', ' ') }}</td>
-                <td>{{ number_format((float)($t['prix_unitaire_transport'] ?? 0), 0, ',', ' ') }}</td>
+                <td>
+                  @if(($t['prix_unitaire_agent'] ?? null) !== null)
+                    {{ number_format((float) $t['prix_unitaire_agent'], 0, ',', ' ') }}
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
+                </td>
+                <td>
+                  @if(($t['montant_calcule'] ?? null) !== null)
+                    <span class="fw-semibold">{{ number_format((float) $t['montant_calcule'], 0, ',', ' ') }}</span>
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
+                </td>
                 <td>
                   @if($t['conformite'] === 'conforme')
                     <span class="badge bg-success">Conforme</span>
@@ -151,7 +165,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="11" class="text-center">Aucun ticket</td>
+                <td colspan="12" class="text-center">Aucun ticket</td>
               </tr>
             @endforelse
           </tbody>
@@ -288,58 +302,68 @@
               <div class="card bg-light border-0 h-100">
                 <div class="card-body">
                   <h6 class="card-title text-warning mb-3"><i class="bx bx-money me-1"></i>Montants</h6>
-                  <div class="mb-2"><strong>Prix unitaire:</strong> {{ number_format((float)($t['prix_unitaire'] ?? 0), 0, ',', ' ') }} FCFA</div>
+                  <div class="mb-2"><strong>Prix unitaire:</strong>
+                    @if(($t['prix_unitaire_agent'] ?? null) !== null)
+                      {{ number_format((float) $t['prix_unitaire_agent'], 0, ',', ' ') }} FCFA
+                    @else
+                      -
+                    @endif
+                  </div>
+                  <div class="mb-2"><strong>Montant calculé:</strong>
+                    @if(($t['montant_calcule'] ?? null) !== null)
+                      {{ number_format((float) $t['montant_calcule'], 0, ',', ' ') }} FCFA
+                    @else
+                      -
+                    @endif
+                  </div>
                   <div class="mb-2"><strong>Montant payé:</strong> {{ number_format((float)($t['montant_paie'] ?? 0), 0, ',', ' ') }} FCFA</div>
                   @php
-                    // Déterminer le type de transporteur basé sur le code transporteur du véhicule
-                    $prixAgentAuto = null;
-                    $idAgent = $t['id_agent'] ?? 0;
-                    $idUsine = $t['id_usine'] ?? 0;
-                    $dateTicket = $t['date_ticket'] ?? $t['date_chargement_fiche'] ?? null;
-                    
-                    if ($idAgent && $idUsine) {
-                        // Déterminer le type basé sur le transporteur
-                        $typeTransporteur = 'transporteur'; // par défaut: camion Pisteur (ex. Camion Agent)
-                        if ($transporteurNom === 'Camion PGF') {
-                            $typeTransporteur = 'pgf';
-                        } elseif (strcasecmp(trim($transporteurNom), 'Autre Camion') === 0
-                            || strcasecmp(trim($transporteurNom), 'Autre') === 0) {
-                            $typeTransporteur = 'autre_camion';
-                        }
-                        
-                        // Chercher le prix correspondant
-                        $queryPrix = \App\Models\PrixAgent::where('id_agent', $idAgent)
-                            ->where('id_usine', $idUsine)
-                            ->where('type', $typeTransporteur);
-                        
-                        // Filtrer par date si disponible
-                        if ($dateTicket) {
-                            $dateTicketParsed = \Carbon\Carbon::parse($dateTicket)->format('Y-m-d');
-                            $queryPrix->where(function($q) use ($dateTicketParsed) {
-                                $q->where(function($q2) use ($dateTicketParsed) {
-                                    $q2->whereNull('date_debut')
-                                       ->orWhere('date_debut', '<=', $dateTicketParsed);
-                                })->where(function($q3) use ($dateTicketParsed) {
-                                    $q3->whereNull('date_fin')
-                                       ->orWhere('date_fin', '>=', $dateTicketParsed);
+                    $prixAgentAuto = $t['prix_unitaire_agent'] ?? null;
+                    $montantAgentsAuto = $t['montant_calcule'] ?? null;
+
+                    if ($prixAgentAuto === null) {
+                        $idAgent = $t['id_agent'] ?? 0;
+                        $idUsine = $t['id_usine'] ?? 0;
+                        $dateTicket = $t['date_ticket'] ?? $t['date_chargement_fiche'] ?? null;
+
+                        if ($idAgent && $idUsine) {
+                            $typeTransporteur = 'transporteur';
+                            if ($transporteurNom === 'Camion PGF') {
+                                $typeTransporteur = 'pgf';
+                            } elseif (strcasecmp(trim($transporteurNom), 'Autre Camion') === 0
+                                || strcasecmp(trim($transporteurNom), 'Autre') === 0) {
+                                $typeTransporteur = 'autre_camion';
+                            }
+
+                            $queryPrix = \App\Models\PrixAgent::where('id_agent', $idAgent)
+                                ->where('id_usine', $idUsine)
+                                ->where('type', $typeTransporteur);
+
+                            if ($dateTicket) {
+                                $dateTicketParsed = \Carbon\Carbon::parse($dateTicket)->format('Y-m-d');
+                                $queryPrix->where(function($q) use ($dateTicketParsed) {
+                                    $q->where(function($q2) use ($dateTicketParsed) {
+                                        $q2->whereNull('date_debut')
+                                           ->orWhere('date_debut', '<=', $dateTicketParsed);
+                                    })->where(function($q3) use ($dateTicketParsed) {
+                                        $q3->whereNull('date_fin')
+                                           ->orWhere('date_fin', '>=', $dateTicketParsed);
+                                    });
                                 });
-                            });
+                            }
+
+                            $prixAgentRecord = $queryPrix->first();
+                            if ($prixAgentRecord) {
+                                $prixAgentAuto = $prixAgentRecord->prix;
+                            }
                         }
-                        
-                        $prixAgentRecord = $queryPrix->first();
-                        if ($prixAgentRecord) {
-                            $prixAgentAuto = $prixAgentRecord->prix;
+
+                        if ($prixAgentAuto !== null && $poidsUsineModal > 0) {
+                            $montantAgentsAuto = $prixAgentAuto * $poidsUsineModal;
                         }
                     }
                   @endphp
                   <div class="mb-2"><strong>Prix unitaire Agent:</strong> {{ $prixAgentAuto !== null ? number_format($prixAgentAuto, 0, ',', ' ') . ' FCFA' : '-' }}</div>
-                  @php
-                    $montantAgentsAuto = null;
-                    if ($prixAgentAuto !== null && $poidsUsineModal > 0) {
-                        // Poids en kg, prix en FCFA/kg
-                        $montantAgentsAuto = $prixAgentAuto * $poidsUsineModal;
-                    }
-                  @endphp
                   <div class="mb-2"><strong>Montant Agents:</strong> {{ $montantAgentsAuto !== null ? number_format($montantAgentsAuto, 0, ',', ' ') . ' FCFA' : '-' }}</div>
                 </div>
               </div>
@@ -577,7 +601,7 @@ var agentsParGroupe = @json(
     return [$groupe->id => $groupe->agents->map(function ($agent) {
       return [
         'id' => $agent->id,
-        'label' => trim($agent->nom . ' ' . $agent->prenoms) . ($agent->contact ? ' (' . $agent->contact . ')' : ''),
+        'label' => ($agent->numero_agent ? $agent->numero_agent . ' — ' : '') . trim($agent->nom . ' ' . $agent->prenoms),
       ];
     })->values()];
   })

@@ -34,6 +34,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ApprovisionnementController;
 use App\Http\Controllers\SoldeChefEquipeController;
 use App\Http\Controllers\ParticulierController;
+use App\Http\Controllers\ParticulierPrixController;
 use App\Services\SoldeChefEquipeService;
 use Illuminate\Support\Facades\Route;
 
@@ -313,6 +314,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/particuliers/agents', [ParticulierController::class, 'storeAgent'])->name('particuliers.agents.store');
     Route::put('/particuliers/agents/{agent}', [ParticulierController::class, 'updateAgent'])->name('particuliers.agents.update');
     Route::delete('/particuliers/agents/{agent}', [ParticulierController::class, 'destroyAgent'])->name('particuliers.agents.destroy');
+    Route::get('/particuliers/prix-unitaire', [ParticulierPrixController::class, 'index'])->name('particuliers.prix.index');
+    Route::get('/particuliers/prix-unitaire/{agent}', [ParticulierPrixController::class, 'show'])->name('particuliers.prix.show');
+    Route::post('/particuliers/prix-unitaire/{agent}/prix', [ParticulierPrixController::class, 'storePrix'])->name('particuliers.prix.store');
+    Route::put('/particuliers/prix-unitaire/{agent}/prix/{prix}', [ParticulierPrixController::class, 'updatePrix'])->name('particuliers.prix.update');
+    Route::delete('/particuliers/prix-unitaire/{agent}/prix/{prix}', [ParticulierPrixController::class, 'deletePrix'])->name('particuliers.prix.delete');
     Route::get('/particuliers/{id}', [ParticulierController::class, 'show'])->name('particuliers.show');
     Route::delete('/particuliers/{id}', [ParticulierController::class, 'destroy'])->name('particuliers.destroy');
 

@@ -10,6 +10,7 @@ class ParticulierAgent extends Model
 
     protected $fillable = [
         'particulier_groupe_id',
+        'numero_agent',
         'nom',
         'prenoms',
         'contact',
@@ -18,6 +19,11 @@ class ParticulierAgent extends Model
     public function groupe()
     {
         return $this->belongsTo(ParticulierGroupe::class, 'particulier_groupe_id');
+    }
+
+    public function prix()
+    {
+        return $this->hasMany(ParticulierAgentPrix::class, 'particulier_agent_id');
     }
 
     public function getNomCompletAttribute(): string

@@ -43,7 +43,7 @@
           </div>
           <div class="col-md-5">
             <label class="form-label">Recherche</label>
-            <input type="text" name="q" class="form-control" value="{{ request('q') }}" placeholder="Nom, prénoms, contact, groupe..." />
+            <input type="text" name="q" class="form-control" value="{{ request('q') }}" placeholder="N°, nom, prénoms, contact, groupe..." />
           </div>
           <div class="col-md-3 d-flex gap-2">
             <button type="submit" class="btn btn-primary">Filtrer</button>
@@ -58,6 +58,7 @@
         <table class="table">
           <thead>
             <tr>
+              <th>N° agent</th>
               <th>Nom</th>
               <th>Prénoms</th>
               <th>Contact</th>
@@ -68,6 +69,7 @@
           <tbody class="table-border-bottom-0">
             @forelse($agents as $agent)
               <tr>
+                <td><code>{{ $agent->numero_agent }}</code></td>
                 <td><strong>{{ $agent->nom }}</strong></td>
                 <td>{{ $agent->prenoms }}</td>
                 <td>{{ $agent->contact ?? '-' }}</td>
@@ -93,7 +95,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="5" class="text-center">Aucun agent enregistré</td>
+                <td colspan="6" class="text-center">Aucun agent enregistré</td>
               </tr>
             @endforelse
           </tbody>
@@ -117,7 +119,7 @@
       <form action="{{ route('particuliers.agents.store') }}" method="POST">
         @csrf
         <div class="modal-body">
-          @include('particuliers.agents._form', ['agent' => null, 'groupes' => $groupes])
+          @include('particuliers.agents._form', ['agent' => null, 'groupes' => $groupes, 'prochainNumero' => $prochainNumero ?? null])
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
@@ -163,7 +165,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        Supprimer l'agent <strong>{{ $agent->nom_complet }}</strong>
+        Supprimer l'agent <strong>{{ $agent->numero_agent }} — {{ $agent->nom_complet }}</strong>
         @if($agent->groupe)
           du groupe <strong>{{ $agent->groupe->nom_groupe }}</strong> ?
         @else

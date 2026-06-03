@@ -61,6 +61,7 @@
         <table class="table table-hover mb-0">
           <thead class="table-light">
             <tr>
+              <th>N° agent</th>
               <th>Nom</th>
               <th>Prénoms</th>
               <th>Contact</th>
@@ -70,6 +71,7 @@
           <tbody>
             @forelse($groupe->agents as $agent)
               <tr>
+                <td><code>{{ $agent->numero_agent }}</code></td>
                 <td><strong>{{ $agent->nom }}</strong></td>
                 <td>{{ $agent->prenoms }}</td>
                 <td>{{ $agent->contact ?? '-' }}</td>
@@ -85,7 +87,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="4" class="text-center text-muted py-4">Aucun agent dans ce groupe</td>
+                <td colspan="5" class="text-center text-muted py-4">Aucun agent dans ce groupe</td>
               </tr>
             @endforelse
           </tbody>
@@ -111,6 +113,7 @@
             'groupes' => collect([$groupe]),
             'groupeId' => $groupe->id,
             'lockGroupe' => true,
+            'prochainNumero' => $prochainNumero ?? null,
           ])
         </div>
         <div class="modal-footer">

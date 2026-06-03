@@ -24,6 +24,16 @@
   @endif
 </div>
 
+<div class="mb-3">
+  <label class="form-label">N° agent <span class="text-danger">*</span></label>
+  <input type="text" name="numero_agent" class="form-control @error('numero_agent') is-invalid @enderror"
+    value="{{ old('numero_agent', $agent->numero_agent ?? ($prochainNumero ?? '')) }}" required
+    placeholder="Ex: AGP-0001" />
+  @error('numero_agent')
+    <div class="invalid-feedback">{{ $message }}</div>
+  @enderror
+</div>
+
 <div class="row">
   <div class="col-md-6 mb-3">
     <label class="form-label">Nom <span class="text-danger">*</span></label>

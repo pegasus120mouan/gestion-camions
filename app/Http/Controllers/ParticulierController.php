@@ -8,6 +8,22 @@ use Illuminate\Http\Request;
 
 class ParticulierController extends Controller
 {
+    private function prochainNumeroAgent(): string
+    {
+        $lastNumero = ParticulierAgent::query()
+            ->where('numero_agent', 'like', 'AGP-%')
+            ->orderByDesc('id')
+            ->value('numero_agent');
+
+        if ($lastNumero && preg_match('/^AGP-(\d+)$/', $lastNumero, $matches)) {
+            $next = (int) $matches[1] + 1;
+        } else {
+            $next = ParticulierAgent::count() + 1;
+        }
+
+        return 'AGP-' . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
     public function index()
     {
         $groupes = ParticulierGroupe::withCount('agents')
@@ -44,7 +60,8 @@ class ParticulierController extends Controller
         if ($request->filled('q')) {
             $q = $request->string('q')->toString();
             $query->where(function ($sub) use ($q) {
-                $sub->where('nom', 'like', "%{$q}%")
+                $sub->where('numero_agent', 'like', "%{$q}%")
+                    ->orWhere('nom', 'like', "%{$q}%")
                     ->orWhere('prenoms', 'like', "%{$q}%")
                     ->orWhere('contact', 'like', "%{$q}%")
                     ->orWhereHas('groupe', function ($groupeQuery) use ($q) {
@@ -56,6 +73,7 @@ class ParticulierController extends Controller
         return view('particuliers.agents.index', [
             'agents' => $query->paginate(20)->withQueryString(),
             'groupes' => ParticulierGroupe::orderBy('nom_groupe')->get(),
+            'prochainNumero' => $this->prochainNumeroAgent(),
         ]);
     }
 
@@ -63,6 +81,7 @@ class ParticulierController extends Controller
     {
         $validated = $request->validate([
             'particulier_groupe_id' => ['required', 'exists:particulier_groupes,id'],
+            'numero_agent' => ['required', 'string', 'max:50', 'unique:particulier_agents,numero_agent'],
             'nom' => ['required', 'string', 'max:100'],
             'prenoms' => ['required', 'string', 'max:150'],
             'contact' => ['nullable', 'string', 'max:50'],
@@ -84,6 +103,7 @@ class ParticulierController extends Controller
     {
         $validated = $request->validate([
             'particulier_groupe_id' => ['required', 'exists:particulier_groupes,id'],
+            'numero_agent' => ['required', 'string', 'max:50', 'unique:particulier_agents,numero_agent,' . $agent->id],
             'nom' => ['required', 'string', 'max:100'],
             'prenoms' => ['required', 'string', 'max:150'],
             'contact' => ['nullable', 'string', 'max:50'],
@@ -108,6 +128,7 @@ class ParticulierController extends Controller
 
         return view('particuliers.show', [
             'groupe' => $groupe,
+            'prochainNumero' => $this->prochainNumeroAgent(),
         ]);
     }
 

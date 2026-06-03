@@ -783,12 +783,12 @@
                     <div class="text-truncate" data-i18n="Accordion">Liste des agents </div>
                   </a>
                 </li>
-               <!-- <li class="menu-item">
-                  <a href="ui-badges.html" class="menu-link">
-                    <div class="text-truncate" data-i18n="Badges">Badges</div>
+                <li class="menu-item">
+                  <a href="{{ route('particuliers.prix.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Badges">Prix Unitaire</div>
                   </a>
                 </li>
-                <li class="menu-item">
+               <!--  <li class="menu-item">
                   <a href="ui-buttons.html" class="menu-link">
                     <div class="text-truncate" data-i18n="Buttons">Buttons</div>
                   </a>

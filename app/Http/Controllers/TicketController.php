@@ -7,14 +7,45 @@ use App\Models\Groupe;
 use App\Models\GroupeAgent;
 use App\Models\GroupeVehicule;
 use App\Models\ParticulierAgent;
+use App\Models\ParticulierAgentPrix;
 use App\Models\ParticulierGroupe;
 use App\Models\Ticket;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 
 class TicketController extends Controller
 {
+    private function prixUnitaireParticulierAgent($prixRecords, int $particulierAgentId, int $idUsine, ?string $dateTicket): ?float
+    {
+        if ($particulierAgentId <= 0 || $idUsine <= 0) {
+            return null;
+        }
+
+        $date = $dateTicket
+            ? Carbon::parse($dateTicket)->startOfDay()
+            : now()->startOfDay();
+
+        $match = $prixRecords
+            ->where('particulier_agent_id', $particulierAgentId)
+            ->where('id_usine', $idUsine)
+            ->filter(function (ParticulierAgentPrix $prix) use ($date) {
+                if ($prix->date_debut && $prix->date_debut->gt($date)) {
+                    return false;
+                }
+                if ($prix->date_fin && $prix->date_fin->lt($date)) {
+                    return false;
+                }
+
+                return true;
+            })
+            ->sortByDesc(fn (ParticulierAgentPrix $prix) => $prix->date_debut ?? $prix->created_at)
+            ->first();
+
+        return $match ? (float) $match->prix : null;
+    }
+
     public function index(Request $request)
     {
         $vehicule = trim((string) $request->query('vehicule', ''));
@@ -91,8 +122,33 @@ class TicketController extends Controller
 
         // Convertir en tableau pour compatibilité avec la vue existante
         $tickets = $ticketsPaginated->items();
+        $particulierAgentIds = collect($tickets)
+            ->pluck('particulier_agent_id')
+            ->filter()
+            ->unique()
+            ->values();
+        $prixParticuliers = $particulierAgentIds->isNotEmpty()
+            ? ParticulierAgentPrix::whereIn('particulier_agent_id', $particulierAgentIds)->get()
+            : collect();
+
         $ticketsArray = [];
         foreach ($tickets as $ticket) {
+            $prixUnitaireAgent = null;
+            $montantCalcule = null;
+
+            if ($ticket->particulier_agent_id && $ticket->id_usine) {
+                $prixUnitaireAgent = $this->prixUnitaireParticulierAgent(
+                    $prixParticuliers,
+                    (int) $ticket->particulier_agent_id,
+                    (int) $ticket->id_usine,
+                    $ticket->date_ticket?->format('Y-m-d')
+                );
+
+                if ($prixUnitaireAgent !== null && (float) $ticket->poids > 0) {
+                    $montantCalcule = $prixUnitaireAgent * (float) $ticket->poids;
+                }
+            }
+
             $ticketsArray[] = [
                 'id_ticket' => $ticket->id_ticket,
                 'numero_ticket' => $ticket->numero_ticket,
@@ -109,6 +165,8 @@ class TicketController extends Controller
                 'nom_groupe' => $ticket->particulierAgent?->groupe?->nom_groupe ?? '-',
                 'particulier_agent_id' => $ticket->particulier_agent_id,
                 'prix_unitaire' => $ticket->prix_unitaire,
+                'prix_unitaire_agent' => $prixUnitaireAgent,
+                'montant_calcule' => $montantCalcule,
                 'montant_paie' => $ticket->montant_paie,
                 'statut_ticket' => $ticket->statut_ticket,
                 'created_at' => $ticket->created_at ? $ticket->created_at->format('Y-m-d H:i:s') : null,
