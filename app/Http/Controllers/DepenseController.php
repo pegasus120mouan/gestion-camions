@@ -326,6 +326,10 @@ class DepenseController extends Controller
         // Récupérer les chefs des chargeurs
         $chefChargeurs = \App\Models\ChefChargeur::orderBy('nom')->get();
 
+        $parcsParPont = \App\Models\Parc::where('statut', 'actif')
+            ->get()
+            ->groupBy('id_pont');
+
         // Statistiques des fiches de sortie
         $totalFiches = FicheSortie::count();
         $fichesEnAttente = FicheSortie::whereNull('date_dechargement')->count();
@@ -341,6 +345,7 @@ class DepenseController extends Controller
             'totalFiches' => $totalFiches,
             'fichesEnAttente' => $fichesEnAttente,
             'fichesDechargees' => $fichesDechargees,
+            'parcsParPont' => $parcsParPont,
             'external_error' => null,
         ]);
     }
@@ -1320,36 +1325,52 @@ class DepenseController extends Controller
 
     public function updateDechargement(Request $request, int $ficheId)
     {
+        $ficheSortie = FicheSortie::findOrFail($ficheId);
+
+        $redirectBack = fn (array $errors = []) => redirect()
+            ->back()
+            ->withInput()
+            ->with('open_dechargement_modal', $ficheId)
+            ->withErrors($errors);
+
+        $request->session()->flash('open_dechargement_modal', $ficheId);
+
         $validated = $request->validate([
             'date_dechargement' => ['required', 'date'],
+            'numero_ticket' => [
+                'required',
+                'string',
+                'max:100',
+                \Illuminate\Validation\Rule::unique('fiches_sortie', 'numero_ticket')->ignore($ficheId),
+            ],
             'poids_pont' => ['required', 'numeric', 'min:0.01'],
             'prix_unitaire_camion' => ['nullable', 'numeric', 'min:0'],
             'montant_camion' => ['nullable', 'numeric', 'min:0'],
-            'parc_id' => ['nullable', 'exists:parcs,id'],
+            'parc_id' => ['required', 'exists:parcs,id'],
+        ], [
+            'numero_ticket.required' => 'Le numéro de ticket est obligatoire.',
+            'numero_ticket.unique' => 'Ce numéro de ticket existe déjà sur une autre fiche de sortie.',
+            'parc_id.required' => 'Sélectionnez un parc pour le déchargement.',
         ]);
 
-        $ficheSortie = FicheSortie::findOrFail($ficheId);
+        $numeroTicket = trim($validated['numero_ticket']);
+        if ($numeroTicket === '') {
+            return $redirectBack(['numero_ticket' => 'Le numéro de ticket est obligatoire.']);
+        }
 
         $dejaDecharge = $ficheSortie->date_dechargement !== null;
 
-        $parcId = (int) ($validated['parc_id'] ?? $ficheSortie->parc_id ?? 0);
-        if ($parcId <= 0 && $ficheSortie->stock_id) {
-            $parcId = (int) (Stock::query()->where('id', $ficheSortie->stock_id)->value('parc_id') ?? 0);
-        }
-
-        if ($parcId <= 0) {
-            return redirect()->back()->withErrors(['error' => 'Aucun parc associé à cette fiche. Sélectionnez un parc.']);
-        }
+        $parcId = (int) $validated['parc_id'];
 
         $parc = \App\Models\Parc::find($parcId);
         if (!$parc || $parc->id_pont != $ficheSortie->id_pont) {
-            return redirect()->back()->withErrors(['error' => 'Parc invalide pour ce pont.']);
+            return $redirectBack(['parc_id' => 'Parc invalide pour ce pont.']);
         }
 
         $stockOuvert = $this->resoudreStockPourDechargement($ficheSortie, $parc->id);
 
         if (!$stockOuvert) {
-            return redirect()->back()->withErrors(['error' => 'Aucun stock ouvert pour le parc "' . $parc->nom . '" avec ce produit.']);
+            return $redirectBack(['parc_id' => 'Aucun stock ouvert pour ce parc avec le produit « ' . ($ficheSortie->nom_produit ?? '-') . ' ».']);
         }
 
         $poidsDecharge = (float) $validated['poids_pont'];
@@ -1368,6 +1389,7 @@ class DepenseController extends Controller
 
         $ficheSortie->update([
             'date_dechargement' => $validated['date_dechargement'],
+            'numero_ticket' => $numeroTicket,
             'poids_pont' => $poidsDecharge,
             'prix_unitaire_camion' => $prixUnitaireCamion,
             'montant_camion' => $montantCamion,

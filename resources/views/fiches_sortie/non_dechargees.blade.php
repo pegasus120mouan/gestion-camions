@@ -7,6 +7,24 @@
       <span class="badge bg-warning fs-6">{{ $fiches->total() }} fiche(s) en attente</span>
     </div>
 
+    @if(session('success'))
+      <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    @endif
+
+    @if($errors->any())
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <ul class="mb-0">
+          @foreach($errors->all() as $error)
+            <li>{{ $error }}</li>
+          @endforeach
+        </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    @endif
+
     <!-- Filtres de recherche -->
     <div class="card mb-4">
       <div class="card-header">
@@ -197,14 +215,23 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Date de déchargement <span class="text-danger">*</span></label>
-            <input type="date" name="date_dechargement" class="form-control" value="{{ date('Y-m-d') }}" required />
+            <input type="date" name="date_dechargement" class="form-control" value="{{ old('date_dechargement', date('Y-m-d')) }}" required />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">N° ticket <span class="text-danger">*</span></label>
+            <input type="text" name="numero_ticket" class="form-control @error('numero_ticket') is-invalid @enderror"
+              value="{{ old('numero_ticket', $f->numero_ticket ?? '') }}" placeholder="Numéro du ticket" maxlength="100" required />
+            @error('numero_ticket')
+              <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+            <small class="text-muted">Obligatoire et unique — un numéro déjà utilisé sera refusé.</small>
           </div>
           @if($f->nom_produit)
             <p class="mb-2"><strong>Produit:</strong> {{ $f->nom_produit }}</p>
           @endif
           <div class="mb-3">
             <label class="form-label">Poids (kg) <span class="text-danger">*</span></label>
-            <input type="number" name="poids_pont" class="form-control" value="{{ $f->poids_pont }}" placeholder="Poids en kg" min="0.01" step="0.01" required />
+            <input type="number" name="poids_pont" class="form-control" value="{{ old('poids_pont', $f->poids_pont) }}" placeholder="Poids en kg" min="0.01" step="0.01" required />
             <small class="text-muted">Le poids sera déduit du stock ouvert du parc sélectionné.</small>
           </div>
         </div>
@@ -217,5 +244,17 @@
   </div>
 </div>
 @endforeach
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var openModalId = @json(session('open_dechargement_modal'));
+  if (openModalId) {
+    var modalEl = document.getElementById('modalDechargement' + openModalId);
+    if (modalEl && window.bootstrap) {
+      new bootstrap.Modal(modalEl).show();
+    }
+  }
+});
+</script>
 
 @endsection

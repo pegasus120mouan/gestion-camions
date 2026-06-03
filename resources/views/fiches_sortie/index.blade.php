@@ -6,6 +6,24 @@
       <h4 class="mb-0">Liste des fiches de sortie</h4>
     </div>
 
+    @if(session('success'))
+      <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    @endif
+
+    @if($errors->any())
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <ul class="mb-0">
+          @foreach($errors->all() as $error)
+            <li>{{ $error }}</li>
+          @endforeach
+        </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    @endif
+
     <!-- Filtres de recherche -->
     <div class="card mb-4">
       <div class="card-header">
@@ -102,6 +120,7 @@
               <th>Usine</th>
               <th>Produit</th>
               <th>Date déchargement</th>
+              <th>N° ticket</th>
               <th>Poids (kg)</th>
               <th>Actions</th>
             </tr>
@@ -133,6 +152,13 @@
                   @endif
                 </td>
                 <td>
+                  @if($f->numero_ticket)
+                    <span class="fw-medium">{{ $f->numero_ticket }}</span>
+                  @else
+                    <span class="text-muted">-</span>
+                  @endif
+                </td>
+                <td>
                   @if($f->poids_pont)
                     {{ number_format((float)$f->poids_pont, 0, ',', ' ') }}
                   @else
@@ -158,7 +184,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="9" class="text-center">Aucune fiche de sortie</td>
+                <td colspan="10" class="text-center">Aucune fiche de sortie</td>
               </tr>
             @endforelse
           </tbody>
@@ -443,24 +469,60 @@
               </p>
             @endif
           </div>
-          @if($f->parc_id)
-            <input type="hidden" name="parc_id" value="{{ $f->parc_id }}">
-          @endif
+          <div class="mb-3">
+            <label class="form-label">Parc <span class="text-danger">*</span></label>
+            <select name="parc_id" class="form-select @error('parc_id') is-invalid @enderror" required>
+              <option value="">-- Sélectionner un parc --</option>
+              @php
+                $parcsForPont = $parcsParPont[$f->id_pont] ?? collect();
+              @endphp
+              @foreach($parcsForPont as $parc)
+                @php
+                  $stockOuvertParc = \App\Models\Stock::where('parc_id', $parc->id)
+                      ->where('type', 'entree')
+                      ->where('statut', 'ouvert')
+                      ->when($f->produit_id, fn($q) => $q->where('produit_id', $f->produit_id))
+                      ->first();
+                  $selectedParc = (int) old('parc_id', $f->parc_id ?? 0) === (int) $parc->id;
+                @endphp
+                @if($stockOuvertParc)
+                  <option value="{{ $parc->id }}" @selected($selectedParc)>{{ $parc->nom }}</option>
+                @else
+                  <option value="{{ $parc->id }}" disabled>{{ $parc->nom }} (pas de stock ouvert{{ $f->nom_produit ? ' pour ' . $f->nom_produit : '' }})</option>
+                @endif
+              @endforeach
+            </select>
+            @error('parc_id')
+              <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+            @if($parcsForPont->isEmpty())
+              <small class="text-danger">Aucun parc pour ce pont. <a href="{{ route('parcs.index') }}">Créer un parc</a></small>
+            @endif
+          </div>
           <hr>
           <div class="mb-3">
             <label class="form-label">Date de déchargement <span class="text-danger">*</span></label>
-            <input type="date" name="date_dechargement" class="form-control" value="{{ $f->date_dechargement ? $f->date_dechargement->format('Y-m-d') : date('Y-m-d') }}" required>
+            <input type="date" name="date_dechargement" class="form-control" value="{{ old('date_dechargement', $f->date_dechargement ? $f->date_dechargement->format('Y-m-d') : date('Y-m-d')) }}" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">N° ticket <span class="text-danger">*</span></label>
+            <input type="text" name="numero_ticket" class="form-control @error('numero_ticket') is-invalid @enderror"
+              value="{{ old('numero_ticket', $f->numero_ticket ?? '') }}" placeholder="Numéro du ticket" maxlength="100" required />
+            @error('numero_ticket')
+              <div class="invalid-feedback">{{ $message }}</div>
+            @enderror
+            <small class="text-muted">Obligatoire et unique — un numéro déjà utilisé sera refusé.</small>
           </div>
           <div class="mb-3">
             <label class="form-label">Poids (kg) <span class="text-danger">*</span></label>
-            <input type="number" name="poids_pont" id="poids_pont_{{ $f->id }}" class="form-control" value="{{ $f->poids_pont ?? '' }}" placeholder="Poids en kg" min="0.01" step="0.01" required onchange="calculerMontantCamion({{ $f->id }})" oninput="calculerMontantCamion({{ $f->id }})">
+            <input type="number" name="poids_pont" id="poids_pont_{{ $f->id }}" class="form-control" value="{{ old('poids_pont', $f->poids_pont ?? '') }}" placeholder="Poids en kg" min="0.01" step="0.01" required onchange="calculerMontantCamion({{ $f->id }})" oninput="calculerMontantCamion({{ $f->id }})">
             @if($stockFiche)
               <small class="text-muted">Le poids sera déduit du stock du parc {{ $f->nom_parc ?? $stockFiche->nom_parc }}. Si le déchargement dépasse le stock disponible, l'écart est enregistré comme gain.</small>
             @endif
           </div>
           <div class="mb-3">
             <label class="form-label">Prix unitaire (FCFA/kg)</label>
-            <input type="number" name="prix_unitaire_camion" id="prix_unitaire_camion_{{ $f->id }}" class="form-control" value="{{ $f->prix_unitaire_camion ?? '' }}" placeholder="Ex: 150" min="0" step="1" onchange="calculerMontantCamion({{ $f->id }})" oninput="calculerMontantCamion({{ $f->id }})">
+            <input type="number" name="prix_unitaire_camion" id="prix_unitaire_camion_{{ $f->id }}" class="form-control" value="{{ old('prix_unitaire_camion', $f->prix_unitaire_camion ?? '') }}" placeholder="Ex: 150" min="0" step="1" onchange="calculerMontantCamion({{ $f->id }})" oninput="calculerMontantCamion({{ $f->id }})">
           </div>
           <div class="mb-3">
             <label class="form-label">Montant camion</label>
@@ -533,5 +595,19 @@ function calculerMontantCamion(ficheId) {
   document.getElementById('montant_camion_' + ficheId).value = montant;
   document.getElementById('montant_camion_display_' + ficheId).value = montant.toLocaleString('fr-FR').replace(/,/g, ' ');
 }
+
+document.addEventListener('DOMContentLoaded', function () {
+  var openModalId = @json(session('open_dechargement_modal'));
+  if (openModalId) {
+    var modalEl = document.getElementById('modalDechargement' + openModalId);
+    if (modalEl && window.bootstrap) {
+      new bootstrap.Modal(modalEl).show();
+    }
+  }
+
+  @foreach($fiches as $f)
+  calculerMontantCamion({{ $f->id }});
+  @endforeach
+});
 </script>
 @endsection
