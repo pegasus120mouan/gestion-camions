@@ -85,7 +85,6 @@
               <th>Poids Usine</th>
               <th>Prix U</th>
               <th>Montant</th>
-              <th>Conformité</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -136,28 +135,15 @@
                   @endif
                 </td>
                 <td>
-                  @if($t['conformite'] === 'conforme')
-                    <span class="badge bg-success">Conforme</span>
-                  @elseif($t['conformite'] === 'non conforme')
-                    <span class="badge bg-danger">Non conforme</span>
-                  @else
-                    <span class="badge bg-secondary">Non vérifié</span>
-                  @endif
-                </td>
-                <td>
                   <button type="button" class="btn btn-sm btn-outline-primary me-1" data-bs-toggle="modal" data-bs-target="#modalTicketDetail{{ $loop->index }}" title="Voir détails">
                     <i class="bx bx-show"></i>
                   </button>
-                  @if($t['conformite'] !== 'conforme')
+                  <a href="{{ route('tickets.pdf', ['id' => $t['id_ticket']]) }}" class="btn btn-sm btn-outline-secondary me-1" target="_blank" rel="noopener" title="Imprimer en PDF">
+                    <i class="bx bx-printer"></i>
+                  </a>
                   <button type="button" class="btn btn-sm btn-outline-warning me-1" data-bs-toggle="modal" data-bs-target="#modalEditTicket{{ $loop->index }}" title="Modifier">
                     <i class="bx bx-edit"></i>
                   </button>
-                  @endif
-                  @if($t['conformite'] === 'Conforme' && empty($t['fiche_id']))
-                  <button type="button" class="btn btn-sm btn-outline-success me-1" data-bs-toggle="modal" data-bs-target="#modalAssocierFiche{{ $loop->index }}" title="Associer à une fiche">
-                    <i class="bx bx-link"></i>
-                  </button>
-                  @endif
                   <button type="button" class="btn btn-sm btn-outline-danger me-1" data-bs-toggle="modal" data-bs-target="#modalDeleteTicket{{ $loop->index }}" title="Supprimer">
                     <i class="bx bx-trash"></i>
                   </button>
@@ -165,7 +151,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="12" class="text-center">Aucun ticket</td>
+                <td colspan="10" class="text-center">Aucun ticket</td>
               </tr>
             @endforelse
           </tbody>

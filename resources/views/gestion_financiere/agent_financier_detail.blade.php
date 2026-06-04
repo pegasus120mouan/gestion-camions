@@ -16,8 +16,11 @@
           <span class="badge bg-secondary">{{ $agent['contact'] }}</span>
         @endif
       </div>
-      <div>
-        <a href="{{ route('gestionfinanciere.montant_agent') }}" class="btn btn-secondary">
+      <div class="d-flex gap-2">
+        <a href="{{ route('gestionfinanciere.synthese_produit', $queryFiltres ?? []) }}" class="btn btn-outline-info btn-sm">
+          <i class="bx bx-pie-chart-alt me-1"></i>Synthèse produits
+        </a>
+        <a href="{{ route('gestionfinanciere.montant_agent', $queryFiltres ?? []) }}" class="btn btn-secondary">
           <i class="bx bx-arrow-back me-1"></i>Retour
         </a>
       </div>
@@ -30,13 +33,30 @@
       </div>
     @endif
 
+    @include('gestion_financiere._filtres_montant_agent', [
+      'actionRoute' => route('gestionfinanciere.agent.show', ['id_agent' => $idAgent]),
+      'filtres' => $filtres,
+      'filtresActifs' => $filtresActifs,
+      'produits' => $produits,
+      'usines' => $usines,
+    ])
+
     <div class="row mb-4">
       <div class="col-md-4">
         <div class="card" style="background-color: #f8d7da; border-left: 4px solid #dc3545;">
           <div class="card-body">
-            <h6 class="card-title" style="color: #842029;">Montant dû</h6>
+            <h6 class="card-title" style="color: #842029;">
+              Montant dû
+              @if(!empty($filtresActifs))
+                <small class="fw-normal">(filtre)</small>
+              @endif
+            </h6>
             <h3 class="mb-0" style="color: #842029;">{{ number_format($montantDu, 0, ',', ' ') }} FCFA</h3>
-            <small class="text-muted">Montants enregistrés au déchargement (tarif selon usine et type de camion : Pisteur, PGF ou autre)</small>
+            @if(!empty($filtresActifs))
+              <small class="text-muted">Total agent : {{ number_format($montantDuGlobal, 0, ',', ' ') }} FCFA</small>
+            @else
+              <small class="text-muted">Fiches déchargées (tarif produit / usine / type camion)</small>
+            @endif
           </div>
         </div>
       </div>
@@ -45,6 +65,7 @@
           <div class="card-body">
             <h6 class="card-title" style="color: #0f5132;">Montant payé</h6>
             <h3 class="mb-0" style="color: #0f5132;">{{ number_format($montantPaye, 0, ',', ' ') }} FCFA</h3>
+            <small class="text-muted">Paiements globaux à l’agent</small>
           </div>
         </div>
       </div>
@@ -53,53 +74,120 @@
           <div class="card-body">
             <h6 class="card-title" style="color: #664d03;">Reste à payer</h6>
             <h3 class="mb-0" style="color: #664d03;">{{ number_format($resteAPayer, 0, ',', ' ') }} FCFA</h3>
+            <small class="text-muted">Basé sur le total dû de l’agent</small>
           </div>
         </div>
       </div>
     </div>
 
     <div class="row">
-      <div class="col-md-6">
-        <div class="card">
+      <div class="col-12">
+        <div class="card mb-4">
           <div class="card-header" style="background-color: #f8d7da; border-bottom: 1px solid #f5c2c7;">
-            <h5 class="card-title mb-0" style="color: #842029;"><i class="bx bx-file me-2"></i>Fiches déchargées ({{ count($fichesAvecMontant) }})</h5>
+            <h5 class="card-title mb-0" style="color: #842029;">
+              <i class="bx bx-layer me-2"></i>Ventilation par produit et usine
+            </h5>
+          </div>
+          <div class="card-body p-0">
+            @forelse($groupesProduitUsine as $groupe)
+              <div class="border-bottom p-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h6 class="mb-0">
+                    <span class="badge bg-label-primary">{{ $groupe['produit'] }}</span>
+                    <span class="text-danger fw-bold ms-2">{{ number_format($groupe['montant_total'], 0, ',', ' ') }} FCFA</span>
+                  </h6>
+                  <small class="text-muted">{{ $groupe['nb_fiches'] }} fiche(s) · {{ number_format($groupe['poids_total'], 0, ',', ' ') }} kg</small>
+                </div>
+                @foreach($groupe['usines'] as $blocUsine)
+                  <div class="ms-3 mb-2">
+                    <div class="fw-medium text-secondary mb-1">
+                      <i class="bx bx-buildings me-1"></i>{{ $blocUsine['usine'] }}
+                      — {{ number_format($blocUsine['montant_total'], 0, ',', ' ') }} FCFA
+                      <small class="text-muted">({{ $blocUsine['nb_fiches'] }} fiche(s))</small>
+                    </div>
+                  </div>
+                @endforeach
+              </div>
+            @empty
+              <p class="text-center text-muted py-4 mb-0">Aucune fiche pour ces critères</p>
+            @endforelse
+          </div>
+        </div>
+
+        <div class="card mb-4">
+          <div class="card-header" style="background-color: #f8d7da; border-bottom: 1px solid #f5c2c7;">
+            <h5 class="card-title mb-0" style="color: #842029;">
+              <i class="bx bx-file me-2"></i>Détail des fiches ({{ count($fichesAvecMontant) }})
+            </h5>
           </div>
           <div class="table-responsive">
-            <table class="table table-sm">
-              <thead>
+            <table class="table table-sm table-hover mb-0">
+              <thead class="table-light">
                 <tr>
                   <th>Date</th>
                   <th>Véhicule</th>
+                  <th>Produit</th>
                   <th>Usine</th>
+                  <th class="text-end">Poids</th>
                   <th class="text-end">PU</th>
                   <th class="text-end">Montant</th>
                 </tr>
               </thead>
               <tbody>
-                @forelse($fichesAvecMontant as $item)
-                  <tr>
-                    <td>{{ $item['fiche']->date_chargement ? $item['fiche']->date_chargement->format('d/m/Y') : '-' }}</td>
-                    <td>{{ $item['fiche']->matricule_vehicule ?? '-' }}</td>
-                    <td><small>{{ $item['fiche']->usine ?? '-' }}</small></td>
-                    <td class="text-end">
-                      @if($item['prix_unitaire'] !== null)
-                        {{ number_format($item['prix_unitaire'], 0, ',', ' ') }}
-                      @else
-                        <span class="text-muted">—</span>
-                      @endif
-                    </td>
-                    <td class="text-end text-danger">{{ $item['montant'] > 0 ? number_format($item['montant'], 0, ',', ' ') . ' FCFA' : '—' }}</td>
+                @forelse($groupesProduitUsine as $groupe)
+                  @foreach($groupe['usines'] as $blocUsine)
+                    @foreach($blocUsine['lignes'] as $item)
+                      <tr>
+                        <td>{{ $item['fiche']->date_chargement ? $item['fiche']->date_chargement->format('d/m/Y') : '-' }}</td>
+                        <td>{{ $item['fiche']->matricule_vehicule ?? '-' }}</td>
+                        <td>
+                          @if($item['fiche']->nom_produit)
+                            <span class="badge bg-label-info">{{ $item['fiche']->nom_produit }}</span>
+                          @else
+                            <span class="text-muted">—</span>
+                          @endif
+                        </td>
+                        <td><small>{{ $item['fiche']->usine ?? '—' }}</small></td>
+                        <td class="text-end">
+                          @if($item['fiche']->poids_pont)
+                            {{ number_format((float) $item['fiche']->poids_pont, 0, ',', ' ') }}
+                          @else
+                            —
+                          @endif
+                        </td>
+                        <td class="text-end">
+                          @if($item['prix_unitaire'] !== null)
+                            {{ number_format($item['prix_unitaire'], 0, ',', ' ') }}
+                          @else
+                            <span class="text-muted">—</span>
+                          @endif
+                        </td>
+                        <td class="text-end text-danger">{{ $item['montant'] > 0 ? number_format($item['montant'], 0, ',', ' ') . ' FCFA' : '—' }}</td>
+                      </tr>
+                    @endforeach
+                    <tr class="table-secondary">
+                      <td colspan="4" class="text-end"><strong>Sous-total {{ $blocUsine['usine'] }}</strong></td>
+                      <td class="text-end"><strong>{{ number_format($blocUsine['poids_total'], 0, ',', ' ') }}</strong></td>
+                      <td></td>
+                      <td class="text-end text-danger"><strong>{{ number_format($blocUsine['montant_total'], 0, ',', ' ') }} FCFA</strong></td>
+                    </tr>
+                  @endforeach
+                  <tr class="table-warning">
+                    <td colspan="4" class="text-end"><strong>Total {{ $groupe['produit'] }}</strong></td>
+                    <td class="text-end"><strong>{{ number_format($groupe['poids_total'], 0, ',', ' ') }}</strong></td>
+                    <td></td>
+                    <td class="text-end text-danger"><strong>{{ number_format($groupe['montant_total'], 0, ',', ' ') }} FCFA</strong></td>
                   </tr>
                 @empty
                   <tr>
-                    <td colspan="5" class="text-center">Aucune fiche</td>
+                    <td colspan="7" class="text-center">Aucune fiche</td>
                   </tr>
                 @endforelse
               </tbody>
               @if(count($fichesAvecMontant) > 0)
                 <tfoot>
-                  <tr class="table-warning">
-                    <td colspan="4"><strong>Total dû (lignes calculées)</strong></td>
+                  <tr class="table-danger">
+                    <td colspan="6" class="text-end"><strong>Total affiché</strong></td>
                     <td class="text-end"><strong>{{ number_format($montantDu, 0, ',', ' ') }} FCFA</strong></td>
                   </tr>
                 </tfoot>
@@ -109,7 +197,7 @@
         </div>
       </div>
 
-      <div class="col-md-6">
+      <div class="col-12">
         <div class="card">
           <div class="card-header d-flex justify-content-between align-items-center" style="background-color: #d1e7dd; border-bottom: 1px solid #badbcc;">
             <h5 class="card-title mb-0" style="color: #0f5132;"><i class="bx bx-plus-circle me-2"></i>Paiements ({{ $paiements->count() }})</h5>
@@ -118,7 +206,7 @@
             </button>
           </div>
           <div class="table-responsive">
-            <table class="table table-sm">
+            <table class="table table-sm mb-0">
               <thead>
                 <tr>
                   <th>Date</th>
@@ -172,7 +260,7 @@
         @csrf
         <div class="modal-body">
           <div class="alert alert-info">
-            <strong>Reste à payer:</strong> {{ number_format($resteAPayer, 0, ',', ' ') }} FCFA
+            <strong>Reste à payer (global):</strong> {{ number_format($resteAPayer, 0, ',', ' ') }} FCFA
           </div>
           <div class="mb-3">
             <label class="form-label">Montant (FCFA)</label>
@@ -205,4 +293,6 @@
     </div>
   </div>
 </div>
+
+@include('gestion_financiere._filtres_montant_agent_js')
 @endsection

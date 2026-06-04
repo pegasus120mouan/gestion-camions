@@ -12,6 +12,8 @@ class PrixAgent extends Model
         'id_agent',
         'id_usine',
         'nom_usine',
+        'produit_id',
+        'nom_produit',
         'type',
         'prix',
         'date_debut',
@@ -23,4 +25,9 @@ class PrixAgent extends Model
         'date_debut' => 'date',
         'date_fin' => 'date',
     ];
+
+    public function produit()
+    {
+        return $this->belongsTo(Produit::class);
+    }
 }

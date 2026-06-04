@@ -296,6 +296,11 @@
                     <div class="text-truncate" data-i18n="Accordion">Montant Pisteur</div>
                   </a>
                 </li>
+                <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.synthese_produit') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Synthèse par produit</div>
+                  </a>
+                </li>
                   <li class="menu-item">
                   <a href="{{ route('gestionfinanciere.montant_chef_chargeur') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Accordion">Montant chef chargeur</div>

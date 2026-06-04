@@ -6,10 +6,13 @@ use App\Models\CamionEtat;
 use App\Models\Depense;
 use App\Models\FicheSortie;
 use App\Models\Stock;
+use App\Models\Usine;
 use App\Services\MontantAgentFicheService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 class DepenseController extends Controller
 {
@@ -113,6 +116,67 @@ class DepenseController extends Controller
         }
 
         return 'Aucun stock actif disponible pour ce produit sur ce pont.';
+    }
+
+    /**
+     * Usines locales groupées par produit_id pour les listes déroulantes (fiche de sortie).
+     *
+     * @return array<int|string, list<array{nom: string, code: string}>>
+     */
+    private function usinesLocalesParProduitPourSelect(): array
+    {
+        if (!Schema::hasColumn('usines', 'produit_id')) {
+            return [];
+        }
+
+        return Usine::query()
+            ->whereNotNull('produit_id')
+            ->orderBy('nom_usine')
+            ->get()
+            ->groupBy('produit_id')
+            ->map(fn ($group) => $group->map(fn (Usine $u) => [
+                'nom' => $u->nom_usine,
+                'code' => $u->code_usine ?? '',
+            ])->values()->all())
+            ->all();
+    }
+
+    private function usineAppartientAuProduit(?string $nomUsine, int $produitId): bool
+    {
+        if ($nomUsine === null || $nomUsine === '') {
+            return true;
+        }
+
+        if (!Schema::hasColumn('usines', 'produit_id')) {
+            return true;
+        }
+
+        return Usine::query()
+            ->where('produit_id', $produitId)
+            ->where('nom_usine', $nomUsine)
+            ->exists();
+    }
+
+    /**
+     * @return array{produits: \Illuminate\Database\Eloquent\Collection, usinesParProduit: array, usinesFiltre: list<array{nom_usine: string}>}
+     */
+    private function chargerDonneesUsinesProduitsFiches(): array
+    {
+        $produits = \App\Models\Produit::orderBy('nom')->get();
+        $usinesParProduit = $this->usinesLocalesParProduitPourSelect();
+        $usinesFiltre = Schema::hasColumn('usines', 'produit_id')
+            ? Usine::query()
+                ->orderBy('nom_usine')
+                ->get()
+                ->map(fn (Usine $u) => ['nom_usine' => $u->nom_usine])
+                ->all()
+            : [];
+
+        return [
+            'produits' => $produits,
+            'usinesParProduit' => $usinesParProduit,
+            'usinesFiltre' => $usinesFiltre,
+        ];
     }
 
     public function verifierStockPontProduit(Request $request)
@@ -221,6 +285,11 @@ class DepenseController extends Controller
             $query->where('nom_pont', $request->input('pont'));
         }
 
+        // Filtre par produit
+        if ($request->filled('produit_id')) {
+            $query->where('produit_id', $request->input('produit_id'));
+        }
+
         // Filtre par usine
         if ($request->filled('usine')) {
             $query->where('usine', $request->input('usine'));
@@ -258,7 +327,6 @@ class DepenseController extends Controller
         $vehicules = [];
         $ponts = [];
         $agents = [];
-        $usines = [];
 
         try {
             $camionsResponse = Http::acceptJson()
@@ -313,15 +381,7 @@ class DepenseController extends Controller
             $agents = $allAgents;
         } catch (\Throwable $e) {}
 
-        try {
-            $usinesResponse = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
-            if ($usinesResponse->successful()) {
-                $usines = $usinesResponse->json('usines') ?? [];
-            }
-        } catch (\Throwable $e) {}
+        $donneesUsinesProduits = $this->chargerDonneesUsinesProduitsFiches();
 
         // Récupérer les chefs des chargeurs
         $chefChargeurs = \App\Models\ChefChargeur::orderBy('nom')->get();
@@ -340,7 +400,9 @@ class DepenseController extends Controller
             'vehicules' => $vehicules,
             'ponts' => $ponts,
             'agents' => $agents,
-            'usines' => $usines,
+            'usines' => $donneesUsinesProduits['usinesFiltre'],
+            'produits' => $donneesUsinesProduits['produits'],
+            'usinesParProduit' => $donneesUsinesProduits['usinesParProduit'],
             'chefChargeurs' => $chefChargeurs,
             'totalFiches' => $totalFiches,
             'fichesEnAttente' => $fichesEnAttente,
@@ -415,15 +477,7 @@ class DepenseController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        try {
-            $usinesResponse = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
-            if ($usinesResponse->successful()) {
-                $usines = $usinesResponse->json('usines') ?? [];
-            }
-        } catch (\Throwable $e) {}
+        $donneesUsinesProduits = $this->chargerDonneesUsinesProduitsFiches();
 
         // Récupérer tous les parcs actifs groupés par pont
         $parcsParPont = \App\Models\Parc::where('statut', 'actif')
@@ -434,7 +488,7 @@ class DepenseController extends Controller
             'fiches' => $fiches,
             'vehicules' => $vehicules,
             'ponts' => $ponts,
-            'usines' => $usines,
+            'usines' => $donneesUsinesProduits['usinesFiltre'],
             'parcsParPont' => $parcsParPont,
             'external_error' => null,
         ]);
@@ -505,21 +559,13 @@ class DepenseController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        try {
-            $usinesResponse = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
-            if ($usinesResponse->successful()) {
-                $usines = $usinesResponse->json('usines') ?? [];
-            }
-        } catch (\Throwable $e) {}
+        $donneesUsinesProduits = $this->chargerDonneesUsinesProduitsFiches();
 
         return view('fiches_sortie.dechargees', [
             'fiches' => $fiches,
             'vehicules' => $vehicules,
             'ponts' => $ponts,
-            'usines' => $usines,
+            'usines' => $donneesUsinesProduits['usinesFiltre'],
             'external_error' => null,
         ]);
     }
@@ -544,11 +590,10 @@ class DepenseController extends Controller
             $displayMatricule = $existingDepense?->matricule_vehicule ?: '';
         }
 
-        // Charger les ponts, agents et usines pour le modal fiche de sortie
+        // Charger les ponts et agents pour le modal fiche de sortie
         $timeout = 10;
         $ponts = [];
         $agents = [];
-        $usines = [];
 
         try {
             $pontsResponse = Http::acceptJson()
@@ -595,18 +640,6 @@ class DepenseController extends Controller
             // Ignorer l'erreur
         }
 
-        try {
-            $usinesResponse = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
-            if ($usinesResponse->successful()) {
-                $usines = $usinesResponse->json('usines') ?? [];
-            }
-        } catch (\Throwable $e) {
-            // Ignorer l'erreur
-        }
-
         // Charger les chefs des chargeurs
         $chefChargeurs = \App\Models\ChefChargeur::orderBy('nom')->get();
 
@@ -616,6 +649,7 @@ class DepenseController extends Controller
 
         // Charger les produits
         $produits = \App\Models\Produit::orderBy('nom')->get();
+        $usinesParProduit = $this->usinesLocalesParProduitPourSelect();
 
         return view('depenses.index', [
             'depenses' => $depenses,
@@ -626,7 +660,7 @@ class DepenseController extends Controller
             'vehicule_id' => $vehiculeId,
             'ponts' => $ponts,
             'agents' => $agents,
-            'usines' => $usines,
+            'usinesParProduit' => $usinesParProduit,
             'chefChargeurs' => $chefChargeurs,
             'services' => $services,
             'fournisseurs' => $fournisseurs,
@@ -876,6 +910,15 @@ class DepenseController extends Controller
             return back()->withErrors(['error' => $message]);
         }
 
+        if (!$this->usineAppartientAuProduit($validated['usine'] ?? null, (int) $validated['produit_id'])) {
+            $message = "L'usine sélectionnée n'est pas associée à ce produit.";
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            return back()->withErrors(['usine' => $message]);
+        }
+
         // Utiliser le matricule du formulaire
         $matricule = $validated['matricule_vehicule'];
 
@@ -1012,9 +1055,14 @@ class DepenseController extends Controller
             'date_dechargement' => ['nullable', 'date'],
             'poids_pont' => ['nullable', 'numeric', 'min:0'],
             'usine' => ['nullable', 'string', 'max:255'],
+            'produit_id' => ['required', 'integer', 'exists:produits,id'],
             'pont_display' => ['nullable', 'string'],
             'agent_display' => ['nullable', 'string'],
         ]);
+
+        if (!$this->usineAppartientAuProduit($validated['usine'] ?? null, (int) $validated['produit_id'])) {
+            return back()->withErrors(['usine' => "L'usine sélectionnée n'est pas associée à ce produit."])->withInput();
+        }
 
         $etatVehicule = CamionEtat::query()
             ->where('vehicule_id', $validated['vehicule_id'])
@@ -1026,6 +1074,9 @@ class DepenseController extends Controller
         if ($this->vehiculeEstEnCoursUtilisation((int) $validated['vehicule_id'])) {
             return back()->withErrors(['error' => "Ce camion est en cours d'utilisation. Impossible de créer une fiche de sortie."]);
         }
+
+        $produit = \App\Models\Produit::find($validated['produit_id']);
+        $nomProduit = $produit ? $produit->nom : null;
 
         // Si matricule_vehicule est vide, récupérer depuis l'API
         $matricule = $validated['matricule_vehicule'] ?? '';
@@ -1126,6 +1177,8 @@ class DepenseController extends Controller
             'nom_pont' => $nomPont,
             'code_pont' => $codePont,
             'usine' => $validated['usine'] ?? null,
+            'produit_id' => $validated['produit_id'],
+            'nom_produit' => $nomProduit,
             'id_agent' => $validated['id_agent'],
             'nom_agent' => $nomAgent,
             'numero_agent' => $numeroAgent,
@@ -1245,12 +1298,20 @@ class DepenseController extends Controller
             'id_pont' => ['required', 'integer'],
             'id_agent' => ['required', 'integer'],
             'id_chef_chargeur' => ['nullable', 'integer'],
+            'produit_id' => ['required', 'integer', 'exists:produits,id'],
             'usine' => ['nullable', 'string', 'max:255'],
             'date_dechargement' => ['nullable', 'date'],
             'poids_pont' => ['nullable', 'numeric', 'min:0'],
             'carburant' => ['nullable', 'integer', 'min:0'],
             'frais_route' => ['nullable', 'integer', 'min:0'],
         ]);
+
+        if (!$this->usineAppartientAuProduit($validated['usine'] ?? null, (int) $validated['produit_id'])) {
+            return back()->withErrors(['usine' => "L'usine sélectionnée n'est pas associée à ce produit."])->withInput();
+        }
+
+        $produit = \App\Models\Produit::find($validated['produit_id']);
+        $nomProduit = $produit ? $produit->nom : null;
 
         // Récupérer les infos du pont depuis l'API
         $timeout = 10;
@@ -1305,6 +1366,8 @@ class DepenseController extends Controller
             'nom_agent' => $nomAgent,
             'numero_agent' => $numeroAgent,
             'id_chef_chargeur' => $validated['id_chef_chargeur'] ?? null,
+            'produit_id' => $validated['produit_id'],
+            'nom_produit' => $nomProduit,
             'usine' => $validated['usine'] ?? null,
             'date_dechargement' => $validated['date_dechargement'] ?? null,
             'poids_pont' => $validated['poids_pont'] ?? null,
@@ -1333,25 +1396,31 @@ class DepenseController extends Controller
             ->with('open_dechargement_modal', $ficheId)
             ->withErrors($errors);
 
-        $request->session()->flash('open_dechargement_modal', $ficheId);
-
-        $validated = $request->validate([
-            'date_dechargement' => ['required', 'date'],
-            'numero_ticket' => [
-                'required',
-                'string',
-                'max:100',
-                \Illuminate\Validation\Rule::unique('fiches_sortie', 'numero_ticket')->ignore($ficheId),
-            ],
-            'poids_pont' => ['required', 'numeric', 'min:0.01'],
-            'prix_unitaire_camion' => ['nullable', 'numeric', 'min:0'],
-            'montant_camion' => ['nullable', 'numeric', 'min:0'],
-            'parc_id' => ['required', 'exists:parcs,id'],
-        ], [
-            'numero_ticket.required' => 'Le numéro de ticket est obligatoire.',
-            'numero_ticket.unique' => 'Ce numéro de ticket existe déjà sur une autre fiche de sortie.',
-            'parc_id.required' => 'Sélectionnez un parc pour le déchargement.',
-        ]);
+        try {
+            $validated = $request->validate([
+                'date_dechargement' => ['required', 'date'],
+                'numero_ticket' => [
+                    'required',
+                    'string',
+                    'max:100',
+                    \Illuminate\Validation\Rule::unique('fiches_sortie', 'numero_ticket')->ignore($ficheId),
+                ],
+                'poids_pont' => ['required', 'numeric', 'min:0.01'],
+                'prix_unitaire_camion' => ['nullable', 'numeric', 'min:0'],
+                'montant_camion' => ['nullable', 'numeric', 'min:0'],
+                'parc_id' => ['required', 'exists:parcs,id'],
+            ], [
+                'numero_ticket.required' => 'Le numéro de ticket est obligatoire.',
+                'numero_ticket.unique' => 'Ce numéro de ticket existe déjà sur une autre fiche de sortie.',
+                'parc_id.required' => 'Sélectionnez un parc pour le déchargement.',
+            ]);
+        } catch (ValidationException $e) {
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('open_dechargement_modal', $ficheId)
+                ->withErrors($e->errors());
+        }
 
         $numeroTicket = trim($validated['numero_ticket']);
         if ($numeroTicket === '') {

@@ -198,6 +198,7 @@ Route::middleware('auth')->group(function () {
     Route::post('pesees/{pesee}/cancel', [PeseeController::class, 'cancel'])->name('pesees.cancel');
     Route::resource('pesees', PeseeController::class)->except(['create']);
     Route::resource('produits', ProduitController::class)->except(['create']);
+    Route::post('/produits/{produit}/usines', [ProduitController::class, 'storeUsine'])->name('produits.usines.store');
 
     Route::get('/gestionfinanciere', [GestionFinanciereController::class, 'index'])->name('gestionfinanciere.index');
     Route::post('/gestionfinanciere', [GestionFinanciereController::class, 'store'])->name('gestionfinanciere.store');
@@ -214,6 +215,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/commis/{commi}', [CommisController::class, 'destroy'])->name('commis.destroy');
 
     Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
+    Route::get('/tickets/{id}/pdf', [TicketController::class, 'exportBordereauPdf'])->name('tickets.pdf');
     Route::get('/tickets/unipalm', [TicketController::class, 'unipalm'])->name('tickets.unipalm');
     Route::post('/tickets/associer-fiche', [TicketController::class, 'associerFiche'])->name('tickets.associer_fiche');
     Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
@@ -356,6 +358,7 @@ Route::middleware('auth')->group(function () {
 
     // Montant Agent (Pisteur)
     Route::get('/gestion-financiere/montant-agent', [MontantAgentController::class, 'index'])->name('gestionfinanciere.montant_agent');
+    Route::get('/gestion-financiere/synthese-produit', [MontantAgentController::class, 'syntheseProduit'])->name('gestionfinanciere.synthese_produit');
     Route::get('/gestion-financiere/agent-financier/{id_agent}', [MontantAgentController::class, 'show'])->name('gestionfinanciere.agent.show');
     Route::post('/gestion-financiere/agent-financier/{id_agent}/paiement', [MontantAgentController::class, 'storePaiement'])->name('gestionfinanciere.paiement_agent.store');
 

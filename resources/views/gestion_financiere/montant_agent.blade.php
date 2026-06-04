@@ -31,25 +31,16 @@
       </div>
     @endif
 
-    <div class="card mb-4">
-      <div class="card-body">
-        <form method="GET" action="{{ route('gestionfinanciere.montant_agent') }}" class="row g-3 align-items-end">
-          <div class="col-md-9">
-            <label class="form-label">Recherche par nom</label>
-            <input type="text" name="q" class="form-control" value="{{ $search ?? request('q') }}" placeholder="Ex: AKA EHOUMAN, AGT-26-PGF..." list="agents_noms_list" autocomplete="off" />
-            <datalist id="agents_noms_list">
-              @foreach($agentNoms ?? [] as $nomAgent)
-                <option value="{{ $nomAgent }}"></option>
-              @endforeach
-            </datalist>
-          </div>
-          <div class="col-md-3 d-flex gap-2">
-            <button type="submit" class="btn btn-primary">Rechercher</button>
-            <a href="{{ route('gestionfinanciere.montant_agent') }}" class="btn btn-outline-secondary">Réinitialiser</a>
-          </div>
-        </form>
-      </div>
-    </div>
+    @include('gestion_financiere._filtres_montant_agent', [
+      'actionRoute' => route('gestionfinanciere.montant_agent'),
+      'filtres' => $filtres,
+      'filtresActifs' => $filtresActifs,
+      'produits' => $produits,
+      'usines' => $usines,
+      'showSearch' => true,
+      'search' => $search,
+      'agentNoms' => $agentNoms,
+    ])
 
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
@@ -60,7 +51,12 @@
           <thead class="table-light">
             <tr>
               <th class="text-uppercase small text-muted">Agent</th>
-              <th class="text-end text-uppercase small text-muted">Montant dû</th>
+              <th class="text-end text-uppercase small text-muted">
+                Montant dû
+                @if(!empty($filtresActifs))
+                  <br><small class="fw-normal">(filtre)</small>
+                @endif
+              </th>
               <th class="text-end text-uppercase small text-muted">Montant payé</th>
               <th class="text-end text-uppercase small text-muted">Reste à payer</th>
               <th class="text-center text-uppercase small text-muted">Actions</th>
@@ -72,10 +68,16 @@
                 $idAgent = $item['agent']['id_agent'] ?? 0;
                 $nomComplet = $item['agent']['nom_complet'] ?? (($item['agent']['nom_agent'] ?? '') . ' ' . ($item['agent']['prenom_agent'] ?? ''));
                 $numeroAgent = $item['agent']['numero_agent'] ?? '';
+                $lienAgent = route('gestionfinanciere.agent.show', array_merge(['id_agent' => $idAgent], array_filter([
+                  'produit_id' => $filtres['produit_id'] ?? null,
+                  'usine' => $filtres['usine'] ?? null,
+                  'date_debut' => $filtres['date_debut'] ?? null,
+                  'date_fin' => $filtres['date_fin'] ?? null,
+                ])));
               @endphp
               <tr>
                 <td>
-                  <a href="{{ route('gestionfinanciere.agent.show', ['id_agent' => $idAgent]) }}" class="text-primary fw-bold">
+                  <a href="{{ $lienAgent }}" class="text-primary fw-bold">
                     {{ trim($nomComplet) ?: '—' }}
                   </a>
                   @if($numeroAgent !== '')
@@ -225,4 +227,6 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 @endif
 @endforeach
+
+@include('gestion_financiere._filtres_montant_agent_js')
 @endsection

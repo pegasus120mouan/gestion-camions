@@ -2,20 +2,21 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\FicheSortie;
 use App\Models\PaiementAgent;
-use App\Services\MontantAgentFicheService;
+use App\Services\MontantAgentReportingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
 class MontantAgentController extends Controller
 {
     public function __construct(
-        private MontantAgentFicheService $montantAgentFiche
+        private MontantAgentReportingService $reporting
     ) {}
 
     public function index(Request $request)
     {
+        $filtres = $this->reporting->filtresDepuisRequest($request);
+        $options = $this->reporting->optionsFiltres();
         $agents = $this->fetchAgentsFromApi();
         $data = [];
 
@@ -25,6 +26,10 @@ class MontantAgentController extends Controller
                 'external_error' => 'Impossible de charger la liste des agents. Vérifiez l’API agents et la connexion réseau, puis rechargez la page.',
                 'search' => trim((string) $request->query('q', '')),
                 'agentNoms' => [],
+                'filtres' => $filtres,
+                'filtresActifs' => false,
+                'produits' => $options['produits'],
+                'usines' => $options['usines'],
             ]);
         }
 
@@ -34,15 +39,21 @@ class MontantAgentController extends Controller
                 continue;
             }
 
-            $montantDu = (int) round($this->calculerMontantDuAgent($idAgent));
+            $montantDu = (int) round($this->reporting->calculerMontantDuAgent($idAgent, $filtres));
+            $montantDuGlobal = (int) round($this->reporting->calculerMontantDuAgent($idAgent, ['id_agent' => $idAgent]));
             $montantPaye = (int) PaiementAgent::where('id_agent', $idAgent)->sum('montant');
-            $resteAPayer = $montantDu - $montantPaye;
+            $filtresActifs = $this->reporting->filtresActifs($filtres);
+
+            if ($filtresActifs && $montantDu === 0) {
+                continue;
+            }
 
             $data[] = [
                 'agent' => $agent,
                 'montant_du' => $montantDu,
+                'montant_du_global' => $montantDuGlobal,
                 'montant_paye' => $montantPaye,
-                'reste_a_payer' => $resteAPayer,
+                'reste_a_payer' => $montantDuGlobal - $montantPaye,
             ];
         }
 
@@ -89,6 +100,32 @@ class MontantAgentController extends Controller
             'external_error' => null,
             'search' => $search,
             'agentNoms' => $agentNoms,
+            'filtres' => $filtres,
+            'filtresActifs' => $this->reporting->filtresActifs($filtres),
+            'produits' => $options['produits'],
+            'usines' => $options['usines'],
+        ]);
+    }
+
+    public function syntheseProduit(Request $request)
+    {
+        $filtres = $this->reporting->filtresDepuisRequest($request);
+        $options = $this->reporting->optionsFiltres();
+        $synthese = $this->reporting->syntheseParProduit($filtres);
+
+        $totaux = [
+            'montant' => (int) collect($synthese)->sum('montant_total'),
+            'poids' => (float) collect($synthese)->sum('poids_total'),
+            'fiches' => (int) collect($synthese)->sum('nb_fiches'),
+        ];
+
+        return view('gestion_financiere.synthese_produit', [
+            'synthese' => $synthese,
+            'filtres' => $filtres,
+            'filtresActifs' => $this->reporting->filtresActifs($filtres),
+            'produits' => $options['produits'],
+            'usines' => $options['usines'],
+            'totaux' => $totaux,
         ]);
     }
 
@@ -139,35 +176,7 @@ class MontantAgentController extends Controller
         return $all;
     }
 
-    /**
-     * Montant dû : uniquement les fiches déjà déchargées (montant figé au déchargement ou recalcul rétroactif).
-     */
-    private function calculerMontantDuAgent(int $idAgent): float
-    {
-        $total = 0.0;
-
-        $fiches = FicheSortie::query()
-            ->where('id_agent', $idAgent)
-            ->whereNotNull('date_dechargement')
-            ->get();
-
-        foreach ($fiches as $fiche) {
-            if ($fiche->montant_agent !== null) {
-                $total += (float) $fiche->montant_agent;
-
-                continue;
-            }
-
-            $pu = $this->montantAgentFiche->prixUnitairePourFiche($fiche);
-            if ($pu !== null && (float) $fiche->poids_pont > 0) {
-                $total += $pu * (float) $fiche->poids_pont;
-            }
-        }
-
-        return $total;
-    }
-
-    public function show(int $id_agent)
+    public function show(Request $request, int $id_agent)
     {
         $agent = $this->findAgentById($id_agent);
         if (!$agent) {
@@ -175,44 +184,36 @@ class MontantAgentController extends Controller
                 ->withErrors(['error' => 'Agent non trouvé.']);
         }
 
-        $montantDu = (int) round($this->calculerMontantDuAgent($id_agent));
+        $filtres = $this->reporting->filtresDepuisRequest($request);
+        $filtres['id_agent'] = $id_agent;
+
+        $montantDu = (int) round($this->reporting->calculerMontantDuAgent($id_agent, $filtres));
+        $montantDuGlobal = (int) round($this->reporting->calculerMontantDuAgent($id_agent, ['id_agent' => $id_agent]));
         $paiements = PaiementAgent::where('id_agent', $id_agent)
             ->orderBy('date_paiement', 'desc')
             ->orderBy('id', 'desc')
             ->get();
         $montantPaye = (int) $paiements->sum('montant');
-        $resteAPayer = $montantDu - $montantPaye;
+        $resteAPayer = $montantDuGlobal - $montantPaye;
 
-        $fiches = FicheSortie::query()
-            ->where('id_agent', $id_agent)
-            ->whereNotNull('date_dechargement')
-            ->orderBy('date_chargement', 'desc')
-            ->get();
-
-        $fichesAvecMontant = [];
-        foreach ($fiches as $fiche) {
-            $pu = $this->montantAgentFiche->prixUnitairePourFiche($fiche);
-            if ($fiche->montant_agent !== null) {
-                $montantLigne = (int) round((float) $fiche->montant_agent);
-            } else {
-                $montantLigne = $pu !== null && (float) $fiche->poids_pont > 0
-                    ? (int) round($pu * (float) $fiche->poids_pont)
-                    : 0;
-            }
-            $fichesAvecMontant[] = [
-                'fiche' => $fiche,
-                'montant' => $montantLigne,
-                'prix_unitaire' => $pu,
-            ];
-        }
+        $fichesAvecMontant = $this->reporting->fichesAvecMontant($filtres);
+        $groupesProduitUsine = $this->reporting->grouperParProduitEtUsine($fichesAvecMontant);
+        $options = $this->reporting->optionsFiltres();
 
         return view('gestion_financiere.agent_financier_detail', [
             'agent' => $agent,
             'fichesAvecMontant' => $fichesAvecMontant,
+            'groupesProduitUsine' => $groupesProduitUsine,
             'paiements' => $paiements,
             'montantDu' => $montantDu,
+            'montantDuGlobal' => $montantDuGlobal,
             'montantPaye' => $montantPaye,
             'resteAPayer' => $resteAPayer,
+            'filtres' => $filtres,
+            'filtresActifs' => $this->reporting->filtresActifs($filtres),
+            'produits' => $options['produits'],
+            'usines' => $options['usines'],
+            'queryFiltres' => $this->reporting->filtresPourUrl($filtres),
         ]);
     }
 

@@ -12,5 +12,11 @@ class Usine extends Model
     protected $fillable = [
         'nom_usine',
         'code_usine',
+        'produit_id',
     ];
+
+    public function produit()
+    {
+        return $this->belongsTo(Produit::class);
+    }
 }

@@ -19,4 +19,9 @@ class Produit extends Model
     protected $casts = [
         'tare' => 'decimal:3',
     ];
+
+    public function usines()
+    {
+        return $this->hasMany(Usine::class);
+    }
 }

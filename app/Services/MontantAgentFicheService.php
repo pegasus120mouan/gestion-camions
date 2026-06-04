@@ -67,7 +67,16 @@ class MontantAgentFicheService
             });
         }
 
-        $row = $query->first();
+        $row = null;
+        if ($fiche->produit_id) {
+            $row = (clone $query)->where('produit_id', $fiche->produit_id)->first();
+        }
+        if (!$row) {
+            $row = (clone $query)->whereNull('produit_id')->first();
+        }
+        if (!$row) {
+            $row = $query->first();
+        }
 
         return $row ? (float) $row->prix : null;
     }

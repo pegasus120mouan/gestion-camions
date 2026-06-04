@@ -172,16 +172,6 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label">Usine</label>
-            <select name="usine" class="form-select">
-              <option value="">-- Sélectionner une usine --</option>
-              @foreach($usines ?? [] as $u)
-                <option value="{{ $u['nom_usine'] ?? '' }}">{{ $u['nom_usine'] ?? '' }}</option>
-              @endforeach
-            </select>
-          </div>
-
-          <div class="mb-3">
             <label class="form-label">Produit <span class="text-danger">*</span></label>
             <select name="produit_id" id="produit_select" class="form-select" required>
               <option value="">-- Sélectionner un produit --</option>
@@ -191,6 +181,13 @@
             </select>
             <input type="hidden" name="nom_produit" id="nom_produit_hidden" value="">
             <div id="stock_pont_produit_alert" class="mt-2" style="display: none;"></div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Usine</label>
+            <select name="usine" id="usine_select" class="form-select" disabled>
+              <option value="">-- Sélectionner d'abord un produit --</option>
+            </select>
           </div>
 
           <div class="mb-3">
@@ -247,6 +244,8 @@ document.addEventListener('DOMContentLoaded', function() {
   var pontDisplayHidden = document.getElementById('pont_display_hidden');
   var agentDisplayHidden = document.getElementById('agent_display_hidden');
   var produitSelect = document.getElementById('produit_select');
+  var usineSelect = document.getElementById('usine_select');
+  var usinesParProduit = {!! json_encode($usinesParProduit ?? []) !!};
   var nomProduitHidden = document.getElementById('nom_produit_hidden');
   var stockAlert = document.getElementById('stock_pont_produit_alert');
   var stockPontProduitValide = false;
@@ -331,14 +330,45 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  function usinesPourProduit(produitId) {
+    if (!produitId) return [];
+    return usinesParProduit[produitId] || usinesParProduit[String(produitId)] || [];
+  }
+
+  function remplirSelectUsines(produitId, valeurSelectionnee) {
+    if (!usineSelect) return;
+    var liste = usinesPourProduit(produitId);
+    usineSelect.innerHTML = '<option value="">-- Sélectionner une usine --</option>';
+    liste.forEach(function(u) {
+      var opt = document.createElement('option');
+      opt.value = u.nom || '';
+      opt.textContent = u.code ? (u.nom + ' (' + u.code + ')') : (u.nom || '');
+      if (valeurSelectionnee && u.nom === valeurSelectionnee) {
+        opt.selected = true;
+      }
+      usineSelect.appendChild(opt);
+    });
+    if (!produitId) {
+      usineSelect.disabled = true;
+      usineSelect.options[0].textContent = '-- Sélectionner d\'abord un produit --';
+    } else {
+      usineSelect.disabled = false;
+      if (liste.length === 0) {
+        usineSelect.options[0].textContent = '-- Aucune usine pour ce produit --';
+      }
+    }
+  }
+
   if (produitSelect) {
     produitSelect.addEventListener('change', function() {
       var opt = this.options[this.selectedIndex];
       if (nomProduitHidden) {
         nomProduitHidden.value = opt && opt.dataset.nom ? opt.dataset.nom : '';
       }
+      remplirSelectUsines(this.value, '');
       verifierStockPontProduit();
     });
+    remplirSelectUsines(produitSelect.value, '');
   }
 
   // Autocomplétion pour les agents

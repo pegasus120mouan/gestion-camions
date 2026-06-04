@@ -55,8 +55,19 @@
               </select>
             </div>
             <div class="col-md-3">
+              <label class="form-label">Produit</label>
+              <select name="produit_id" id="filtre_produit" class="form-select">
+                <option value="">Tous les produits</option>
+                @foreach($produits ?? [] as $produit)
+                  <option value="{{ $produit->id }}" {{ (string) request('produit_id') === (string) $produit->id ? 'selected' : '' }}>
+                    {{ $produit->nom }}
+                  </option>
+                @endforeach
+              </select>
+            </div>
+            <div class="col-md-3">
               <label class="form-label">Usine</label>
-              <select name="usine" class="form-select">
+              <select name="usine" id="filtre_usine" class="form-select" data-usine-selectionnee="{{ request('usine') }}">
                 <option value="">Toutes les usines</option>
                 @foreach($usines ?? [] as $u)
                   <option value="{{ $u['nom_usine'] ?? '' }}" {{ request('usine') == ($u['nom_usine'] ?? '') ? 'selected' : '' }}>
@@ -262,12 +273,20 @@
               <input type="hidden" name="agent_display" id="hiddenAgentDisplay" value="" />
             </div>
             <div class="col-md-6">
-              <label class="form-label">Usine</label>
-              <select name="usine" class="form-select">
-                <option value="">-- Sélectionner une usine --</option>
-                @foreach($usines ?? [] as $u)
-                  <option value="{{ $u['nom_usine'] ?? '' }}">{{ $u['nom_usine'] ?? '' }}</option>
+              <label class="form-label">Produit <span class="text-danger">*</span></label>
+              <select name="produit_id" class="form-select produit-select-fiche" data-fiche="add" required>
+                <option value="">-- Sélectionner un produit --</option>
+                @foreach($produits ?? [] as $produit)
+                  <option value="{{ $produit->id }}" {{ (string) old('produit_id') === (string) $produit->id ? 'selected' : '' }}>
+                    {{ $produit->nom }}
+                  </option>
                 @endforeach
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Usine</label>
+              <select name="usine" class="form-select usine-select-fiche" data-fiche="add" data-usine-selectionnee="{{ old('usine') }}" disabled>
+                <option value="">-- Sélectionner d'abord un produit --</option>
               </select>
             </div>
             <div class="col-md-6">
@@ -337,14 +356,20 @@
               </select>
             </div>
             <div class="col-md-6">
-              <label class="form-label">Usine</label>
-              <select name="usine" class="form-select">
-                <option value="">-- Sélectionner une usine --</option>
-                @foreach($usines ?? [] as $u)
-                  <option value="{{ $u['nom_usine'] ?? '' }}" {{ ($f->usine == ($u['nom_usine'] ?? '')) ? 'selected' : '' }}>
-                    {{ $u['nom_usine'] ?? '' }}
+              <label class="form-label">Produit <span class="text-danger">*</span></label>
+              <select name="produit_id" class="form-select produit-select-fiche" data-fiche="{{ $f->id }}" required>
+                <option value="">-- Sélectionner un produit --</option>
+                @foreach($produits ?? [] as $produit)
+                  <option value="{{ $produit->id }}" {{ (int) ($f->produit_id ?? 0) === (int) $produit->id ? 'selected' : '' }}>
+                    {{ $produit->nom }}
                   </option>
                 @endforeach
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Usine</label>
+              <select name="usine" class="form-select usine-select-fiche" data-fiche="{{ $f->id }}" data-usine-selectionnee="{{ $f->usine }}" disabled>
+                <option value="">-- Sélectionner d'abord un produit --</option>
               </select>
             </div>
             <div class="col-md-6">
@@ -545,7 +570,92 @@
 @endforeach
 
 <script>
+var usinesParProduit = {!! json_encode($usinesParProduit ?? []) !!};
+var toutesUsinesFiltre = {!! json_encode($usines ?? []) !!};
+
+function usinesPourProduit(produitId) {
+  if (!produitId) return [];
+  return usinesParProduit[produitId] || usinesParProduit[String(produitId)] || [];
+}
+
+function remplirSelectUsines(selectUsine, produitId, valeurSelectionnee) {
+  if (!selectUsine) return;
+  var liste = usinesPourProduit(produitId);
+  selectUsine.innerHTML = '<option value="">-- Sélectionner une usine --</option>';
+  liste.forEach(function(u) {
+    var opt = document.createElement('option');
+    opt.value = u.nom || '';
+    opt.textContent = u.code ? (u.nom + ' (' + u.code + ')') : (u.nom || '');
+    if (valeurSelectionnee && u.nom === valeurSelectionnee) {
+      opt.selected = true;
+    }
+    selectUsine.appendChild(opt);
+  });
+  if (!produitId) {
+    selectUsine.disabled = true;
+    selectUsine.options[0].textContent = '-- Sélectionner d\'abord un produit --';
+  } else {
+    selectUsine.disabled = false;
+    if (liste.length === 0) {
+      selectUsine.options[0].textContent = '-- Aucune usine pour ce produit --';
+    }
+  }
+}
+
+function initUsineParProduit(produitSelect) {
+  var ficheKey = produitSelect.dataset.fiche;
+  var usineSelect = document.querySelector('.usine-select-fiche[data-fiche="' + ficheKey + '"]');
+  if (!usineSelect) return;
+
+  var usineInitiale = usineSelect.dataset.usineSelectionnee || '';
+  remplirSelectUsines(usineSelect, produitSelect.value, usineInitiale);
+
+  produitSelect.addEventListener('change', function() {
+    usineSelect.dataset.usineSelectionnee = '';
+    remplirSelectUsines(usineSelect, this.value, '');
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.produit-select-fiche').forEach(initUsineParProduit);
+
+  var filtreProduit = document.getElementById('filtre_produit');
+  var filtreUsine = document.getElementById('filtre_usine');
+  if (filtreProduit && filtreUsine) {
+    var usineFiltreInitiale = filtreUsine.dataset.usineSelectionnee || '';
+    function remplirFiltreToutesUsines(valeurSelectionnee) {
+      filtreUsine.innerHTML = '<option value="">Toutes les usines</option>';
+      toutesUsinesFiltre.forEach(function(u) {
+        var opt = document.createElement('option');
+        opt.value = u.nom_usine || '';
+        opt.textContent = u.nom_usine || '';
+        if (valeurSelectionnee && opt.value === valeurSelectionnee) {
+          opt.selected = true;
+        }
+        filtreUsine.appendChild(opt);
+      });
+      filtreUsine.disabled = false;
+    }
+    function majFiltreUsines() {
+      var produitId = filtreProduit.value;
+      if (!produitId) {
+        remplirFiltreToutesUsines(usineFiltreInitiale);
+        usineFiltreInitiale = '';
+        return;
+      }
+      remplirSelectUsines(filtreUsine, produitId, usineFiltreInitiale);
+      filtreUsine.options[0].textContent = 'Toutes les usines';
+      usineFiltreInitiale = '';
+    }
+    filtreProduit.addEventListener('change', function() {
+      usineFiltreInitiale = '';
+      majFiltreUsines();
+    });
+    if (filtreProduit.value) {
+      majFiltreUsines();
+    }
+  }
+
   const selectVehicule = document.getElementById('selectVehicule');
   const hiddenMatricule = document.getElementById('hiddenMatricule');
   const selectPont = document.getElementById('selectPont');

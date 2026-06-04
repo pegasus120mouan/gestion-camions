@@ -11,6 +11,7 @@ use App\Models\ParticulierAgentPrix;
 use App\Models\ParticulierGroupe;
 use App\Models\Ticket;
 use Carbon\Carbon;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -421,6 +422,105 @@ class TicketController extends Controller
             return redirect()->route('tickets.index')
                 ->with('error', 'Aucun ticket correspondant trouvé dans Unipalm. Vérifiez les données (Date, N°Ticket, Usine, Poids).');
         }
+    }
+
+    public function exportBordereauPdf(int $id)
+    {
+        $ticket = Ticket::with('particulierAgent.groupe')->findOrFail($id);
+
+        $nomUsine = $this->nomUsinePourTicket($ticket->id_usine);
+        $chargeMission = $ticket->particulierAgent
+            ? $ticket->particulierAgent->nom_complet
+            : '—';
+
+        $dateTicket = $ticket->date_ticket
+            ? Carbon::parse($ticket->date_ticket)
+            : now();
+        $dateReception = $ticket->created_at
+            ? Carbon::parse($ticket->created_at)
+            : $dateTicket;
+
+        $formatCourt = fn (Carbon $d) => $d->format('d/m/y');
+
+        $poids = (float) ($ticket->poids ?? 0);
+        $poidsFormate = number_format($poids, 0, ',', ' ');
+
+        $prixUnitaire = null;
+        $montantCalcule = null;
+        if ($ticket->particulier_agent_id && $ticket->id_usine) {
+            $prixRecords = ParticulierAgentPrix::where('particulier_agent_id', $ticket->particulier_agent_id)->get();
+            $prixUnitaire = $this->prixUnitaireParticulierAgent(
+                $prixRecords,
+                (int) $ticket->particulier_agent_id,
+                (int) $ticket->id_usine,
+                $ticket->date_ticket?->format('Y-m-d')
+            );
+            if ($prixUnitaire !== null && $poids > 0) {
+                $montantCalcule = $prixUnitaire * $poids;
+            }
+        }
+        if ($montantCalcule === null && (float) ($ticket->prix_unitaire ?? 0) > 0 && $poids > 0) {
+            $prixUnitaire = (float) $ticket->prix_unitaire;
+            $montantCalcule = $prixUnitaire * $poids;
+        }
+
+        $montantFormate = $montantCalcule !== null
+            ? number_format($montantCalcule, 0, ',', ' ')
+            : '—';
+
+        $logoPath = public_path('img/logo/logo.png');
+        if (!is_file($logoPath)) {
+            $logoPath = null;
+        }
+
+        $pdf = Pdf::loadView('tickets.bordereau_pdf', [
+            'logoPath' => $logoPath,
+            'chargeMission' => strtoupper($chargeMission),
+            'periodeDebut' => $formatCourt($dateTicket),
+            'periodeFin' => $formatCourt($dateTicket),
+            'nomUsine' => strtoupper($nomUsine),
+            'ligne' => [
+                'date_reception' => $formatCourt($dateReception),
+                'date_ticket' => $formatCourt($dateTicket),
+                'vehicule' => $ticket->matricule_vehicule ?? '—',
+                'numero_ticket' => $ticket->numero_ticket ?? '—',
+                'poids' => $poidsFormate,
+                'montant' => $montantFormate,
+            ],
+            'lieu' => 'Divo',
+            'dateDocument' => now()->format('d/m/y'),
+        ]);
+
+        $pdf->setPaper('A4', 'portrait');
+
+        $filename = 'bordereau_' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', (string) $ticket->numero_ticket) . '.pdf';
+
+        return $pdf->stream($filename);
+    }
+
+    private function nomUsinePourTicket(?int $idUsine): string
+    {
+        if (!$idUsine) {
+            return '—';
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout(10)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
+
+            if ($response->successful()) {
+                foreach ($response->json('usines') ?? [] as $usine) {
+                    if ((int) ($usine['id_usine'] ?? 0) === $idUsine) {
+                        return (string) ($usine['nom_usine'] ?? '—');
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return 'Usine #' . $idUsine;
     }
 
     /**

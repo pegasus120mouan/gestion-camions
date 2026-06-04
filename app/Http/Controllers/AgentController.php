@@ -3,11 +3,104 @@
 namespace App\Http\Controllers;
 
 use App\Models\PrixAgent;
+use App\Models\Produit;
+use App\Services\UsinesParProduitService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 
 class AgentController extends Controller
 {
+    public function __construct(
+        private UsinesParProduitService $usinesParProduitService
+    ) {}
+
+    /**
+     * @param  Collection<int, PrixAgent>  $prixCollection
+     * @param  Collection<int, Produit>  $produits
+     * @return list<array{id: int|string, nom: string, prix: list<PrixAgent>}>
+     */
+    private function grouperPrixParProduit(Collection $prixCollection, Collection $produits): array
+    {
+        $groupes = $produits->map(fn (Produit $produit) => [
+            'id' => $produit->id,
+            'nom' => $produit->nom,
+            'prix' => [],
+        ])->all();
+
+        $sansProduit = [
+            'id' => 'sans',
+            'nom' => 'Sans produit',
+            'prix' => [],
+        ];
+
+        foreach ($prixCollection as $prix) {
+            $place = false;
+
+            if ($prix->produit_id) {
+                foreach ($groupes as &$groupe) {
+                    if ($groupe['id'] === $prix->produit_id) {
+                        $groupe['prix'][] = $prix;
+                        $place = true;
+                        break;
+                    }
+                }
+                unset($groupe);
+            }
+
+            if (!$place && $prix->nom_produit) {
+                $nomPrix = mb_strtolower(trim((string) $prix->nom_produit), 'UTF-8');
+                foreach ($groupes as &$groupe) {
+                    if (mb_strtolower((string) $groupe['nom'], 'UTF-8') === $nomPrix) {
+                        $groupe['prix'][] = $prix;
+                        $place = true;
+                        break;
+                    }
+                }
+                unset($groupe);
+            }
+
+            if (!$place) {
+                $sansProduit['prix'][] = $prix;
+            }
+        }
+
+        usort($groupes, function ($a, $b) {
+            $countA = count($a['prix']);
+            $countB = count($b['prix']);
+            if ($countA !== $countB) {
+                return $countB <=> $countA;
+            }
+
+            return strcasecmp($a['nom'], $b['nom']);
+        });
+
+        if (count($sansProduit['prix']) > 0) {
+            $groupes[] = $sansProduit;
+        }
+
+        return $groupes;
+    }
+
+    private function prixAgentDejaExiste(
+        int $idAgent,
+        int $produitId,
+        string $nomUsine,
+        string $type,
+        ?string $dateDebut
+    ): bool {
+        return PrixAgent::query()
+            ->where('id_agent', $idAgent)
+            ->where('produit_id', $produitId)
+            ->where('nom_usine', $nomUsine)
+            ->where('type', $type)
+            ->where(function ($q) use ($dateDebut) {
+                $q->whereNull('date_fin')
+                    ->orWhere('date_fin', '>=', $dateDebut ?? now()->format('Y-m-d'));
+            })
+            ->exists();
+    }
+
     public function index(Request $request)
     {
         $mesAgentsUrl = (string) config('services.external_auth.mes_agents_url');
@@ -124,47 +217,32 @@ class AgentController extends Controller
             return redirect()->route('agents.index')->withErrors(['error' => 'Agent non trouvé.']);
         }
 
-        // Récupérer la liste des usines
-        $mesUsinesUrl = (string) config('services.external_auth.mes_usines_url');
-        $usines = [];
-        try {
-            $usinesResponse = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->get($mesUsinesUrl);
-            if ($usinesResponse->successful()) {
-                $usines = $usinesResponse->json('usines') ?? [];
-            }
-        } catch (\Throwable $e) {}
+        $produits = Produit::orderBy('nom')->get();
+        $usinesParProduit = $this->usinesParProduitService->usinesParProduitPourSelect();
 
-        // Récupérer les prix de l'agent
-        $prixTransporteur = PrixAgent::where('id_agent', $id_agent)
-            ->where('type', 'transporteur')
-            ->orderBy('nom_usine')
-            ->get();
-        
-        $prixPgf = PrixAgent::where('id_agent', $id_agent)
-            ->where('type', 'pgf')
-            ->orderBy('nom_usine')
-            ->get();
+        $orderPrix = fn ($q) => $q->orderBy('nom_produit')->orderBy('nom_usine');
 
-        $prixAutreCamion = PrixAgent::where('id_agent', $id_agent)
-            ->where('type', 'autre_camion')
-            ->orderBy('nom_usine')
-            ->get();
+        $prixTransporteur = $orderPrix(PrixAgent::where('id_agent', $id_agent)->where('type', 'transporteur'))->get();
+        $prixPgf = $orderPrix(PrixAgent::where('id_agent', $id_agent)->where('type', 'pgf'))->get();
+        $prixAutreCamion = $orderPrix(PrixAgent::where('id_agent', $id_agent)->where('type', 'autre_camion'))->get();
 
         return view('agents.show', [
             'agent' => $agent,
-            'usines' => $usines,
+            'produits' => $produits,
+            'usinesParProduit' => $usinesParProduit,
             'prixTransporteur' => $prixTransporteur,
             'prixPgf' => $prixPgf,
             'prixAutreCamion' => $prixAutreCamion,
+            'prixTransporteurParProduit' => $this->grouperPrixParProduit($prixTransporteur, $produits),
+            'prixPgfParProduit' => $this->grouperPrixParProduit($prixPgf, $produits),
+            'prixAutreParProduit' => $this->grouperPrixParProduit($prixAutreCamion, $produits),
         ]);
     }
 
     public function storePrix(Request $request, int $id_agent)
     {
         $validated = $request->validate([
+            'produit_id' => ['required', 'integer', 'exists:produits,id'],
             'id_usine' => ['required', 'string'],
             'nom_usine' => ['required', 'string'],
             'type' => ['required', 'in:transporteur,pgf,autre_camion'],
@@ -174,62 +252,76 @@ class AgentController extends Controller
             'toutes_usines' => ['nullable', 'in:0,1'],
         ]);
 
-        // Si "Toutes les usines" est sélectionné
-        if ($request->input('toutes_usines') === '1' || $validated['id_usine'] === 'all') {
-            // Récupérer toutes les usines depuis l'API
-            $timeout = (int) config('services.external_auth.timeout', 10);
-            $usines = [];
-            
-            try {
-                $usinesResponse = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
-                if ($usinesResponse->successful()) {
-                    $usines = $usinesResponse->json('usines') ?? [];
-                }
-            } catch (\Throwable $e) {}
+        $produit = Produit::findOrFail((int) $validated['produit_id']);
+        $produitId = (int) $produit->id;
+        $nomProduit = $produit->nom;
 
-            $count = 0;
-            foreach ($usines as $usine) {
-                // Vérifier si ce prix n'existe pas déjà pour cette usine
-                $existe = PrixAgent::where('id_agent', $id_agent)
-                    ->where('id_usine', $usine['id_usine'])
-                    ->where('type', $validated['type'])
-                    ->where(function($q) use ($validated) {
-                        $q->whereNull('date_fin')
-                          ->orWhere('date_fin', '>=', $validated['date_debut'] ?? now());
-                    })
-                    ->exists();
-
-                if (!$existe) {
-                    PrixAgent::create([
-                        'id_agent' => $id_agent,
-                        'id_usine' => $usine['id_usine'],
-                        'nom_usine' => $usine['nom_usine'],
-                        'type' => $validated['type'],
-                        'prix' => $validated['prix'],
-                        'date_debut' => $validated['date_debut'],
-                        'date_fin' => $validated['date_fin'],
-                    ]);
-                    $count++;
-                }
-            }
-
-            return redirect()->route('agents.show', ['id_agent' => $id_agent])
-                ->with('success', "Prix ajouté pour {$count} usine(s) avec succès.");
-        }
-
-        // Sinon, créer pour une seule usine
-        PrixAgent::create([
+        $payloadBase = [
             'id_agent' => $id_agent,
-            'id_usine' => $validated['id_usine'],
-            'nom_usine' => $validated['nom_usine'],
+            'produit_id' => $produitId,
+            'nom_produit' => $nomProduit,
             'type' => $validated['type'],
             'prix' => $validated['prix'],
             'date_debut' => $validated['date_debut'],
             'date_fin' => $validated['date_fin'],
-        ]);
+        ];
+
+        if ($request->input('toutes_usines') === '1' || $validated['id_usine'] === 'all') {
+            $usinesProduit = $this->usinesParProduitService->usinesPourProduitId($produitId);
+
+            if ($usinesProduit === []) {
+                return redirect()->route('agents.show', ['id_agent' => $id_agent])
+                    ->withErrors(['error' => 'Aucune usine associée à ce produit (API ou locale).']);
+            }
+
+            $count = 0;
+            foreach ($usinesProduit as $usine) {
+                if ($this->prixAgentDejaExiste(
+                    $id_agent,
+                    $produitId,
+                    $usine['nom'],
+                    $validated['type'],
+                    $validated['date_debut'] ?? null
+                )) {
+                    continue;
+                }
+
+                PrixAgent::create(array_merge($payloadBase, [
+                    'id_usine' => $usine['id_usine'],
+                    'nom_usine' => $usine['nom'],
+                ]));
+                $count++;
+            }
+
+            return redirect()->route('agents.show', ['id_agent' => $id_agent])
+                ->with('success', "Prix ajouté pour {$count} usine(s) du produit « {$nomProduit} ».");
+        }
+
+        $idUsine = $validated['id_usine'];
+        if (!$this->usinesParProduitService->usineAppartientAuProduit(
+            $produitId,
+            $idUsine,
+            $validated['nom_usine']
+        )) {
+            return redirect()->route('agents.show', ['id_agent' => $id_agent])
+                ->withErrors(['error' => "L'usine sélectionnée n'est pas associée à ce produit."]);
+        }
+
+        if ($this->prixAgentDejaExiste(
+            $id_agent,
+            $produitId,
+            $validated['nom_usine'],
+            $validated['type'],
+            $validated['date_debut'] ?? null
+        )) {
+            return redirect()->route('agents.show', ['id_agent' => $id_agent])
+                ->withErrors(['error' => 'Un prix existe déjà pour cette combinaison produit / usine.']);
+        }
+
+        PrixAgent::create(array_merge($payloadBase, [
+            'id_usine' => is_numeric($idUsine) ? (int) $idUsine : $idUsine,
+            'nom_usine' => $validated['nom_usine'],
+        ]));
 
         return redirect()->route('agents.show', ['id_agent' => $id_agent])
             ->with('success', 'Prix ajouté avec succès.');
