@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ParticulierAgent;
 use App\Models\ParticulierAgentPrix;
 use App\Models\ParticulierGroupe;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -70,12 +71,65 @@ class ParticulierPrixController extends Controller
 
     public function show(ParticulierAgent $agent)
     {
-        $agent->load(['groupe', 'prix' => fn ($q) => $q->orderBy('nom_usine')]);
+        $agent->load([
+            'groupe',
+            'prix' => fn ($q) => $q->orderBy('nom_usine')->orderByDesc('date_debut')->orderByDesc('date_fin'),
+        ]);
 
         return view('particuliers.prix.show', [
             'agent' => $agent,
             'usines' => $this->fetchUsines(),
         ]);
+    }
+
+    private function periodesSeChevauchent(?string $dateDebutA, ?string $dateFinA, ?string $dateDebutB, ?string $dateFinB): bool
+    {
+        $debutA = $dateDebutA ? Carbon::parse($dateDebutA)->startOfDay() : Carbon::create(1900, 1, 1);
+        $finA = $dateFinA ? Carbon::parse($dateFinA)->endOfDay() : Carbon::create(2100, 12, 31)->endOfDay();
+        $debutB = $dateDebutB ? Carbon::parse($dateDebutB)->startOfDay() : Carbon::create(1900, 1, 1);
+        $finB = $dateFinB ? Carbon::parse($dateFinB)->endOfDay() : Carbon::create(2100, 12, 31)->endOfDay();
+
+        return $debutA->lte($finB) && $debutB->lte($finA);
+    }
+
+    private function prixUsineEnConflit(
+        ParticulierAgent $agent,
+        int $idUsine,
+        ?string $dateDebut,
+        ?string $dateFin,
+        ?int $excludePrixId = null
+    ): ?ParticulierAgentPrix {
+        $query = ParticulierAgentPrix::where('particulier_agent_id', $agent->id)
+            ->where('id_usine', $idUsine);
+
+        if ($excludePrixId) {
+            $query->where('id', '!=', $excludePrixId);
+        }
+
+        foreach ($query->get() as $existant) {
+            if ($this->periodesSeChevauchent(
+                $dateDebut,
+                $dateFin,
+                $existant->date_debut?->format('Y-m-d'),
+                $existant->date_fin?->format('Y-m-d')
+            )) {
+                return $existant;
+            }
+        }
+
+        return null;
+    }
+
+    private function formaterPeriode(?ParticulierAgentPrix $prix): string
+    {
+        if (!$prix) {
+            return '';
+        }
+
+        $debut = $prix->date_debut ? $prix->date_debut->format('d/m/Y') : '…';
+        $fin = $prix->date_fin ? $prix->date_fin->format('d/m/Y') : '…';
+
+        return "{$debut} au {$fin}";
     }
 
     public function storePrix(Request $request, ParticulierAgent $agent)
@@ -89,9 +143,13 @@ class ParticulierPrixController extends Controller
             'toutes_usines' => ['nullable', 'in:0,1'],
         ]);
 
+        $dateDebut = $validated['date_debut'] ?? null;
+        $dateFin = $validated['date_fin'] ?? null;
+
         if ($request->input('toutes_usines') === '1' || $validated['id_usine'] === 'all') {
             $usines = $this->fetchUsines();
             $count = 0;
+            $ignored = 0;
 
             foreach ($usines as $usine) {
                 $idUsine = (int) ($usine['id_usine'] ?? 0);
@@ -99,44 +157,48 @@ class ParticulierPrixController extends Controller
                     continue;
                 }
 
-                $exists = ParticulierAgentPrix::where('particulier_agent_id', $agent->id)
-                    ->where('id_usine', $idUsine)
-                    ->exists();
-
-                if (!$exists) {
-                    ParticulierAgentPrix::create([
-                        'particulier_agent_id' => $agent->id,
-                        'id_usine' => $idUsine,
-                        'nom_usine' => $usine['nom_usine'] ?? '',
-                        'prix' => $validated['prix'],
-                        'date_debut' => $validated['date_debut'] ?? null,
-                        'date_fin' => $validated['date_fin'] ?? null,
-                    ]);
-                    $count++;
+                if ($this->prixUsineEnConflit($agent, $idUsine, $dateDebut, $dateFin)) {
+                    $ignored++;
+                    continue;
                 }
+
+                ParticulierAgentPrix::create([
+                    'particulier_agent_id' => $agent->id,
+                    'id_usine' => $idUsine,
+                    'nom_usine' => $usine['nom_usine'] ?? '',
+                    'prix' => $validated['prix'],
+                    'date_debut' => $dateDebut,
+                    'date_fin' => $dateFin,
+                ]);
+                $count++;
+            }
+
+            $message = "Prix ajouté pour {$count} usine(s).";
+            if ($ignored > 0) {
+                $message .= " {$ignored} usine(s) ignorée(s) (période déjà couverte).";
             }
 
             return redirect()->route('particuliers.prix.show', $agent)
-                ->with('success', "Prix ajouté pour {$count} usine(s).");
+                ->with('success', $message);
         }
 
-        $exists = ParticulierAgentPrix::where('particulier_agent_id', $agent->id)
-            ->where('id_usine', $validated['id_usine'])
-            ->exists();
+        $idUsine = (int) $validated['id_usine'];
+        $conflit = $this->prixUsineEnConflit($agent, $idUsine, $dateDebut, $dateFin);
 
-        if ($exists) {
+        if ($conflit) {
             return back()->withInput()->withErrors([
-                'id_usine' => 'Un prix existe déjà pour cette usine.',
+                'id_usine' => 'Cette période chevauche un prix existant pour cette usine ('
+                    . $this->formaterPeriode($conflit) . ').',
             ]);
         }
 
         ParticulierAgentPrix::create([
             'particulier_agent_id' => $agent->id,
-            'id_usine' => $validated['id_usine'],
+            'id_usine' => $idUsine,
             'nom_usine' => $validated['nom_usine'],
             'prix' => $validated['prix'],
-            'date_debut' => $validated['date_debut'] ?? null,
-            'date_fin' => $validated['date_fin'] ?? null,
+            'date_debut' => $dateDebut,
+            'date_fin' => $dateFin,
         ]);
 
         return redirect()->route('particuliers.prix.show', $agent)
@@ -152,6 +214,23 @@ class ParticulierPrixController extends Controller
             'date_debut' => ['nullable', 'date'],
             'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
         ]);
+
+        $dateDebut = $validated['date_debut'] ?? null;
+        $dateFin = $validated['date_fin'] ?? null;
+        $conflit = $this->prixUsineEnConflit(
+            $agent,
+            (int) $prix->id_usine,
+            $dateDebut,
+            $dateFin,
+            $prix->id
+        );
+
+        if ($conflit) {
+            return back()->withInput()->withErrors([
+                'date_debut' => 'Cette période chevauche un autre prix pour cette usine ('
+                    . $this->formaterPeriode($conflit) . ').',
+            ]);
+        }
 
         $prix->update($validated);
 

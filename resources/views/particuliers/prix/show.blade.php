@@ -152,6 +152,7 @@
               <input type="date" name="date_fin" class="form-control">
             </div>
           </div>
+          <p class="text-muted small mb-0">Plusieurs prix sont possibles pour la même usine si les périodes ne se chevauchent pas.</p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
