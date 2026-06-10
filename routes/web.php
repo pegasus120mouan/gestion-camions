@@ -307,6 +307,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/groupes', [GroupeController::class, 'index'])->name('groupes.index');
     Route::post('/groupes', [GroupeController::class, 'store'])->name('groupes.store');
     Route::get('/groupes/{id}', [GroupeController::class, 'show'])->name('groupes.show');
+    Route::put('/groupes/{id}', [GroupeController::class, 'update'])->name('groupes.update');
     Route::delete('/groupes/{id}', [GroupeController::class, 'destroy'])->name('groupes.destroy');
     Route::post('/groupes/{id}/agents', [GroupeController::class, 'addAgent'])->name('groupes.agent.add');
     Route::delete('/groupes/{id}/agents/{agent_id}', [GroupeController::class, 'removeAgent'])->name('groupes.agent.remove');
@@ -325,6 +326,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/particuliers/prix-unitaire/{agent}/prix/{prix}', [ParticulierPrixController::class, 'updatePrix'])->name('particuliers.prix.update');
     Route::delete('/particuliers/prix-unitaire/{agent}/prix/{prix}', [ParticulierPrixController::class, 'deletePrix'])->name('particuliers.prix.delete');
     Route::get('/particuliers/{id}', [ParticulierController::class, 'show'])->name('particuliers.show');
+    Route::put('/particuliers/{id}', [ParticulierController::class, 'update'])->name('particuliers.update');
     Route::delete('/particuliers/{id}', [ParticulierController::class, 'destroy'])->name('particuliers.destroy');
 
     // Chef des chargeurs

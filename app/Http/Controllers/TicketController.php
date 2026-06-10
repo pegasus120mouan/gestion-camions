@@ -24,7 +24,28 @@ use Illuminate\Support\Facades\Http;
 
 class TicketController extends Controller
 {
-    private function prixUnitairePrixAgent(int $idAgentApi, int $idUsine, ?int $produitId, ?string $dateTicket): ?float
+    private function typePrixPourMatricule(?string $matricule): string
+    {
+        if (!$matricule) {
+            return 'transporteur';
+        }
+        $link = \App\Models\CodeTransporteurVehicule::with('codeTransporteur')
+            ->where('matricule_vehicule', $matricule)
+            ->first();
+        if (!$link || !$link->codeTransporteur) {
+            return 'transporteur';
+        }
+        $nom = trim((string) $link->codeTransporteur->nom);
+        if ($nom === 'Camion PGF') {
+            return 'pgf';
+        }
+        if (strcasecmp($nom, 'Autre Camion') === 0 || strcasecmp($nom, 'Autre') === 0) {
+            return 'autre_camion';
+        }
+        return 'transporteur';
+    }
+
+    private function prixUnitairePrixAgent(int $idAgentApi, int $idUsine, ?int $produitId, ?string $dateTicket, string $type = 'transporteur'): ?float
     {
         if ($idAgentApi <= 0 || $idUsine <= 0) {
             return null;
@@ -34,6 +55,7 @@ class TicketController extends Controller
 
         $query = PrixAgent::where('id_agent', $idAgentApi)
             ->where('id_usine', $idUsine)
+            ->where('type', $type)
             ->where(fn ($q) => $q->whereNull('date_debut')->orWhereDate('date_debut', '<=', $date))
             ->where(fn ($q) => $q->whereNull('date_fin')->orWhereDate('date_fin', '>=', $date));
 
@@ -202,11 +224,13 @@ class TicketController extends Controller
                 if ($prixUnitaireAgent === null) {
                     $idAgentApi = (int) ($ticket->particulierAgent?->id_agent ?? 0);
                     if ($idAgentApi > 0) {
+                        $typeVehicule = $this->typePrixPourMatricule($ticket->matricule_vehicule);
                         $prixUnitaireAgent = $this->prixUnitairePrixAgent(
                             $idAgentApi,
                             (int) $ticket->id_usine,
                             null,
-                            $ticket->date_ticket?->format('Y-m-d')
+                            $ticket->date_ticket?->format('Y-m-d'),
+                            $typeVehicule
                         );
                     }
                 }

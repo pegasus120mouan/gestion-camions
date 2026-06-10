@@ -149,8 +149,8 @@
                         </td>
                         <td><small>{{ $item['fiche']->usine ?? '—' }}</small></td>
                         <td class="text-end">
-                          @if($item['fiche']->poids_pont)
-                            {{ number_format((float) $item['fiche']->poids_pont, 0, ',', ' ') }}
+                          @if(($item['poids_effectif'] ?? 0) > 0)
+                            {{ number_format((float) $item['poids_effectif'], 0, ',', ' ') }}
                           @else
                             —
                           @endif

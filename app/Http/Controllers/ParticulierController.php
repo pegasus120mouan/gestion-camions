@@ -215,6 +215,20 @@ class ParticulierController extends Controller
         ]);
     }
 
+    public function update(Request $request, int $id)
+    {
+        $groupe = ParticulierGroupe::findOrFail($id);
+
+        $validated = $request->validate([
+            'nom_groupe' => ['required', 'string', 'max:255'],
+        ]);
+
+        $groupe->update($validated);
+
+        return redirect()->route('particuliers.index')
+            ->with('success', 'Groupe renommé avec succès.');
+    }
+
     public function destroy(int $id)
     {
         $groupe = ParticulierGroupe::findOrFail($id);

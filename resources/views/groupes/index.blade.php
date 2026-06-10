@@ -49,6 +49,10 @@
                   <a href="{{ route('groupes.show', $groupe->id) }}" class="btn btn-sm btn-outline-primary" title="Voir">
                     <i class="bx bx-show"></i>
                   </a>
+                  <button type="button" class="btn btn-sm btn-outline-warning" title="Renommer"
+                    data-bs-toggle="modal" data-bs-target="#modalEditGroupe{{ $groupe->id }}">
+                    <i class="bx bx-edit"></i>
+                  </button>
                   <form method="POST" action="{{ route('groupes.destroy', $groupe->id) }}" class="d-inline" onsubmit="return confirm('Supprimer ce groupe ?')">
                     @csrf
                     @method('DELETE')
@@ -69,6 +73,34 @@
     </div>
   </div>
 </div>
+
+<!-- Modals Renommer Groupe -->
+@foreach($groupes as $groupe)
+<div class="modal fade" id="modalEditGroupe{{ $groupe->id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-edit me-2"></i>Renommer le groupe</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ route('groupes.update', $groupe->id) }}">
+        @csrf
+        @method('PUT')
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Nom du groupe <span class="text-danger">*</span></label>
+            <input type="text" name="nom_groupe" class="form-control" required value="{{ $groupe->nom_groupe }}" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-warning text-white"><i class="bx bx-check me-1"></i>Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endforeach
 
 <!-- Modal Nouveau Groupe -->
 <div class="modal fade" id="modalAddGroupe" tabindex="-1" aria-hidden="true">

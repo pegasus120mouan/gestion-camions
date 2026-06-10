@@ -149,6 +149,20 @@ class GroupeController extends Controller
             ->with('success', 'Agent retiré du groupe.');
     }
 
+    public function update(Request $request, int $id)
+    {
+        $groupe = Groupe::findOrFail($id);
+
+        $validated = $request->validate([
+            'nom_groupe' => ['required', 'string', 'max:255'],
+        ]);
+
+        $groupe->update($validated);
+
+        return redirect()->route('groupes.index')
+            ->with('success', 'Groupe renommé avec succès.');
+    }
+
     public function destroy(int $id)
     {
         $groupe = Groupe::findOrFail($id);

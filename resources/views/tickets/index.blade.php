@@ -310,11 +310,16 @@
 
                         if ($idAgent && $idUsine) {
                             $typeTransporteur = 'transporteur';
-                            if ($transporteurNom === 'Camion PGF') {
-                                $typeTransporteur = 'pgf';
-                            } elseif (strcasecmp(trim($transporteurNom), 'Autre Camion') === 0
-                                || strcasecmp(trim($transporteurNom), 'Autre') === 0) {
-                                $typeTransporteur = 'autre_camion';
+                            $ctv = \App\Models\CodeTransporteurVehicule::with('codeTransporteur')
+                                ->where('matricule_vehicule', $t['matricule_vehicule'] ?? '')
+                                ->first();
+                            if ($ctv && $ctv->codeTransporteur) {
+                                $ctNom = trim((string) $ctv->codeTransporteur->nom);
+                                if ($ctNom === 'Camion PGF') {
+                                    $typeTransporteur = 'pgf';
+                                } elseif (strcasecmp($ctNom, 'Autre Camion') === 0 || strcasecmp($ctNom, 'Autre') === 0) {
+                                    $typeTransporteur = 'autre_camion';
+                                }
                             }
 
                             $queryPrix = \App\Models\PrixAgent::where('id_agent', $idAgent)
@@ -521,7 +526,7 @@
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Date Ticket <span class="text-danger">*</span></label>
-              <input type="date" name="date_ticket" class="form-control" required value="{{ date('Y-m-d') }}" />
+              <input type="date" name="date_ticket" class="form-control" required value="" />
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">N° Ticket <span class="text-danger">*</span></label>
@@ -556,9 +561,8 @@
               <select name="id_pont" id="ticket_id_pont" class="form-select">
                 <option value="" data-gerable="0">-- Aucun pont --</option>
                 @foreach($tousLesPonts ?? [] as $pont)
-                  <option value="{{ $pont['id_pont'] }}" data-gerable="{{ $pont['gerable'] ? '1' : '0' }}">
-                    {{ $pont['nom_pont'] ?? '' }} ({{ $pont['code_pont'] ?? '' }})
-                    @if($pont['gerable']) ★ @endif
+                  <option value="{{ $pont['id_pont'] }}" data-gerable="{{ $pont['gerable'] ? '1' : '0' }}" data-starred="{{ $pont['gerable'] ? '1' : '0' }}">
+                    {{ $pont['nom_pont'] ?? '' }} ({{ $pont['code_pont'] ?? '' }}){{ $pont['gerable'] ? ' ★' : '' }}
                   </option>
                 @endforeach
               </select>
@@ -684,6 +688,35 @@ $(document).ready(function() {
       placeholder: '-- Sélectionner un véhicule --',
       allowClear: true,
       width: '100%'
+    });
+
+    if ($('#ticket_id_pont').hasClass('select2-hidden-accessible')) {
+      $('#ticket_id_pont').select2('destroy');
+    }
+    $('#ticket_id_pont').select2({
+      theme: 'bootstrap-5',
+      dropdownParent: $('#modalAddTicket .modal-body'),
+      placeholder: '-- Aucun pont --',
+      allowClear: true,
+      width: '100%',
+      templateResult: function(option) {
+        var text = option.text || '';
+        if (text.indexOf('★') !== -1) {
+          var safe = text.replace(/[&<>"]/g, function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);});
+          var html = safe.replace('★', '<span style="color:red;">★</span>');
+          return $('' + html + '');
+        }
+        return option.text;
+      },
+      templateSelection: function(option) {
+        var text = option.text || '';
+        if (text.indexOf('★') !== -1) {
+          var safe = text.replace(/[&<>"]/g, function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);});
+          var html = safe.replace('★', '<span style="color:red;">★</span>');
+          return $('' + html + '');
+        }
+        return option.text;
+      }
     });
 
     if ($('#ticket_id_usine').hasClass('select2-hidden-accessible')) {

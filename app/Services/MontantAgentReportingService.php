@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\FicheSortie;
 use App\Models\Produit;
+use App\Models\Ticket;
 use App\Models\Usine;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -78,9 +79,15 @@ class MontantAgentReportingService
         }
 
         $pu = $this->montantAgentFiche->prixUnitairePourFiche($fiche);
+        $poids = (float) $fiche->poids_pont;
 
-        return $pu !== null && (float) $fiche->poids_pont > 0
-            ? (int) round($pu * (float) $fiche->poids_pont)
+        if ($poids <= 0 && $fiche->id_ticket) {
+            $ticket = Ticket::where('id_ticket', $fiche->id_ticket)->first();
+            $poids = $ticket ? (float) ($ticket->poids ?? 0) : 0;
+        }
+
+        return $pu !== null && $poids > 0
+            ? (int) round($pu * $poids)
             : 0;
     }
 
@@ -119,10 +126,16 @@ class MontantAgentReportingService
             if (is_numeric($fiche->usine) && isset($usinesById[(string) $fiche->usine])) {
                 $fiche->usine = $usinesById[(string) $fiche->usine];
             }
+            $poids = (float) $fiche->poids_pont;
+            if ($poids <= 0 && $fiche->id_ticket) {
+                $ticket = Ticket::where('id_ticket', $fiche->id_ticket)->first();
+                $poids = $ticket ? (float) ($ticket->poids ?? 0) : 0;
+            }
             $result[] = [
                 'fiche' => $fiche,
                 'montant' => $this->montantLigneFiche($fiche),
                 'prix_unitaire' => $this->montantAgentFiche->prixUnitairePourFiche($fiche),
+                'poids_effectif' => $poids,
             ];
         }
 
@@ -188,7 +201,7 @@ class MontantAgentReportingService
                 $usines[] = [
                     'usine' => $nomUsine,
                     'montant_total' => (int) $lignes->sum('montant'),
-                    'poids_total' => (float) $lignes->sum(fn ($i) => (float) ($i['fiche']->poids_pont ?? 0)),
+                    'poids_total' => (float) $lignes->sum(fn ($i) => (float) ($i['poids_effectif'] ?? $i['fiche']->poids_pont ?? 0)),
                     'nb_fiches' => count($lignesArr),
                     'lignes' => $lignesArr,
                 ];
@@ -200,7 +213,7 @@ class MontantAgentReportingService
                 'produit' => $nomProduit,
                 'produit_id' => $produitId,
                 'montant_total' => (int) $itemsProduit->sum('montant'),
-                'poids_total' => (float) $itemsProduit->sum(fn ($i) => (float) ($i['fiche']->poids_pont ?? 0)),
+                'poids_total' => (float) $itemsProduit->sum(fn ($i) => (float) ($i['poids_effectif'] ?? $i['fiche']->poids_pont ?? 0)),
                 'nb_fiches' => $itemsProduit->count(),
                 'usines' => $usines,
             ];
