@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PontEtat;
 use App\Models\Stock;
+use App\Models\Usine;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -264,6 +265,30 @@ class PontController extends Controller
             ->whereNotNull('poids_pont')
             ->orderBy('date_dechargement', 'desc')
             ->get();
+
+        // Résoudre les IDs numériques d'usine en noms
+        $usinesById = [];
+        foreach (Usine::all() as $ul) {
+            $usinesById[(string) $ul->id_usine] = $ul->nom_usine;
+        }
+        try {
+            $usinesUrl = (string) config('services.external_auth.mes_usines_url');
+            $resp = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($usinesUrl);
+            if ($resp->successful()) {
+                foreach ($resp->json('usines') ?? [] as $u) {
+                    $key = (string) ($u['id_usine'] ?? '');
+                    if ($key !== '' && !isset($usinesById[$key])) {
+                        $usinesById[$key] = $u['nom_usine'] ?? '';
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        foreach ($fichesDechargees as $fiche) {
+            if (is_numeric($fiche->usine) && isset($usinesById[(string) $fiche->usine])) {
+                $fiche->usine = $usinesById[(string) $fiche->usine];
+            }
+        }
 
         // Calculer le solde (total approvisionnements - total dépenses stocks - total dépenses entrées - dépenses pont)
         $totalApprovisionnements = \App\Models\Approvisionnement::where('pont_id', $id_pont)->sum('montant');

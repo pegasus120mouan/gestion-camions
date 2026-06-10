@@ -751,6 +751,10 @@ class TicketController extends Controller
     public function destroy($id)
     {
         $ticket = Ticket::findOrFail($id);
+
+        // Supprimer la fiche de sortie liée → restitue automatiquement le poids au stock du parc
+        FicheSortie::where('id_ticket', $ticket->id_ticket)->delete();
+
         $ticket->delete();
 
         return redirect()->route('tickets.index')
