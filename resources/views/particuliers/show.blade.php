@@ -62,19 +62,23 @@
           <thead class="table-light">
             <tr>
               <th>N° agent</th>
-              <th>Nom</th>
-              <th>Prénoms</th>
+              <th>Nom complet</th>
               <th>Contact</th>
               <th class="text-center">Actions</th>
             </tr>
           </thead>
           <tbody>
             @forelse($groupe->agents as $agent)
+              @php
+                $info = $agentsById[(int)($agent->id_agent ?? 0)] ?? null;
+                $nom = $info ? ($info['nom_complet'] ?? $agent->nom) : $agent->nom;
+                $numero = $info ? ($info['numero_agent'] ?? $agent->numero_agent) : $agent->numero_agent;
+                $contact = $info ? ($info['contact'] ?? $agent->contact ?? '-') : ($agent->contact ?? '-');
+              @endphp
               <tr>
-                <td><code>{{ $agent->numero_agent }}</code></td>
-                <td><strong>{{ $agent->nom }}</strong></td>
-                <td>{{ $agent->prenoms }}</td>
-                <td>{{ $agent->contact ?? '-' }}</td>
+                <td><code>{{ $numero }}</code></td>
+                <td><strong>{{ $nom }}</strong></td>
+                <td>{{ $contact }}</td>
                 <td class="text-center">
                   <form method="POST" action="{{ route('particuliers.agents.destroy', $agent) }}" class="d-inline" onsubmit="return confirm('Supprimer cet agent ?')">
                     @csrf
@@ -87,7 +91,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="5" class="text-center text-muted py-4">Aucun agent dans ce groupe</td>
+                <td colspan="4" class="text-center text-muted py-4">Aucun agent dans ce groupe</td>
               </tr>
             @endforelse
           </tbody>
@@ -104,23 +108,52 @@
         <h5 class="modal-title text-white"><i class="bx bx-user-plus me-2"></i>Ajouter un agent</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
-      <form method="POST" action="{{ route('particuliers.agents.store') }}">
+      <form method="POST" action="{{ route('particuliers.agents.store') }}" id="formAddAgentApi">
         @csrf
-        <input type="hidden" name="redirect" value="show" />
+        <input type="hidden" name="particulier_groupe_id" value="{{ $groupe->id }}" />
+        <input type="hidden" name="id_agent" id="hidden_id_agent" value="" />
+        <input type="hidden" name="numero_api" id="hidden_numero_api" value="" />
+        <input type="hidden" name="nom_api" id="hidden_nom_api" value="" />
+        <input type="hidden" name="prenoms_api" id="hidden_prenoms_api" value="" />
+        <input type="hidden" name="contact_api" id="hidden_contact_api" value="" />
         <div class="modal-body">
-          @include('particuliers.agents._form', [
-            'agent' => null,
-            'groupes' => collect([$groupe]),
-            'groupeId' => $groupe->id,
-            'lockGroupe' => true,
-            'prochainNumero' => $prochainNumero ?? null,
-          ])
+          @if(count($agentsDisponibles ?? []) > 0)
+            <div class="mb-3">
+              <label class="form-label">Sélectionner un agent <span class="text-danger">*</span></label>
+              <select class="form-select" id="selectAgentApi" required>
+                <option value="">-- Choisir un agent --</option>
+                @foreach($agentsDisponibles as $a)
+                  <option value="{{ $a['id_agent'] }}"
+                    data-numero="{{ $a['numero_agent'] ?? '' }}"
+                    data-nom="{{ $a['nom_complet'] ?? '' }}"
+                    data-prenoms=""
+                    data-contact="{{ $a['contact'] ?? '' }}">
+                    {{ $a['numero_agent'] ?? '' }} – {{ $a['nom_complet'] ?? '' }}
+                  </option>
+                @endforeach
+              </select>
+            </div>
+          @else
+            <p class="text-muted mb-0">Tous les agents de l’API sont déjà dans ce groupe.</p>
+          @endif
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-primary"><i class="bx bx-check me-1"></i>Ajouter</button>
+          <button type="submit" class="btn btn-primary" @if(empty($agentsDisponibles)) disabled @endif>
+            <i class="bx bx-check me-1"></i>Ajouter
+          </button>
         </div>
       </form>
+      <script>
+      document.getElementById('selectAgentApi')?.addEventListener('change', function() {
+        var opt = this.options[this.selectedIndex];
+        document.getElementById('hidden_id_agent').value    = opt.value;
+        document.getElementById('hidden_numero_api').value  = opt.dataset.numero  || '';
+        document.getElementById('hidden_nom_api').value     = opt.dataset.nom      || '';
+        document.getElementById('hidden_prenoms_api').value = opt.dataset.prenoms  || '';
+        document.getElementById('hidden_contact_api').value = opt.dataset.contact  || '';
+      });
+      </script>
     </div>
   </div>
 </div>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ParticulierAgent;
 use App\Models\ParticulierGroupe;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 
 class ParticulierController extends Controller
 {
@@ -79,6 +80,39 @@ class ParticulierController extends Controller
 
     public function storeAgent(Request $request)
     {
+        $fromApi = $request->filled('id_agent') && $request->filled('nom_api');
+
+        if ($fromApi) {
+            $request->validate([
+                'particulier_groupe_id' => ['required', 'exists:particulier_groupes,id'],
+                'id_agent' => ['required', 'integer'],
+            ]);
+
+            $groupeId = (int) $request->input('particulier_groupe_id');
+            $idAgent = (int) $request->input('id_agent');
+
+            $already = ParticulierAgent::where('particulier_groupe_id', $groupeId)
+                ->where('id_agent', $idAgent)
+                ->exists();
+
+            if ($already) {
+                return redirect()->route('particuliers.show', $groupeId)
+                    ->with('error', 'Cet agent est déjà dans le groupe.');
+            }
+
+            ParticulierAgent::create([
+                'particulier_groupe_id' => $groupeId,
+                'id_agent' => $idAgent,
+                'numero_agent' => (string) $request->input('numero_api', 'AGT-' . $idAgent),
+                'nom' => (string) $request->input('nom_api', ''),
+                'prenoms' => (string) $request->input('prenoms_api', ''),
+                'contact' => (string) $request->input('contact_api', ''),
+            ]);
+
+            return redirect()->route('particuliers.show', $groupeId)
+                ->with('success', 'Agent ajouté avec succès.');
+        }
+
         $validated = $request->validate([
             'particulier_groupe_id' => ['required', 'exists:particulier_groupes,id'],
             'numero_agent' => ['required', 'string', 'max:50', 'unique:particulier_agents,numero_agent'],
@@ -122,12 +156,61 @@ class ParticulierController extends Controller
         return redirect()->back()->with('success', 'Agent supprimé avec succès.');
     }
 
-    public function show(int $id)
+    private function fetchAgentsApi(Request $request): array
+    {
+        $mesAgentsUrl = (string) config('services.external_auth.mes_agents_url');
+        $timeout = (int) config('services.external_auth.timeout', 10);
+        $phpsessid = (string) $request->session()->get('external_auth.phpsessid', '');
+        $all = [];
+        $page = 1;
+
+        try {
+            while (true) {
+                $response = Http::acceptJson()
+                    ->withoutVerifying()
+                    ->timeout($timeout)
+                    ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
+                    ->get($mesAgentsUrl, ['page' => $page]);
+
+                if (!$response->successful()) break;
+
+                $batch = $response->json('agents') ?? [];
+                if (empty($batch)) break;
+
+                foreach ($batch as $a) {
+                    if (is_array($a)) $all[] = $a;
+                }
+
+                $pagination = $response->json('pagination') ?? [];
+                if ($page >= (int) ($pagination['last_page'] ?? 1)) break;
+                $page++;
+            }
+        } catch (\Throwable $e) {}
+
+        return $all;
+    }
+
+    public function show(Request $request, int $id)
     {
         $groupe = ParticulierGroupe::with('agents')->findOrFail($id);
 
+        $agentsApi = $this->fetchAgentsApi($request);
+
+        $idsDejaPresents = $groupe->agents->pluck('id_agent')->filter()->map(fn($v) => (int)$v)->toArray();
+
+        $agentsDisponibles = array_values(array_filter($agentsApi, function ($a) use ($idsDejaPresents) {
+            return !in_array((int) ($a['id_agent'] ?? 0), $idsDejaPresents, true);
+        }));
+
+        $agentsById = [];
+        foreach ($agentsApi as $a) {
+            $agentsById[(int) ($a['id_agent'] ?? 0)] = $a;
+        }
+
         return view('particuliers.show', [
             'groupe' => $groupe,
+            'agentsDisponibles' => $agentsDisponibles,
+            'agentsById' => $agentsById,
             'prochainNumero' => $this->prochainNumeroAgent(),
         ]);
     }

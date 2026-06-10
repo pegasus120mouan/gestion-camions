@@ -10,6 +10,7 @@ class ParticulierAgent extends Model
 
     protected $fillable = [
         'particulier_groupe_id',
+        'id_agent',
         'numero_agent',
         'nom',
         'prenoms',

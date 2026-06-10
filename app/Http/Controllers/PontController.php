@@ -53,6 +53,23 @@ class PontController extends Controller
         return null;
     }
 
+    public function toggleGerable(Request $request, int $id_pont)
+    {
+        $pontEtat = PontEtat::firstOrCreate(
+            ['id_pont' => $id_pont],
+            [
+                'nom_pont' => $request->input('nom_pont'),
+                'code_pont' => $request->input('code_pont'),
+                'etat' => 'actif',
+                'gerable' => false,
+            ]
+        );
+
+        $pontEtat->update(['gerable' => !$pontEtat->gerable]);
+
+        return back()->with('success', 'Statut gérable mis à jour.');
+    }
+
     public function updatePontEtat(Request $request, int $id_pont)
     {
         $validated = $request->validate([
@@ -109,12 +126,14 @@ class PontController extends Controller
         }
 
         $etatsParPont = PontEtat::query()->pluck('etat', 'id_pont')->toArray();
+        $gerableParPont = PontEtat::query()->pluck('gerable', 'id_pont')->toArray();
 
         // Calculer le stock disponible et le solde pour chaque pont
         foreach ($ponts as &$pont) {
             $idPont = (int) ($pont['id_pont'] ?? 0);
             $etatPont = $etatsParPont[$idPont] ?? PontEtat::etatDepuisApi($pont['statut'] ?? 'Actif');
             $pont['etat_pont'] = $etatPont;
+            $pont['gerable'] = (bool) ($gerableParPont[$idPont] ?? false);
             $pont['peut_entrer_stock'] = in_array($etatPont, ['actif', 'inactif'], true);
             
             // Trouver TOUS les stocks ouverts pour ce pont (un par parc)

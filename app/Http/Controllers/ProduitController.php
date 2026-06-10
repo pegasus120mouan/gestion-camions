@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ParticulierAgent;
 use App\Models\Produit;
 use App\Models\Usine;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 
 class ProduitController extends Controller
@@ -39,6 +41,40 @@ class ProduitController extends Controller
         $fichesSortie = \App\Models\FicheSortie::where('produit_id', $produit->id)
             ->orderBy('date_chargement', 'desc')
             ->paginate(20);
+
+        // Construire un index usinesById : ID → nom (locales + API)
+        $usinesById = [];
+        foreach (Usine::all() as $ul) {
+            $usinesById[(string) $ul->id_usine] = $ul->nom_usine;
+        }
+        try {
+            $timeout = (int) config('services.external_auth.timeout', 10);
+            $usinesUrl = (string) config('services.external_auth.mes_usines_url');
+            $resp = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($usinesUrl);
+            if ($resp->successful()) {
+                foreach ($resp->json('usines') ?? [] as $u) {
+                    $key = (string) ($u['id_usine'] ?? '');
+                    if ($key !== '' && !isset($usinesById[$key])) {
+                        $usinesById[$key] = $u['nom_usine'] ?? '';
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        // Construire un index agentsById : id_agent API → nom_complet (depuis particulier_agents)
+        $agentsById = ParticulierAgent::all()->keyBy('id_agent')
+            ->map(fn ($a) => $a->nom_complet);
+
+        // Enrichir chaque fiche : résoudre usine (si numérique) et nom_agent (si vide)
+        foreach ($fichesSortie as $fiche) {
+            if (is_numeric($fiche->usine) && isset($usinesById[$fiche->usine])) {
+                $fiche->usine = $usinesById[$fiche->usine];
+            }
+            if (empty($fiche->nom_agent) && !empty($fiche->id_agent)) {
+                $fiche->nom_agent = $agentsById[(string) $fiche->id_agent] ?? '-';
+            }
+        }
+
         $usines = Schema::hasColumn('usines', 'produit_id')
             ? $produit->usines()->orderBy('nom_usine')->get()
             : collect();

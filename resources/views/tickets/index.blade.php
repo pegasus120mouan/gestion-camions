@@ -79,7 +79,6 @@
               <th>Date ticket</th>
               <th>N°Ticket</th>
               <th>Usine</th>
-              <th>Groupe</th>
               <th>Agent</th>
               <th>Vehicule</th>
               <th>Poids Usine</th>
@@ -108,7 +107,6 @@
                   </a>
                 </td>
                 <td>{{ $t['nom_usine'] ?? '-' }}</td>
-                <td>{{ $t['nom_groupe'] ?? '-' }}</td>
                 <td>{{ $t['nom_agent'] ?? '-' }}</td>
                 <td>
                   @if(!empty($t['vehicule_id']))
@@ -135,9 +133,6 @@
                   @endif
                 </td>
                 <td>
-                  <button type="button" class="btn btn-sm btn-outline-primary me-1" data-bs-toggle="modal" data-bs-target="#modalTicketDetail{{ $loop->index }}" title="Voir détails">
-                    <i class="bx bx-show"></i>
-                  </button>
                   <a href="{{ route('tickets.pdf', ['id' => $t['id_ticket']]) }}" class="btn btn-sm btn-outline-secondary me-1" target="_blank" rel="noopener" title="Imprimer en PDF">
                     <i class="bx bx-printer"></i>
                   </a>
@@ -151,7 +146,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="10" class="text-center">Aucun ticket</td>
+                <td colspan="9" class="text-center">Aucun ticket</td>
               </tr>
             @endforelse
           </tbody>
@@ -244,6 +239,7 @@
                   @endphp
                   <div class="mb-2"><strong>Transporteur:</strong> <span class="badge bg-info">{{ $transporteurNom }}</span></div>
                   <div class="mb-2"><strong>Usine:</strong> {{ $t['nom_usine'] ?? '-' }}</div>
+                  <div class="mb-2"><strong>Produit:</strong> {{ $t['nom_produit'] ?? '-' }}</div>
                   <div class="mb-2"><strong>Groupe:</strong> {{ $t['nom_groupe'] ?? '-' }}</div>
                   <div class="mb-2"><strong>Agent:</strong> {{ $t['nom_agent'] ?? '-' }}</div>
                   <div class="mb-2"><strong>Origine:</strong> {{ $t['origine'] ?? '-' }}</div>
@@ -521,36 +517,82 @@
       <form method="POST" action="{{ route('tickets.store') }}">
         @csrf
         <div class="modal-body">
+          {{-- Ligne 1 : Date Ticket + N° Ticket --}}
           <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">N° Ticket <span class="text-danger">*</span></label>
-              <input type="text" name="numero_ticket" class="form-control" required placeholder="Ex: TKT-001" />
-            </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">Date Ticket <span class="text-danger">*</span></label>
               <input type="date" name="date_ticket" class="form-control" required value="{{ date('Y-m-d') }}" />
             </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">N° Ticket <span class="text-danger">*</span></label>
+              <input type="text" name="numero_ticket" class="form-control" required placeholder="Ex: TKT-001" />
+            </div>
           </div>
+          {{-- Ligne 2 : Véhicule + Poids --}}
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Véhicule <span class="text-danger">*</span></label>
-              <input type="text" name="matricule_vehicule" class="form-control" required placeholder="Ex: 9943KA03" value="{{ old('matricule_vehicule') }}" />
+              <select name="matricule_vehicule" id="ticket_matricule_vehicule" class="form-select" required>
+                <option value="">-- Sélectionner un véhicule --</option>
+                @foreach($vehiculesApi ?? [] as $v)
+                  <option value="{{ $v['matricule_vehicule'] ?? '' }}"
+                    data-vehicule-id="{{ $v['vehicules_id'] ?? '' }}"
+                    @selected(old('matricule_vehicule') == ($v['matricule_vehicule'] ?? ''))>
+                    {{ $v['matricule_vehicule'] ?? '' }}
+                  </option>
+                @endforeach
+              </select>
+              <input type="hidden" name="vehicule_id" id="ticket_vehicule_id" value="{{ old('vehicule_id') }}" />
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">Poids (kg)</label>
               <input type="number" name="poids" class="form-control" step="0.01" min="0" placeholder="Ex: 15000" value="{{ old('poids') }}" />
             </div>
           </div>
+          {{-- Ligne 3 : Pont --}}
           <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Usine <span class="text-danger">*</span></label>
-              <select name="id_usine" id="ticket_id_usine" class="form-select" required>
-                <option value="">-- Sélectionner une usine --</option>
-                @foreach($usines ?? [] as $usineItem)
-                  <option value="{{ $usineItem['id_usine'] ?? '' }}" @selected(old('id_usine') == ($usineItem['id_usine'] ?? ''))>{{ $usineItem['nom_usine'] ?? '' }}</option>
+            <div class="col-md-12 mb-3">
+              <label class="form-label">Pont</label>
+              <select name="id_pont" id="ticket_id_pont" class="form-select">
+                <option value="" data-gerable="0">-- Aucun pont --</option>
+                @foreach($tousLesPonts ?? [] as $pont)
+                  <option value="{{ $pont['id_pont'] }}" data-gerable="{{ $pont['gerable'] ? '1' : '0' }}">
+                    {{ $pont['nom_pont'] ?? '' }} ({{ $pont['code_pont'] ?? '' }})
+                    @if($pont['gerable']) ★ @endif
+                  </option>
                 @endforeach
               </select>
             </div>
+          </div>
+          {{-- Ligne 4 : Produit + Parc (parc conditionnel si pont gérable) --}}
+          <div class="row">
+            <div id="col_produit" class="col-md-6 mb-3">
+              <label class="form-label">Produit</label>
+              <select name="produit_id" id="ticket_produit_id" class="form-select">
+                <option value="">-- Sélectionner un produit --</option>
+                @foreach($produitsLocaux ?? [] as $produit)
+                  <option value="{{ $produit->id }}">{{ $produit->nom }}</option>
+                @endforeach
+              </select>
+            </div>
+            <div id="col_parc" class="col-md-6 mb-3" style="display:none;">
+              <label class="form-label">Parc</label>
+              <select name="parc_id" id="ticket_parc_id" class="form-select" disabled>
+                <option value="">-- Sélectionner d'abord un produit --</option>
+              </select>
+            </div>
+          </div>
+          {{-- Ligne 5 : Usine (filtrée par produit) --}}
+          <div class="row">
+            <div class="col-md-12 mb-3">
+              <label class="form-label">Usine <span class="text-danger">*</span></label>
+              <select name="id_usine" id="ticket_id_usine" class="form-select" required>
+                <option value="">-- Sélectionner d'abord un produit --</option>
+              </select>
+            </div>
+          </div>
+          {{-- Ligne 6 : Groupe + Agent --}}
+          <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Groupe <span class="text-danger">*</span></label>
               <select name="particulier_groupe_id" id="ticket_particulier_groupe_id" class="form-select" required>
@@ -560,16 +602,14 @@
                 @endforeach
               </select>
             </div>
-          </div>
-          <div class="row">
-            <div class="col-md-12 mb-3">
+            <div class="col-md-6 mb-3">
               <label class="form-label">Agent <span class="text-danger">*</span></label>
               <select name="particulier_agent_id" id="ticket_particulier_agent_id" class="form-select" required disabled>
                 <option value="">-- Sélectionner d'abord un groupe --</option>
               </select>
             </div>
           </div>
-                  </div>
+        </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
           <button type="submit" class="btn btn-primary"><i class="bx bx-check me-1"></i>Enregistrer</button>
@@ -634,7 +674,21 @@ $(document).ready(function() {
     if ($('#ticket_particulier_agent_id').hasClass('select2-hidden-accessible')) {
       $('#ticket_particulier_agent_id').select2('destroy');
     }
+    if ($('#ticket_matricule_vehicule').hasClass('select2-hidden-accessible')) {
+      $('#ticket_matricule_vehicule').select2('destroy');
+    }
 
+    $('#ticket_matricule_vehicule').select2({
+      theme: 'bootstrap-5',
+      dropdownParent: $('#modalAddTicket .modal-body'),
+      placeholder: '-- Sélectionner un véhicule --',
+      allowClear: true,
+      width: '100%'
+    });
+
+    if ($('#ticket_id_usine').hasClass('select2-hidden-accessible')) {
+      $('#ticket_id_usine').select2('destroy');
+    }
     $('#ticket_id_usine').select2({
       theme: 'bootstrap-5',
       dropdownParent: $('#modalAddTicket .modal-body'),
@@ -664,6 +718,97 @@ $(document).ready(function() {
 
   $('#ticket_particulier_groupe_id').on('change', function() {
     remplirAgentsTicket($(this).val(), null);
+  });
+
+  $('#ticket_matricule_vehicule').on('change', function() {
+    var vid = $(this).find('option:selected').data('vehicule-id') || '';
+    $('#ticket_vehicule_id').val(vid);
+  });
+
+  // Usines par produit
+  var usinesParProduit = @json($usinesParProduit ?? []);
+
+  function onProduitChangeUsine() {
+    var produitId = $('#ticket_produit_id').val();
+    var $usine = $('#ticket_id_usine');
+    var oldUsineVal = $usine.val();
+
+    $usine.empty();
+
+    if (!produitId) {
+      $usine.append('<option value="">-- Sélectionner d\'abord un produit --</option>');
+    } else {
+      var usines = usinesParProduit[produitId] || [];
+      $usine.append('<option value="">-- Sélectionner une usine --</option>');
+      usines.forEach(function(u) {
+        $usine.append('<option value="' + u.id_usine + '">' + u.nom + '</option>');
+      });
+    }
+
+    if ($usine.hasClass('select2-hidden-accessible')) {
+      $usine.trigger('change.select2');
+    }
+  }
+
+  // Pont → Produit → Parc
+  var parcsParPontProduit = @json($parcsParPontProduit ?? []);
+
+  function onPontChange() {
+    var $sel = $('#ticket_id_pont');
+    var idPont = $sel.val();
+    var gerable = $sel.find('option:selected').data('gerable');
+    var $colParc = $('#col_parc');
+    var $produit = $('#ticket_produit_id');
+    var $parc = $('#ticket_parc_id');
+
+    // Réinitialiser produit et parc
+    $produit.val('');
+    $parc.empty().append('<option value="">-- Sélectionner d\'abord un produit --</option>').prop('disabled', true);
+
+    if (gerable == 1) {
+      // Pont gérable : afficher colonne Parc
+      $colParc.show();
+    } else {
+      // Pas de pont OU pont non gérable : masquer Parc
+      $colParc.hide();
+    }
+  }
+
+  function onProduitChange() {
+    var $pont = $('#ticket_id_pont');
+    var idPont = $pont.val();
+    var gerable = $pont.find('option:selected').data('gerable');
+    var produitId = $('#ticket_produit_id').val();
+    var $parc = $('#ticket_parc_id');
+
+    $parc.empty();
+
+    if (gerable != 1) {
+      $parc.append('<option value="">-</option>').prop('disabled', true);
+      return;
+    }
+
+    if (!idPont || !produitId) {
+      $parc.append('<option value="">-- Sélectionner d\'abord un produit --</option>').prop('disabled', true);
+      return;
+    }
+
+    var parcs = (parcsParPontProduit[idPont] || {})[produitId] || [];
+    if (parcs.length === 0) {
+      $parc.append('<option value="">Aucun parc disponible pour ce pont/produit</option>').prop('disabled', true);
+    } else {
+      $parc.append('<option value="">-- Sélectionner un parc --</option>');
+      parcs.forEach(function(p) {
+        $parc.append('<option value="' + p.id + '">' + p.nom + ' (' + p.code + ')</option>');
+      });
+      $parc.prop('disabled', false);
+    }
+  }
+
+  $('#ticket_id_pont').on('change', onPontChange);
+  $('#ticket_produit_id').on('change', function() {
+    onProduitChange();
+    onProduitChangeUsine();
   });
 
   @if($errors->any())

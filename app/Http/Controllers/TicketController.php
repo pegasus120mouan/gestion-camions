@@ -6,10 +6,16 @@ use App\Models\FicheSortie;
 use App\Models\Groupe;
 use App\Models\GroupeAgent;
 use App\Models\GroupeVehicule;
+use App\Models\Parc;
 use App\Models\ParticulierAgent;
 use App\Models\ParticulierAgentPrix;
 use App\Models\ParticulierGroupe;
+use App\Models\PontEtat;
+use App\Models\PrixAgent;
+use App\Models\Produit;
+use App\Models\Stock;
 use App\Models\Ticket;
+use App\Services\UsinesParProduitService;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -18,6 +24,28 @@ use Illuminate\Support\Facades\Http;
 
 class TicketController extends Controller
 {
+    private function prixUnitairePrixAgent(int $idAgentApi, int $idUsine, ?int $produitId, ?string $dateTicket): ?float
+    {
+        if ($idAgentApi <= 0 || $idUsine <= 0) {
+            return null;
+        }
+
+        $date = $dateTicket ? Carbon::parse($dateTicket)->startOfDay() : now()->startOfDay();
+
+        $query = PrixAgent::where('id_agent', $idAgentApi)
+            ->where('id_usine', $idUsine)
+            ->where(fn ($q) => $q->whereNull('date_debut')->orWhereDate('date_debut', '<=', $date))
+            ->where(fn ($q) => $q->whereNull('date_fin')->orWhereDate('date_fin', '>=', $date));
+
+        if ($produitId) {
+            $query->where('produit_id', $produitId);
+        }
+
+        $match = $query->orderByDesc('date_debut')->first();
+
+        return $match ? (float) $match->prix : null;
+    }
+
     private function prixUnitaireParticulierAgent($prixRecords, int $particulierAgentId, int $idUsine, ?string $dateTicket): ?float
     {
         if ($particulierAgentId <= 0 || $idUsine <= 0) {
@@ -73,12 +101,32 @@ class TicketController extends Controller
         $agentsApi = [];
 
         try {
-            $usinesResponse = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
-            if ($usinesResponse->successful()) {
-                $usinesApi = $usinesResponse->json('usines') ?? [];
+            $usinesUrl = (string) config('services.external_auth.mes_usines_url', 'https://api.objetombrepegasus.online/api/camions/mes_usines.php');
+            $pageU = 1;
+            $hasMoreU = true;
+            while ($hasMoreU) {
+                $usinesResponse = Http::acceptJson()
+                    ->withoutVerifying()
+                    ->timeout($timeout)
+                    ->get($usinesUrl, ['page' => $pageU]);
+                if ($usinesResponse->successful()) {
+                    $pageUsines = $usinesResponse->json('usines') ?? [];
+                    if (empty($pageUsines)) {
+                        $hasMoreU = false;
+                    } else {
+                        $usinesApi = array_merge($usinesApi, $pageUsines);
+                        $paginationU = $usinesResponse->json('pagination');
+                        $currentPageU = $paginationU['current_page'] ?? $pageU;
+                        $lastPageU = $paginationU['last_page'] ?? 1;
+                        if ($currentPageU >= $lastPageU) {
+                            $hasMoreU = false;
+                        } else {
+                            $pageU++;
+                        }
+                    }
+                } else {
+                    $hasMoreU = false;
+                }
             }
         } catch (\Throwable $e) {}
 
@@ -111,10 +159,15 @@ class TicketController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        // Indexer par ID
+        // Indexer par ID (API d'abord, puis usines locales en complément)
         $usinesById = [];
         foreach ($usinesApi as $u) {
             $usinesById[$u['id_usine'] ?? 0] = $u['nom_usine'] ?? '';
+        }
+        foreach (\App\Models\Usine::all() as $ul) {
+            if (!isset($usinesById[$ul->id_usine])) {
+                $usinesById[$ul->id_usine] = $ul->nom_usine;
+            }
         }
         $agentsById = [];
         foreach ($agentsApi as $a) {
@@ -144,6 +197,19 @@ class TicketController extends Controller
                     (int) $ticket->id_usine,
                     $ticket->date_ticket?->format('Y-m-d')
                 );
+
+                // Fallback : chercher dans prix_agents via l'id_agent API
+                if ($prixUnitaireAgent === null) {
+                    $idAgentApi = (int) ($ticket->particulierAgent?->id_agent ?? 0);
+                    if ($idAgentApi > 0) {
+                        $prixUnitaireAgent = $this->prixUnitairePrixAgent(
+                            $idAgentApi,
+                            (int) $ticket->id_usine,
+                            null,
+                            $ticket->date_ticket?->format('Y-m-d')
+                        );
+                    }
+                }
 
                 if ($prixUnitaireAgent !== null && (float) $ticket->poids > 0) {
                     $montantCalcule = $prixUnitaireAgent * (float) $ticket->poids;
@@ -198,6 +264,7 @@ class TicketController extends Controller
                     'poids_parc' => $fiche->poids_pont,
                     'prix_unitaire_transport' => $fiche->prix_unitaire_transport,
                     'poids_unitaire_regime' => $fiche->poids_unitaire_regime,
+                    'nom_produit' => $fiche->nom_produit,
                 ];
             }
         }
@@ -212,6 +279,7 @@ class TicketController extends Controller
                 $ticket['poids_parc'] = $fichesSortie[$idTicket]['poids_parc'];
                 $ticket['prix_unitaire_transport'] = $fichesSortie[$idTicket]['prix_unitaire_transport'];
                 $ticket['poids_unitaire_regime'] = $fichesSortie[$idTicket]['poids_unitaire_regime'];
+                $ticket['nom_produit'] = $fichesSortie[$idTicket]['nom_produit'];
             } else {
                 $ticket['fiche_id'] = null;
                 $ticket['origine'] = '';
@@ -219,6 +287,7 @@ class TicketController extends Controller
                 $ticket['poids_parc'] = '';
                 $ticket['prix_unitaire_transport'] = null;
                 $ticket['poids_unitaire_regime'] = null;
+                $ticket['nom_produit'] = null;
             }
         }
         unset($ticket);
@@ -273,6 +342,58 @@ class TicketController extends Controller
             ->orderBy('nom_groupe')
             ->get();
 
+        // Ponts gérables (depuis pont_etats)
+        $pontEtatsGerables = PontEtat::where('gerable', true)->get();
+        $idsPontsGerables = $pontEtatsGerables->pluck('id_pont')->toArray();
+
+        // Récupérer les ponts API et filtrer les gérables
+        $mesPontsUrl = (string) config('services.external_auth.mes_ponts_url');
+        $pontsApi = [];
+        try {
+            $pontResponse = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($mesPontsUrl);
+            if ($pontResponse->successful()) {
+                $pontsApi = $pontResponse->json('ponts') ?? [];
+            }
+        } catch (\Throwable $e) {}
+
+        $pontsGerables = array_values(array_filter($pontsApi, function ($p) use ($idsPontsGerables) {
+            return in_array((int) ($p['id_pont'] ?? 0), $idsPontsGerables, true);
+        }));
+
+        // Tous les ponts annotés avec leur statut gérable
+        $tousLesPonts = array_map(function ($p) use ($idsPontsGerables) {
+            $p['gerable'] = in_array((int) ($p['id_pont'] ?? 0), $idsPontsGerables, true);
+            return $p;
+        }, $pontsApi);
+
+        // Produits locaux
+        $produitsLocaux = Produit::orderBy('nom')->get();
+
+        // Usines par produit pour le select dynamique
+        $usinesParProduit = app(UsinesParProduitService::class)->usinesParProduitPourSelect();
+
+        // Parcs par pont + produit (depuis stocks ouverts)
+        // Structure : [ id_pont => [ produit_id => [ {id, nom, code} ] ] ]
+        $parcsParPontProduit = [];
+        $stocksOuverts = Stock::where('type', 'entree')
+            ->where('statut', 'ouvert')
+            ->whereNotNull('id_pont')
+            ->whereNotNull('produit_id')
+            ->with('parc')
+            ->get();
+
+        foreach ($stocksOuverts as $stock) {
+            $idPont = (int) $stock->id_pont;
+            $produitId = (int) $stock->produit_id;
+            $parc = $stock->parc ?? Parc::find($stock->parc_id);
+            if (!$parc) continue;
+            $parcsParPontProduit[$idPont][$produitId][] = [
+                'id' => $parc->id,
+                'nom' => $parc->nom,
+                'code' => $parc->code,
+            ];
+        }
+
         return view('tickets.index', [
             'tickets' => $ticketsArray,
             'pagination' => $pagination,
@@ -283,6 +404,11 @@ class TicketController extends Controller
             'agents' => $agentsApi,
             'agentsPgf' => $agentsPgf,
             'groupesParticuliers' => $groupesParticuliers,
+            'pontsGerables' => $pontsGerables,
+            'tousLesPonts' => $tousLesPonts,
+            'produitsLocaux' => $produitsLocaux,
+            'usinesParProduit' => $usinesParProduit,
+            'parcsParPontProduit' => $parcsParPontProduit,
             'external_error' => null,
         ]);
     }
@@ -290,15 +416,19 @@ class TicketController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'numero_ticket' => ['required', 'string', 'max:255'],
-            'date_ticket' => ['required', 'date'],
-            'matricule_vehicule' => ['required', 'string', 'max:255'],
-            'poids' => ['nullable', 'numeric', 'min:0'],
-            'id_usine' => ['required', 'integer', 'min:1'],
-            'particulier_groupe_id' => ['required', 'exists:particulier_groupes,id'],
+            'numero_ticket'        => ['required', 'string', 'max:255'],
+            'date_ticket'          => ['required', 'date'],
+            'matricule_vehicule'   => ['required', 'string', 'max:255'],
+            'vehicule_id'          => ['nullable', 'integer', 'min:1'],
+            'poids'                => ['nullable', 'numeric', 'min:0'],
+            'id_usine'             => ['required', 'integer', 'min:1'],
+            'particulier_groupe_id'=> ['required', 'exists:particulier_groupes,id'],
             'particulier_agent_id' => ['required', 'exists:particulier_agents,id'],
-            'prix_unitaire' => ['nullable', 'numeric', 'min:0'],
-            'statut_ticket' => ['nullable', 'in:soldé,non soldé'],
+            'prix_unitaire'        => ['nullable', 'numeric', 'min:0'],
+            'statut_ticket'        => ['nullable', 'in:soldé,non soldé'],
+            'id_pont'              => ['nullable', 'integer', 'min:1'],
+            'parc_id'              => ['nullable', 'integer', 'min:1'],
+            'produit_id'           => ['nullable', 'integer', 'min:1'],
         ]);
 
         $agent = ParticulierAgent::where('id', $validated['particulier_agent_id'])
@@ -311,19 +441,91 @@ class TicketController extends Controller
             ]);
         }
 
-        Ticket::create([
-            'numero_ticket' => $validated['numero_ticket'],
-            'date_ticket' => $validated['date_ticket'],
-            'matricule_vehicule' => trim($validated['matricule_vehicule']),
-            'vehicule_id' => null,
-            'poids' => $validated['poids'] ?? null,
-            'id_usine' => $validated['id_usine'],
-            'id_agent' => null,
-            'particulier_agent_id' => $agent->id,
-            'id_utilisateur' => Auth::id() ?? 1,
-            'prix_unitaire' => $validated['prix_unitaire'] ?? 0,
-            'statut_ticket' => $validated['statut_ticket'] ?? 'non soldé',
+        $ticket = Ticket::create([
+            'numero_ticket'       => $validated['numero_ticket'],
+            'date_ticket'         => $validated['date_ticket'],
+            'matricule_vehicule'  => trim($validated['matricule_vehicule']),
+            'vehicule_id'         => $validated['vehicule_id'] ?? null,
+            'poids'               => $validated['poids'] ?? null,
+            'id_usine'            => $validated['id_usine'],
+            'id_agent'            => null,
+            'particulier_agent_id'=> $agent->id,
+            'id_utilisateur'      => Auth::id() ?? 1,
+            'prix_unitaire'       => $validated['prix_unitaire'] ?? 0,
+            'statut_ticket'       => $validated['statut_ticket'] ?? 'non soldé',
         ]);
+
+        // Si pont + parc + produit fournis → créer une FicheSortie liée au stock
+        $idPont   = $validated['id_pont'] ?? null;
+        $parcId   = $validated['parc_id'] ?? null;
+        $produitId = $validated['produit_id'] ?? null;
+
+        if ($idPont && $produitId) {
+            // Trouver le stock ouvert actif pour ce pont + produit (+ parc si fourni)
+            $stockQuery = Stock::where('id_pont', $idPont)
+                ->where('produit_id', $produitId)
+                ->where('type', 'entree')
+                ->where('statut', 'ouvert')
+                ->where(fn ($q) => $q->whereNull('etat')->orWhere('etat', 'actif'));
+
+            if ($parcId) {
+                $stockQuery->where('parc_id', $parcId);
+            }
+
+            $stock = $stockQuery->orderBy('id')->first();
+
+            if ($stock) {
+                $parc    = $parcId ? Parc::find($parcId) : null;
+                $produit = Produit::find($produitId);
+
+                // Récupérer infos pont depuis pont_etats
+                $pontEtat = PontEtat::where('id_pont', $idPont)->first();
+                $nomPont  = $pontEtat?->nom_pont ?? '';
+                $codePont = $pontEtat?->code_pont ?? '';
+
+                // Récupérer le nom de l'usine depuis l'API
+                $nomUsine = (string) $ticket->id_usine;
+                try {
+                    $timeout = (int) config('services.external_auth.timeout', 10);
+                    $usinesUrl = (string) config('services.external_auth.mes_usines_url');
+                    $usinesResp = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($usinesUrl);
+                    if ($usinesResp->successful()) {
+                        foreach ($usinesResp->json('usines') ?? [] as $u) {
+                            if ((int)($u['id_usine'] ?? 0) === (int)$ticket->id_usine) {
+                                $nomUsine = $u['nom_usine'] ?? $nomUsine;
+                                break;
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {}
+
+                // Nom de l'agent depuis le modèle ParticulierAgent
+                $nomAgent = trim($agent->nom . ' ' . $agent->prenoms);
+                $numeroAgent = $agent->numero_agent ?? '';
+
+                FicheSortie::create([
+                    'stock_id'           => $stock->id,
+                    'parc_id'            => $parc?->id,
+                    'nom_parc'           => $parc?->nom ?? '',
+                    'vehicule_id'        => $ticket->vehicule_id ?? 0,
+                    'matricule_vehicule' => $ticket->matricule_vehicule,
+                    'id_pont'            => $idPont,
+                    'nom_pont'           => $nomPont,
+                    'code_pont'          => $codePont,
+                    'id_agent'           => $agent->id_agent ?? 0,
+                    'nom_agent'          => $nomAgent,
+                    'numero_agent'       => $numeroAgent,
+                    'usine'              => $nomUsine,
+                    'produit_id'         => $produit?->id,
+                    'nom_produit'        => $produit?->nom ?? '',
+                    'id_ticket'          => $ticket->id_ticket,
+                    'numero_ticket'      => $ticket->numero_ticket,
+                    'date_chargement'    => $ticket->date_ticket,
+                    'date_dechargement'  => $ticket->date_ticket,
+                    'poids_pont'         => $ticket->poids ?? 0,
+                ]);
+            }
+        }
 
         return redirect()->route('tickets.index')
             ->with('success', 'Ticket créé avec succès.');

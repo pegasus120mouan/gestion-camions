@@ -16,6 +16,11 @@ class PontEtat extends Model
         'nom_pont',
         'code_pont',
         'etat',
+        'gerable',
+    ];
+
+    protected $casts = [
+        'gerable' => 'boolean',
     ];
 
     public static function etatDepuisApi(?string $statutApi): string

@@ -39,9 +39,8 @@
               <th>Nom</th>
               <th>Stock disponible</th>
               <th class="text-end">Solde</th>
-              <th>Gerant</th>
-              <th>Cooperatif</th>
               <th>Statut</th>
+              <th>Gérable</th>
             </tr>
           </thead>
           <tbody class="table-border-bottom-0">
@@ -51,7 +50,17 @@
                 $idPont = (int) ($p['id_pont'] ?? 0);
               @endphp
               <tr>
-                <td>{{ $p['code_pont'] ?? '' }}</td>
+                <td>
+                  <a href="#" class="text-decoration-none fw-semibold text-secondary"
+                     data-bs-toggle="modal" data-bs-target="#modalInfoPont"
+                     data-code="{{ $p['code_pont'] ?? '' }}"
+                     data-nom="{{ $p['nom_pont'] ?? '' }}"
+                     data-gerant="{{ $p['gerant'] ?? '-' }}"
+                     data-cooperatif="{{ $p['cooperatif'] ?? '-' }}"
+                     onclick="remplirModalPont(this)">
+                    {{ $p['code_pont'] ?? '' }}
+                  </a>
+                </td>
                 <td>
                   <a href="{{ route('ponts.stock', ['id_pont' => $idPont]) }}" class="text-primary fw-bold text-decoration-none">
                     {{ $p['nom_pont'] ?? '' }}
@@ -70,8 +79,6 @@
                     <span class="text-muted">0 FCFA</span>
                   @endif
                 </td>
-                <td>{{ $p['gerant'] ?? '' }}</td>
-                <td>{{ $p['cooperatif'] ?? '-' }}</td>
                 <td>
                   @if($etatPont === 'actif')
                     <span class="badge bg-success">Actif</span>
@@ -91,10 +98,22 @@
                     </select>
                   </form>
                 </td>
+                <td>
+                  <form method="POST" action="{{ route('ponts.toggle_gerable', ['id_pont' => $idPont]) }}">
+                    @csrf
+                    <input type="hidden" name="nom_pont" value="{{ $p['nom_pont'] ?? '' }}" />
+                    <input type="hidden" name="code_pont" value="{{ $p['code_pont'] ?? '' }}" />
+                    @if($p['gerable'] ?? false)
+                      <button type="submit" class="btn btn-sm btn-success">Gérable</button>
+                    @else
+                      <button type="submit" class="btn btn-sm btn-outline-secondary">Non gérable</button>
+                    @endif
+                  </form>
+                </td>
               </tr>
             @empty
               <tr>
-                <td colspan="7" class="text-center">
+                <td colspan="6" class="text-center">
                   @if(!empty($search))
                     Aucun pont trouvé pour « {{ $search }} »
                   @else
@@ -123,4 +142,39 @@
     @endif
   </div>
 </div>
+
+<div class="modal fade" id="modalInfoPont" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Informations du pont</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-4">Code</dt>
+          <dd class="col-sm-8" id="modalPontCode">-</dd>
+          <dt class="col-sm-4">Nom</dt>
+          <dd class="col-sm-8" id="modalPontNom">-</dd>
+          <dt class="col-sm-4">Gérant</dt>
+          <dd class="col-sm-8" id="modalPontGerant">-</dd>
+          <dt class="col-sm-4">Coopératif</dt>
+          <dd class="col-sm-8" id="modalPontCooperatif">-</dd>
+        </dl>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function remplirModalPont(el) {
+  document.getElementById('modalPontCode').textContent      = el.dataset.code      || '-';
+  document.getElementById('modalPontNom').textContent       = el.dataset.nom       || '-';
+  document.getElementById('modalPontGerant').textContent    = el.dataset.gerant    || '-';
+  document.getElementById('modalPontCooperatif').textContent = el.dataset.cooperatif || '-';
+}
+</script>
 @endsection

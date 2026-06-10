@@ -193,12 +193,14 @@ Route::middleware('auth')->group(function () {
     Route::post('/camions/assigner-groupe', [CamionController::class, 'assignerGroupe'])->name('camions.assigner_groupe');
     Route::delete('/camions/{vehicule_id}/retirer-groupe', [CamionController::class, 'retirerGroupe'])->name('camions.retirer_groupe');
     Route::resource('ponts_pesage', PontPesageController::class)->except(['create']);
+    Route::post('/ponts_pesage/{pontPesage}/toggle-gerable', [PontPesageController::class, 'toggleGerable'])->name('ponts_pesage.toggle_gerable');
     Route::get('pesees/{pesee}/ticket', [PeseeController::class, 'ticket'])->name('pesees.ticket');
     Route::post('pesees/{pesee}/validate', [PeseeController::class, 'validateStatus'])->name('pesees.validate');
     Route::post('pesees/{pesee}/cancel', [PeseeController::class, 'cancel'])->name('pesees.cancel');
     Route::resource('pesees', PeseeController::class)->except(['create']);
     Route::resource('produits', ProduitController::class)->except(['create']);
     Route::post('/produits/{produit}/usines', [ProduitController::class, 'storeUsine'])->name('produits.usines.store');
+    Route::post('/usines/{code_usine}/gerable', [UsineController::class, 'toggleGerable'])->name('usines.gerable');
 
     Route::get('/gestionfinanciere', [GestionFinanciereController::class, 'index'])->name('gestionfinanciere.index');
     Route::post('/gestionfinanciere', [GestionFinanciereController::class, 'store'])->name('gestionfinanciere.store');
@@ -232,6 +234,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/ponts', [PontController::class, 'index'])->name('ponts.index');
     Route::post('/ponts/{id_pont}/etat', [PontController::class, 'updatePontEtat'])->name('ponts.etat.update');
+    Route::post('/ponts/{id_pont}/toggle-gerable', [PontController::class, 'toggleGerable'])->name('ponts.toggle_gerable');
     Route::get('/ponts/sorties', [PontController::class, 'sorties'])->name('ponts.sorties');
     Route::get('/ponts/{id_pont}/stock', [PontController::class, 'stock'])->name('ponts.stock');
     Route::post('/ponts/{id_pont}/stock', [PontController::class, 'storeStock'])->name('ponts.stock.store');

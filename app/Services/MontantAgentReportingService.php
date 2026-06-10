@@ -8,6 +8,7 @@ use App\Models\Usine;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 
 class MontantAgentReportingService
@@ -111,8 +112,13 @@ class MontantAgentReportingService
             ->orderBy('date_chargement', 'desc')
             ->get();
 
+        $usinesById = $this->buildUsinesById();
+
         $result = [];
         foreach ($fiches as $fiche) {
+            if (is_numeric($fiche->usine) && isset($usinesById[(string) $fiche->usine])) {
+                $fiche->usine = $usinesById[(string) $fiche->usine];
+            }
             $result[] = [
                 'fiche' => $fiche,
                 'montant' => $this->montantLigneFiche($fiche),
@@ -121,6 +127,29 @@ class MontantAgentReportingService
         }
 
         return $result;
+    }
+
+    private function buildUsinesById(): array
+    {
+        $index = [];
+        foreach (Usine::all() as $ul) {
+            $index[(string) $ul->id_usine] = $ul->nom_usine;
+        }
+        try {
+            $url = (string) config('services.external_auth.mes_usines_url');
+            $timeout = (int) config('services.external_auth.timeout', 10);
+            $resp = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($url);
+            if ($resp->successful()) {
+                foreach ($resp->json('usines') ?? [] as $u) {
+                    $key = (string) ($u['id_usine'] ?? '');
+                    if ($key !== '' && !isset($index[$key])) {
+                        $index[$key] = $u['nom_usine'] ?? '';
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        return $index;
     }
 
     /**

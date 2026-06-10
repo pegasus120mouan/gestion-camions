@@ -56,7 +56,6 @@
         <table class="table table-hover">
           <thead>
             <tr>
-              <th>ID</th>
               <th>Date chargement</th>
               <th>Matricule</th>
               <th>Pont</th>
@@ -69,7 +68,6 @@
           <tbody>
             @forelse($fichesSortie as $fiche)
               <tr>
-                <td><strong>#{{ $fiche->id }}</strong></td>
                 <td>{{ $fiche->date_chargement ? $fiche->date_chargement->format('d/m/Y') : '-' }}</td>
                 <td>
                   <a href="{{ route('vehicules.depenses', ['vehicule_id' => $fiche->vehicule_id]) }}" class="text-primary">

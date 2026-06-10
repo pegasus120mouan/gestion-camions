@@ -13,6 +13,11 @@ class Usine extends Model
         'nom_usine',
         'code_usine',
         'produit_id',
+        'gerable',
+    ];
+
+    protected $casts = [
+        'gerable' => 'boolean',
     ];
 
     public function produit()

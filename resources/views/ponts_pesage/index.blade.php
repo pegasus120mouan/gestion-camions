@@ -23,6 +23,7 @@
               <th>Nom</th>
               <th>Localisation</th>
               <th>Actif</th>
+              <th>Gérable</th>
               <th class="text-end">Actions</th>
             </tr>
           </thead>
@@ -33,6 +34,16 @@
                 <td>{{ $p->nom }}</td>
                 <td>{{ $p->localisation }}</td>
                 <td>{{ $p->actif ? 'Oui' : 'Non' }}</td>
+                <td>
+                  <form class="d-inline" method="POST" action="{{ route('ponts_pesage.toggle_gerable', $p) }}">
+                    @csrf
+                    @if($p->gerable)
+                      <button type="submit" class="btn btn-sm btn-success">Gérable</button>
+                    @else
+                      <button type="submit" class="btn btn-sm btn-outline-secondary">Non gérable</button>
+                    @endif
+                  </form>
+                </td>
                 <td class="text-end">
                   <a class="btn btn-sm btn-outline-primary" href="{{ route('ponts_pesage.edit', $p) }}">Modifier</a>
                   <form class="d-inline" method="POST" action="{{ route('ponts_pesage.destroy', $p) }}" onsubmit="return confirm('Supprimer ce pont de pesage ?');">
@@ -44,7 +55,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="5" class="text-center">Aucun pont</td>
+                <td colspan="6" class="text-center">Aucun pont</td>
               </tr>
             @endforelse
           </tbody>

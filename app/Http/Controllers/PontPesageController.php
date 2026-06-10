@@ -99,6 +99,17 @@ class PontPesageController extends Controller
         return redirect()->back();
     }
 
+    public function toggleGerable(PontPesage $pontPesage)
+    {
+        $pontPesage->update(['gerable' => !$pontPesage->gerable]);
+
+        if (request()->wantsJson()) {
+            return response()->json(['data' => $pontPesage->refresh()]);
+        }
+
+        return redirect()->back();
+    }
+
     public function destroy(PontPesage $pontPesage)
     {
         $pontPesage->delete();

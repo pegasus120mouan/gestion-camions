@@ -16,10 +16,12 @@ class PontPesage extends Model
         'nom',
         'localisation',
         'actif',
+        'gerable',
     ];
 
     protected $casts = [
         'actif' => 'boolean',
+        'gerable' => 'boolean',
     ];
 
     public function agents()
