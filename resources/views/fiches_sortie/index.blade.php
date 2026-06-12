@@ -460,6 +460,7 @@
         @method('PUT')
         <div class="modal-body">
           @php
+            $pontGerable = (bool) ($gerableParPont[$f->id_pont] ?? false);
             $stockFiche = $f->stock_id ? \App\Models\Stock::find($f->stock_id) : null;
             if (!$stockFiche && $f->parc_id && $f->produit_id) {
               $stockFiche = \App\Models\Stock::where('parc_id', $f->parc_id)
@@ -488,12 +489,15 @@
             @if($f->nom_produit)
               <p><strong>Produit:</strong> {{ $f->nom_produit }}</p>
             @endif
-            @if($stockFiche)
+            @if($pontGerable && $stockFiche)
               <p class="mb-0"><strong>Stock disponible:</strong>
                 <span class="text-success fw-bold">{{ number_format($stockDispoFiche, 0, ',', ' ') }} kg</span>
               </p>
+            @elseif(!$pontGerable)
+              <p class="mb-0 text-muted"><small>Pont non gérable — le déchargement n'impacte pas le stock.</small></p>
             @endif
           </div>
+          @if($pontGerable)
           <div class="mb-3">
             <label class="form-label">Parc <span class="text-danger">*</span></label>
             <select name="parc_id" class="form-select @error('parc_id') is-invalid @enderror" required>
@@ -524,6 +528,7 @@
               <small class="text-danger">Aucun parc pour ce pont. <a href="{{ route('parcs.index') }}">Créer un parc</a></small>
             @endif
           </div>
+          @endif
           <hr>
           <div class="mb-3">
             <label class="form-label">Date de déchargement <span class="text-danger">*</span></label>
@@ -541,7 +546,7 @@
           <div class="mb-3">
             <label class="form-label">Poids (kg) <span class="text-danger">*</span></label>
             <input type="number" name="poids_pont" id="poids_pont_{{ $f->id }}" class="form-control" value="{{ old('poids_pont', $f->poids_pont ?? '') }}" placeholder="Poids en kg" min="0.01" step="0.01" required onchange="calculerMontantCamion({{ $f->id }})" oninput="calculerMontantCamion({{ $f->id }})">
-            @if($stockFiche)
+            @if($pontGerable && $stockFiche)
               <small class="text-muted">Le poids sera déduit du stock du parc {{ $f->nom_parc ?? $stockFiche->nom_parc }}. Si le déchargement dépasse le stock disponible, l'écart est enregistré comme gain.</small>
             @endif
           </div>

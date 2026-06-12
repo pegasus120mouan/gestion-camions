@@ -56,7 +56,8 @@
             default => ['#6366f1', '#a5b4fc', '#eef2ff'],
           };
           $produitIdAttr = $groupe['id'] === 'sans' ? 'null' : $groupe['id'];
-          $totalPages = (int) ceil(count($groupe['prix']) / 10);
+          $nbPrix = count($groupe['prix']);
+          $totalPages = (int) ceil($nbPrix / 10);
           $showTable = !$firstTableShown;
           if ($showTable) {
             $firstTableShown = true;
@@ -64,10 +65,17 @@
         @endphp
         <div id="table-{{ $sectionId }}-{{ $loop->index }}" class="produit-table mb-4" data-current-page="1" data-total-pages="{{ max(1, $totalPages) }}" style="{{ $showTable ? '' : 'display:none;' }}">
           <div class="d-flex justify-content-between align-items-center p-3 rounded-top" style="background: {{ $produitColors[0] }};">
-            <span class="text-white fw-bold"><i class="bx bx-list-ul me-2"></i>{{ $produitNom }} — {{ count($groupe['prix']) }} prix</span>
+            <span class="text-white fw-bold">
+              <i class="bx bx-list-ul me-2"></i>{{ $produitNom }} —
+              <span class="prix-count-visible">{{ $nbPrix }}</span> / {{ $nbPrix }} prix
+            </span>
             <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddPrix" onclick="setTypeAndProduit('{{ $typeSlug }}', {{ $produitIdAttr }})">
               <i class="bx bx-plus me-1"></i>Ajouter
             </button>
+          </div>
+          @include('shared._prix_table_filtres')
+          <div class="alert alert-warning py-2 mb-0 mx-0 rounded-0 prix-filtre-empty d-none">
+            Aucun prix ne correspond à votre recherche.
           </div>
           <div class="table-responsive border border-top-0 rounded-bottom" style="max-height: 400px; overflow-y: auto;">
             <table class="table table-hover mb-0">
@@ -82,7 +90,10 @@
               </thead>
               <tbody>
                 @foreach($groupe['prix'] as $index => $prix)
-                  <tr class="prix-row" data-row-index="{{ $index }}">
+                  <tr class="prix-row" data-row-index="{{ $index }}"
+                      data-usine="{{ mb_strtolower($prix->nom_usine ?? '', 'UTF-8') }}"
+                      data-date-debut="{{ $prix->date_debut ? $prix->date_debut->format('Y-m-d') : '' }}"
+                      data-date-fin="{{ $prix->date_fin ? $prix->date_fin->format('Y-m-d') : '' }}">
                     <td class="ps-3"><strong>{{ $prix->nom_usine }}</strong></td>
                     <td class="text-end"><span class="badge bg-success">{{ number_format($prix->prix, 0, ',', ' ') }} FCFA</span></td>
                     <td><small>{{ $prix->date_debut ? $prix->date_debut->format('d-m-Y') : '-' }}</small></td>
@@ -100,13 +111,11 @@
               </tbody>
             </table>
           </div>
-          @if($totalPages > 1)
-          <div class="p-2 border border-top-0 rounded-bottom bg-light d-flex justify-content-center align-items-center gap-2 pagination-controls">
+          <div class="p-2 border border-top-0 rounded-bottom bg-light d-flex justify-content-center align-items-center gap-2 pagination-controls" style="{{ $totalPages > 1 ? '' : 'display:none;' }}">
             <button type="button" class="btn btn-sm btn-outline-secondary btn-prev" onclick="changePage('table-{{ $sectionId }}-{{ $loop->index }}', -1)"><i class="bx bx-chevron-left"></i></button>
-            <span class="small text-muted page-info">Page 1 / {{ $totalPages }}</span>
+            <span class="small text-muted page-info">Page 1 / {{ max(1, $totalPages) }}</span>
             <button type="button" class="btn btn-sm btn-outline-secondary btn-next" onclick="changePage('table-{{ $sectionId }}-{{ $loop->index }}', 1)"><i class="bx bx-chevron-right"></i></button>
           </div>
-          @endif
         </div>
       @endforeach
     @else

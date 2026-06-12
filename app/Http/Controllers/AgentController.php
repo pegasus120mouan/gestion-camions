@@ -6,6 +6,7 @@ use App\Models\CodeTransporteur;
 use App\Models\PrixAgent;
 use App\Models\Produit;
 use App\Services\UsinesParProduitService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
@@ -83,23 +84,59 @@ class AgentController extends Controller
         return $groupes;
     }
 
-    private function prixAgentDejaExiste(
+    private function periodesSeChevauchent(?string $dateDebutA, ?string $dateFinA, ?string $dateDebutB, ?string $dateFinB): bool
+    {
+        $debutA = $dateDebutA ? Carbon::parse($dateDebutA)->startOfDay() : Carbon::create(1900, 1, 1);
+        $finA = $dateFinA ? Carbon::parse($dateFinA)->endOfDay() : Carbon::create(2100, 12, 31)->endOfDay();
+        $debutB = $dateDebutB ? Carbon::parse($dateDebutB)->startOfDay() : Carbon::create(1900, 1, 1);
+        $finB = $dateFinB ? Carbon::parse($dateFinB)->endOfDay() : Carbon::create(2100, 12, 31)->endOfDay();
+
+        return $debutA->lte($finB) && $debutB->lte($finA);
+    }
+
+    private function prixAgentEnConflit(
         int $idAgent,
         int $produitId,
         string $nomUsine,
         string $type,
-        ?string $dateDebut
-    ): bool {
-        return PrixAgent::query()
+        ?string $dateDebut,
+        ?string $dateFin,
+        ?int $excludePrixId = null
+    ): ?PrixAgent {
+        $query = PrixAgent::query()
             ->where('id_agent', $idAgent)
             ->where('produit_id', $produitId)
             ->where('nom_usine', $nomUsine)
-            ->where('type', $type)
-            ->where(function ($q) use ($dateDebut) {
-                $q->whereNull('date_fin')
-                    ->orWhere('date_fin', '>=', $dateDebut ?? now()->format('Y-m-d'));
-            })
-            ->exists();
+            ->where('type', $type);
+
+        if ($excludePrixId) {
+            $query->where('id', '!=', $excludePrixId);
+        }
+
+        foreach ($query->get() as $existant) {
+            if ($this->periodesSeChevauchent(
+                $dateDebut,
+                $dateFin,
+                $existant->date_debut?->format('Y-m-d'),
+                $existant->date_fin?->format('Y-m-d')
+            )) {
+                return $existant;
+            }
+        }
+
+        return null;
+    }
+
+    private function formaterPeriodePrix(?PrixAgent $prix): string
+    {
+        if (!$prix) {
+            return '';
+        }
+
+        $debut = $prix->date_debut ? $prix->date_debut->format('d/m/Y') : '…';
+        $fin = $prix->date_fin ? $prix->date_fin->format('d/m/Y') : '…';
+
+        return "{$debut} au {$fin}";
     }
 
     private function typeSlugPourCodeTransporteur(string $nom): string
@@ -233,7 +270,7 @@ class AgentController extends Controller
         $produits = Produit::orderBy('nom')->get();
         $usinesParProduit = $this->usinesParProduitService->usinesParProduitPourSelect();
 
-        $orderPrix = fn ($q) => $q->orderBy('nom_produit')->orderBy('nom_usine');
+        $orderPrix = fn ($q) => $q->orderBy('nom_produit')->orderBy('nom_usine')->orderBy('date_debut');
 
         $prixTransporteur = $orderPrix(PrixAgent::where('id_agent', $id_agent)->where('type', 'transporteur'))->get();
         $prixPgf = $orderPrix(PrixAgent::where('id_agent', $id_agent)->where('type', 'pgf'))->get();
@@ -308,14 +345,17 @@ class AgentController extends Controller
             }
 
             $count = 0;
+            $ignored = 0;
             foreach ($usinesProduit as $usine) {
-                if ($this->prixAgentDejaExiste(
+                if ($this->prixAgentEnConflit(
                     $id_agent,
                     $produitId,
                     $usine['nom'],
                     $validated['type'],
-                    $validated['date_debut'] ?? null
+                    $validated['date_debut'] ?? null,
+                    $validated['date_fin'] ?? null
                 )) {
+                    $ignored++;
                     continue;
                 }
 
@@ -326,8 +366,20 @@ class AgentController extends Controller
                 $count++;
             }
 
+            if ($count === 0) {
+                return redirect()->route('agents.show', ['id_agent' => $id_agent])
+                    ->withErrors(['error' => $ignored > 0
+                        ? "Aucun prix ajouté : {$ignored} usine(s) ont déjà un prix sur une période qui chevauche."
+                        : 'Aucune usine disponible pour ce produit.']);
+            }
+
+            $message = "Prix ajouté pour {$count} usine(s) du produit « {$nomProduit} ».";
+            if ($ignored > 0) {
+                $message .= " ({$ignored} usine(s) ignorée(s) — période en conflit.)";
+            }
+
             return redirect()->route('agents.show', ['id_agent' => $id_agent])
-                ->with('success', "Prix ajouté pour {$count} usine(s) du produit « {$nomProduit} ».");
+                ->with('success', $message);
         }
 
         $idUsine = $validated['id_usine'];
@@ -340,15 +392,19 @@ class AgentController extends Controller
                 ->withErrors(['error' => "L'usine sélectionnée n'est pas associée à ce produit."]);
         }
 
-        if ($this->prixAgentDejaExiste(
+        $conflit = $this->prixAgentEnConflit(
             $id_agent,
             $produitId,
             $validated['nom_usine'],
             $validated['type'],
-            $validated['date_debut'] ?? null
-        )) {
+            $validated['date_debut'] ?? null,
+            $validated['date_fin'] ?? null
+        );
+
+        if ($conflit) {
             return redirect()->route('agents.show', ['id_agent' => $id_agent])
-                ->withErrors(['error' => 'Un prix existe déjà pour cette combinaison produit / usine.']);
+                ->withErrors(['error' => 'Cette période chevauche un prix existant pour cette usine ('
+                    . $this->formaterPeriodePrix($conflit) . ').']);
         }
 
         PrixAgent::create(array_merge($payloadBase, [
@@ -369,15 +425,32 @@ class AgentController extends Controller
         ]);
 
         $prix = PrixAgent::where('id', $prix_id)->where('id_agent', $id_agent)->first();
-        
-        if ($prix) {
-            $prix->update($validated);
+
+        if (!$prix) {
             return redirect()->route('agents.show', ['id_agent' => $id_agent])
-                ->with('success', 'Prix modifié avec succès.');
+                ->withErrors(['error' => 'Prix non trouvé.']);
         }
 
+        $conflit = $this->prixAgentEnConflit(
+            $id_agent,
+            (int) $prix->produit_id,
+            (string) $prix->nom_usine,
+            (string) $prix->type,
+            $validated['date_debut'] ?? null,
+            $validated['date_fin'] ?? null,
+            $prix->id
+        );
+
+        if ($conflit) {
+            return redirect()->route('agents.show', ['id_agent' => $id_agent])
+                ->withErrors(['error' => 'Cette période chevauche un autre prix pour cette usine ('
+                    . $this->formaterPeriodePrix($conflit) . ').']);
+        }
+
+        $prix->update($validated);
+
         return redirect()->route('agents.show', ['id_agent' => $id_agent])
-            ->withErrors(['error' => 'Prix non trouvé.']);
+            ->with('success', 'Prix modifié avec succès.');
     }
 
     public function deletePrix(int $id_agent, int $prix_id)

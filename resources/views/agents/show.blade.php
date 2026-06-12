@@ -308,35 +308,6 @@ function setTypeAndProduit(typeSlug, produitId) {
   }
 }
 
-function changePage(tableId, direction) {
-  var tableDiv = document.getElementById(tableId);
-  if (!tableDiv) return;
-
-  var currentPage = parseInt(tableDiv.getAttribute('data-current-page')) || 1;
-  var totalPages = parseInt(tableDiv.getAttribute('data-total-pages')) || 1;
-  var newPage = currentPage + direction;
-
-  if (newPage < 1 || newPage > totalPages) return;
-
-  tableDiv.setAttribute('data-current-page', newPage);
-
-  tableDiv.querySelectorAll('.prix-row').forEach(function(row) {
-    var rowIndex = parseInt(row.getAttribute('data-row-index'));
-    var rowPage = Math.floor(rowIndex / 10) + 1;
-    row.classList.toggle('d-none', rowPage !== newPage);
-  });
-
-  var pageInfo = tableDiv.querySelector('.page-info');
-  if (pageInfo) {
-    pageInfo.textContent = 'Page ' + newPage + ' / ' + totalPages;
-  }
-
-  var btnPrev = tableDiv.querySelector('.btn-prev');
-  var btnNext = tableDiv.querySelector('.btn-next');
-  if (btnPrev) btnPrev.disabled = newPage === 1;
-  if (btnNext) btnNext.disabled = newPage === totalPages;
-}
-
 function toggleProduitTable(tableId, button) {
   var section = button.closest('.card-body');
   section.querySelectorAll('.produit-table').forEach(function(table) {
@@ -346,17 +317,15 @@ function toggleProduitTable(tableId, button) {
   var selectedTable = document.getElementById(tableId);
   if (selectedTable) {
     selectedTable.style.display = 'block';
+    rafraichirPaginationPrixTable(selectedTable);
     selectedTable.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }
 
+@include('shared._prix_table_filter_script')
+
 document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.produit-table').forEach(function(table) {
-    var totalPages = parseInt(table.getAttribute('data-total-pages')) || 1;
-    if (totalPages > 1) {
-      changePage(table.id, 0);
-    }
-  });
+  initPrixTableFiltres();
 
   var form = document.getElementById('formAddPrix');
   if (!form) return;

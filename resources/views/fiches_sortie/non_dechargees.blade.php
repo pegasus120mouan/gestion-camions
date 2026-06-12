@@ -178,6 +178,13 @@
             <strong>Pont:</strong> {{ $f->nom_pont }}<br>
             <strong class="text-danger">Usine:</strong> <span class="text-danger fw-bold">{{ $f->usine ?? '-' }}</span>
           </div>
+          @php $pontGerable = (bool) ($gerableParPont[$f->id_pont] ?? false); @endphp
+          @if(!$pontGerable)
+            <div class="alert alert-secondary py-2 mb-3">
+              <small>Pont non gérable — aucun parc requis, le déchargement n'impacte pas le stock.</small>
+            </div>
+          @endif
+          @if($pontGerable)
           <div class="mb-3">
             <label class="form-label">Parc <span class="text-danger">*</span></label>
             <select name="parc_id" class="form-select" required>
@@ -213,6 +220,7 @@
               <small class="text-danger">Aucun parc pour ce pont. <a href="{{ route('parcs.index') }}">Créer un parc</a></small>
             @endif
           </div>
+          @endif
           <div class="mb-3">
             <label class="form-label">Date de déchargement <span class="text-danger">*</span></label>
             <input type="date" name="date_dechargement" class="form-control" value="{{ old('date_dechargement', date('Y-m-d')) }}" required />
@@ -232,7 +240,9 @@
           <div class="mb-3">
             <label class="form-label">Poids (kg) <span class="text-danger">*</span></label>
             <input type="number" name="poids_pont" class="form-control" value="{{ old('poids_pont', $f->poids_pont) }}" placeholder="Poids en kg" min="0.01" step="0.01" required />
-            <small class="text-muted">Le poids sera déduit du stock ouvert du parc sélectionné.</small>
+            @if($pontGerable)
+              <small class="text-muted">Le poids sera déduit du stock ouvert du parc sélectionné.</small>
+            @endif
           </div>
         </div>
         <div class="modal-footer">

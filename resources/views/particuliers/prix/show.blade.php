@@ -165,15 +165,23 @@
                   };
                 @endphp
 
-                @php
-                  $totalPages = ceil($prixList->count() / 10);
-                @endphp
-                <div id="table-tous-{{ $loop->index }}" class="produit-table mb-4" data-current-page="1" data-total-pages="{{ $totalPages }}">
+                  @php
+                    $nbPrixTous = $prixList->count();
+                    $totalPages = (int) ceil($nbPrixTous / 10);
+                  @endphp
+                <div id="table-tous-{{ $loop->index }}" class="produit-table mb-4" data-current-page="1" data-total-pages="{{ max(1, $totalPages) }}">
                   <div class="d-flex justify-content-between align-items-center p-3 rounded-top" style="background: {{ $produitColors[0] }};">
-                    <span class="text-white fw-bold"><i class="bx bx-list-ul me-2"></i>{{ $produitNom }} — {{ $prixList->count() }} prix</span>
+                    <span class="text-white fw-bold">
+                      <i class="bx bx-list-ul me-2"></i>{{ $produitNom }} —
+                      <span class="prix-count-visible">{{ $nbPrixTous }}</span> / {{ $nbPrixTous }} prix
+                    </span>
                     <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddPrix" onclick="setTypeAndProduit('', {{ $produitId ?? 'null' }})">
                       <i class="bx bx-plus me-1"></i>Ajouter
                     </button>
+                  </div>
+                  @include('shared._prix_table_filtres')
+                  <div class="alert alert-warning py-2 mb-0 mx-0 rounded-0 prix-filtre-empty d-none">
+                    Aucun prix ne correspond à votre recherche.
                   </div>
                   <div class="table-responsive border border-top-0 rounded-bottom" style="max-height: 400px; overflow-y: auto;">
                     <table class="table table-hover mb-0">
@@ -182,7 +190,10 @@
                       </thead>
                       <tbody>
                         @foreach($prixList as $index => $prix)
-                          <tr class="prix-row" data-row-index="{{ $index }}">
+                          <tr class="prix-row" data-row-index="{{ $index }}"
+                              data-usine="{{ mb_strtolower($prix->nom_usine ?? '', 'UTF-8') }}"
+                              data-date-debut="{{ $prix->date_debut ? $prix->date_debut->format('Y-m-d') : '' }}"
+                              data-date-fin="{{ $prix->date_fin ? $prix->date_fin->format('Y-m-d') : '' }}">
                             <td class="ps-3"><strong>{{ $prix->nom_usine }}</strong></td>
                             <td class="text-end"><span class="badge bg-success">{{ number_format($prix->prix, 0, ',', ' ') }} FCFA</span></td>
                             <td><small>{{ $prix->date_debut ? $prix->date_debut->format('d-m-Y') : '-' }}</small></td>
@@ -196,13 +207,11 @@
                       </tbody>
                     </table>
                   </div>
-                  @if($totalPages > 1)
-                  <div class="p-2 border border-top-0 rounded-bottom bg-light d-flex justify-content-center align-items-center gap-2 pagination-controls">
+                  <div class="p-2 border border-top-0 rounded-bottom bg-light d-flex justify-content-center align-items-center gap-2 pagination-controls" style="{{ $totalPages > 1 ? '' : 'display:none;' }}">
                     <button class="btn btn-sm btn-outline-secondary btn-prev" onclick="changePage('table-tous-{{ $loop->index }}', -1)"><i class="bx bx-chevron-left"></i></button>
-                    <span class="small text-muted page-info">Page 1 / {{ $totalPages }}</span>
+                    <span class="small text-muted page-info">Page 1 / {{ max(1, $totalPages) }}</span>
                     <button class="btn btn-sm btn-outline-secondary btn-next" onclick="changePage('table-tous-{{ $loop->index }}', 1)"><i class="bx bx-chevron-right"></i></button>
                   </div>
-                  @endif
                 </div>
               @endforeach
             </div>
@@ -267,15 +276,23 @@
                   @endphp
 
                   @php
-                    $totalPages = ceil($prixList->count() / 10);
+                    $nbPrixType = $prixList->count();
+                    $totalPages = (int) ceil($nbPrixType / 10);
                   @endphp
-                  <div id="table-produit-{{ $loop->parent->index }}-{{ $loop->index }}" class="produit-table mb-4" data-current-page="1" data-total-pages="{{ $totalPages }}">
+                  <div id="table-produit-{{ $loop->parent->index }}-{{ $loop->index }}" class="produit-table mb-4" data-current-page="1" data-total-pages="{{ max(1, $totalPages) }}">
                     <div class="d-flex justify-content-between align-items-center p-3 rounded-top" style="background: {{ $produitColors[0] }};">
-                      <span class="text-white fw-bold"><i class="bx bx-list-ul me-2"></i>{{ $produitNom }} — {{ $prixList->count() }} prix</span>
+                      <span class="text-white fw-bold">
+                        <i class="bx bx-list-ul me-2"></i>{{ $produitNom }} —
+                        <span class="prix-count-visible">{{ $nbPrixType }}</span> / {{ $nbPrixType }} prix
+                      </span>
                       <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddPrix"
                               onclick="setTypeAndProduit('{{ $typeKey }}', {{ $produitId ?? 'null' }})">
                         <i class="bx bx-plus me-1"></i>Ajouter
                       </button>
+                    </div>
+                    @include('shared._prix_table_filtres')
+                    <div class="alert alert-warning py-2 mb-0 mx-0 rounded-0 prix-filtre-empty d-none">
+                      Aucun prix ne correspond à votre recherche.
                     </div>
                     <div class="table-responsive border border-top-0 rounded-bottom" style="max-height: 400px; overflow-y: auto;">
                       <table class="table table-hover mb-0">
@@ -290,7 +307,10 @@
                         </thead>
                         <tbody>
                           @foreach($prixList as $index => $prix)
-                            <tr class="prix-row" data-row-index="{{ $index }}">
+                            <tr class="prix-row" data-row-index="{{ $index }}"
+                                data-usine="{{ mb_strtolower($prix->nom_usine ?? '', 'UTF-8') }}"
+                                data-date-debut="{{ $prix->date_debut ? $prix->date_debut->format('Y-m-d') : '' }}"
+                                data-date-fin="{{ $prix->date_fin ? $prix->date_fin->format('Y-m-d') : '' }}">
                               <td class="ps-3"><strong>{{ $prix->nom_usine }}</strong></td>
                               <td class="text-end">
                                 <span class="badge bg-success">{{ number_format($prix->prix, 0, ',', ' ') }} FCFA</span>
@@ -314,13 +334,11 @@
                         </tbody>
                       </table>
                     </div>
-                    @if($totalPages > 1)
-                    <div class="p-2 border border-top-0 rounded-bottom bg-light d-flex justify-content-center align-items-center gap-2 pagination-controls">
+                    <div class="p-2 border border-top-0 rounded-bottom bg-light d-flex justify-content-center align-items-center gap-2 pagination-controls" style="{{ $totalPages > 1 ? '' : 'display:none;' }}">
                       <button class="btn btn-sm btn-outline-secondary btn-prev" onclick="changePage('table-produit-{{ $loop->parent->index }}-{{ $loop->index }}', -1)"><i class="bx bx-chevron-left"></i></button>
-                      <span class="small text-muted page-info">Page 1 / {{ $totalPages }}</span>
+                      <span class="small text-muted page-info">Page 1 / {{ max(1, $totalPages) }}</span>
                       <button class="btn btn-sm btn-outline-secondary btn-next" onclick="changePage('table-produit-{{ $loop->parent->index }}-{{ $loop->index }}', 1)"><i class="bx bx-chevron-right"></i></button>
                     </div>
-                    @endif
                   </div>
                 @endforeach
               @else
@@ -582,75 +600,34 @@ function filterUsinesByProduit(selectProduit) {
   usineSelect.value = '';
 }
 
-// Fonction de pagination
-function changePage(tableId, direction) {
-  var tableDiv = document.getElementById(tableId);
-  if (!tableDiv) return;
+@include('shared._prix_table_filter_script')
 
-  var currentPage = parseInt(tableDiv.getAttribute('data-current-page')) || 1;
-  var totalPages = parseInt(tableDiv.getAttribute('data-total-pages')) || 1;
-  var newPage = currentPage + direction;
-
-  if (newPage < 1 || newPage > totalPages) return;
-
-  // Mettre a jour la page courante
-  tableDiv.setAttribute('data-current-page', newPage);
-
-  // Montrer/cacher les lignes selon la page
-  var rows = tableDiv.querySelectorAll('.prix-row');
-  rows.forEach(function(row) {
-    var rowIndex = parseInt(row.getAttribute('data-row-index'));
-    var rowPage = Math.floor(rowIndex / 10) + 1;
-    if (rowPage === newPage) {
-      row.classList.remove('d-none');
-    } else {
-      row.classList.add('d-none');
-    }
-  });
-
-  // Mettre a jour l'affichage de la page
-  var pageInfo = tableDiv.querySelector('.page-info');
-  if (pageInfo) {
-    pageInfo.textContent = 'Page ' + newPage + ' / ' + totalPages;
-  }
-
-  // Activer/desactiver les boutons
-  var btnPrev = tableDiv.querySelector('.btn-prev');
-  var btnNext = tableDiv.querySelector('.btn-next');
-  if (btnPrev) btnPrev.disabled = newPage === 1;
-  if (btnNext) btnNext.disabled = newPage === totalPages;
-}
-
-// Initialiser la pagination et cacher les tableaux au chargement
+// Initialiser filtres, pagination et visibilité des tableaux produits
 document.addEventListener('DOMContentLoaded', function() {
   var sections = document.querySelectorAll('.card-body');
   sections.forEach(function(section) {
     var tables = section.querySelectorAll('.produit-table');
     tables.forEach(function(table, index) {
-      var totalPages = parseInt(table.getAttribute('data-total-pages')) || 1;
-      if (totalPages > 1) {
-        changePage(table.id, 0); // Initialiser page 1
-      }
-      // Cacher tous sauf le premier
       if (index > 0) {
         table.style.display = 'none';
       }
     });
   });
+
+  initPrixTableFiltres();
 });
 
 // Afficher/masquer le tableau d'un produit
 function toggleProduitTable(tableId, button) {
-  // Cacher tous les tableaux de cette section
   var section = button.closest('.card-body');
   section.querySelectorAll('.produit-table').forEach(function(table) {
     table.style.display = 'none';
   });
 
-  // Afficher le tableau sélectionné
   var selectedTable = document.getElementById(tableId);
   if (selectedTable) {
     selectedTable.style.display = 'block';
+    rafraichirPaginationPrixTable(selectedTable);
     selectedTable.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CamionEtat;
 use App\Models\Depense;
 use App\Models\FicheSortie;
+use App\Models\PontEtat;
 use App\Models\Stock;
 use App\Models\Usine;
 use App\Services\MontantAgentFicheService;
@@ -23,6 +24,28 @@ class DepenseController extends Controller
             ->where('vehicule_id', $vehiculeId)
             ->whereNull('date_dechargement')
             ->exists();
+    }
+
+    private function gerableParPontMap(): array
+    {
+        return PontEtat::query()->pluck('gerable', 'id_pont')->map(fn ($v) => (bool) $v)->toArray();
+    }
+
+    private function pontEstGerable(int $idPont): bool
+    {
+        return (bool) PontEtat::query()->where('id_pont', $idPont)->value('gerable');
+    }
+
+    private function annoterPontsGerable(array $ponts): array
+    {
+        $gerableParPont = $this->gerableParPontMap();
+
+        return array_map(function ($pont) use ($gerableParPont) {
+            $idPont = (int) ($pont['id_pont'] ?? 0);
+            $pont['gerable'] = (bool) ($gerableParPont[$idPont] ?? false);
+
+            return $pont;
+        }, $ponts);
     }
 
     private function calculerStockDisponible(Stock $stock, ?int $excludeFicheId = null): float
@@ -184,17 +207,27 @@ class DepenseController extends Controller
         $idPont = (int) $validated['id_pont'];
         $produitId = (int) $validated['produit_id'];
 
+        if (!$this->pontEstGerable($idPont)) {
+            return response()->json([
+                'valid' => true,
+                'gerable' => false,
+                'message' => 'Pont non gérable — aucun parc ni stock requis.',
+            ]);
+        }
+
         $stock = $this->trouverStockActifPourPontEtProduit($idPont, $produitId);
 
         if (!$stock) {
             return response()->json([
                 'valid' => false,
+                'gerable' => true,
                 'message' => $this->messageStockIndisponiblePourFiche($idPont, $produitId),
             ]);
         }
 
         return response()->json([
             'valid' => true,
+            'gerable' => true,
             'message' => sprintf(
                 'Stock actif — Parc %s (%s)',
                 $stock->nom_parc ?? '-',
@@ -341,7 +374,7 @@ class DepenseController extends Controller
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                 ->get($mesPontsUrl);
             if ($pontsResponse->successful()) {
-                $ponts = $pontsResponse->json('ponts') ?? [];
+                $ponts = $this->annoterPontsGerable($pontsResponse->json('ponts') ?? []);
             }
         } catch (\Throwable $e) {}
 
@@ -403,6 +436,7 @@ class DepenseController extends Controller
             'fichesEnAttente' => $fichesEnAttente,
             'fichesDechargees' => $fichesDechargees,
             'parcsParPont' => $parcsParPont,
+            'gerableParPont' => $this->gerableParPontMap(),
             'external_error' => null,
         ]);
     }
@@ -468,7 +502,7 @@ class DepenseController extends Controller
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
                 ->get($mesPontsUrl);
             if ($pontsResponse->successful()) {
-                $ponts = $pontsResponse->json('ponts') ?? [];
+                $ponts = $this->annoterPontsGerable($pontsResponse->json('ponts') ?? []);
             }
         } catch (\Throwable $e) {}
 
@@ -485,6 +519,7 @@ class DepenseController extends Controller
             'ponts' => $ponts,
             'usines' => $donneesUsinesProduits['usinesFiltre'],
             'parcsParPont' => $parcsParPont,
+            'gerableParPont' => $this->gerableParPontMap(),
             'external_error' => null,
         ]);
     }
@@ -596,7 +631,7 @@ class DepenseController extends Controller
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_ponts.php');
             if ($pontsResponse->successful()) {
-                $ponts = $pontsResponse->json('ponts') ?? [];
+                $ponts = $this->annoterPontsGerable($pontsResponse->json('ponts') ?? []);
             }
         } catch (\Throwable $e) {
             // Ignorer l'erreur
@@ -888,21 +923,24 @@ class DepenseController extends Controller
             'matricule_vehicule' => ['required', 'string', 'max:50'],
         ]);
 
-        $stockActif = $this->trouverStockActifPourPontEtProduit(
-            (int) $validated['id_pont'],
-            (int) $validated['produit_id']
-        );
-
-        if (!$stockActif) {
-            $message = $this->messageStockIndisponiblePourFiche(
+        $stockActif = null;
+        if ($this->pontEstGerable((int) $validated['id_pont'])) {
+            $stockActif = $this->trouverStockActifPourPontEtProduit(
                 (int) $validated['id_pont'],
                 (int) $validated['produit_id']
             );
-            if ($request->ajax() || $request->wantsJson()) {
-                return response()->json(['success' => false, 'message' => $message], 422);
-            }
 
-            return back()->withErrors(['error' => $message]);
+            if (!$stockActif) {
+                $message = $this->messageStockIndisponiblePourFiche(
+                    (int) $validated['id_pont'],
+                    (int) $validated['produit_id']
+                );
+                if ($request->ajax() || $request->wantsJson()) {
+                    return response()->json(['success' => false, 'message' => $message], 422);
+                }
+
+                return back()->withErrors(['error' => $message]);
+            }
         }
 
         if (!$this->usineAppartientAuProduit($validated['usine'] ?? null, (int) $validated['produit_id'])) {
@@ -947,15 +985,15 @@ class DepenseController extends Controller
         $ficheSortie = \App\Models\FicheSortie::create([
             'vehicule_id' => $vehiculeId,
             'matricule_vehicule' => $matricule,
-            'stock_id' => $stockActif->id,
-            'parc_id' => $stockActif->parc_id,
-            'nom_parc' => $stockActif->nom_parc,
+            'stock_id' => $stockActif?->id,
+            'parc_id' => $stockActif?->parc_id,
+            'nom_parc' => $stockActif?->nom_parc,
             'id_pont' => $validated['id_pont'],
             'nom_pont' => $nomPont,
             'code_pont' => $codePont,
             'usine' => $validated['usine'] ?? null,
             'produit_id' => $validated['produit_id'],
-            'nom_produit' => $nomProduit ?? $stockActif->nom_produit,
+            'nom_produit' => $nomProduit ?? $stockActif?->nom_produit,
             'id_agent' => $validated['id_agent'],
             'nom_agent' => $nomAgent,
             'numero_agent' => $numeroAgent,
@@ -1391,8 +1429,10 @@ class DepenseController extends Controller
             ->with('open_dechargement_modal', $ficheId)
             ->withErrors($errors);
 
+        $pontGerable = $this->pontEstGerable((int) $ficheSortie->id_pont);
+
         try {
-            $validated = $request->validate([
+            $rules = [
                 'date_dechargement' => ['required', 'date'],
                 'numero_ticket' => [
                     'required',
@@ -1403,8 +1443,15 @@ class DepenseController extends Controller
                 'poids_pont' => ['required', 'numeric', 'min:0.01'],
                 'prix_unitaire_camion' => ['nullable', 'numeric', 'min:0'],
                 'montant_camion' => ['nullable', 'numeric', 'min:0'],
-                'parc_id' => ['required', 'exists:parcs,id'],
-            ], [
+            ];
+
+            if ($pontGerable) {
+                $rules['parc_id'] = ['required', 'exists:parcs,id'];
+            } else {
+                $rules['parc_id'] = ['nullable', 'exists:parcs,id'];
+            }
+
+            $validated = $request->validate($rules, [
                 'numero_ticket.required' => 'Le numéro de ticket est obligatoire.',
                 'numero_ticket.unique' => 'Ce numéro de ticket existe déjà sur une autre fiche de sortie.',
                 'parc_id.required' => 'Sélectionnez un parc pour le déchargement.',
@@ -1424,17 +1471,21 @@ class DepenseController extends Controller
 
         $dejaDecharge = $ficheSortie->date_dechargement !== null;
 
-        $parcId = (int) $validated['parc_id'];
+        $parcId = !empty($validated['parc_id']) ? (int) $validated['parc_id'] : null;
+        $stockOuvert = null;
+        $parc = null;
 
-        $parc = \App\Models\Parc::find($parcId);
-        if (!$parc || $parc->id_pont != $ficheSortie->id_pont) {
-            return $redirectBack(['parc_id' => 'Parc invalide pour ce pont.']);
-        }
+        if ($pontGerable) {
+            $parc = \App\Models\Parc::find($parcId);
+            if (!$parc || $parc->id_pont != $ficheSortie->id_pont) {
+                return $redirectBack(['parc_id' => 'Parc invalide pour ce pont.']);
+            }
 
-        $stockOuvert = $this->resoudreStockPourDechargement($ficheSortie, $parc->id);
+            $stockOuvert = $this->resoudreStockPourDechargement($ficheSortie, $parc->id);
 
-        if (!$stockOuvert) {
-            return $redirectBack(['parc_id' => 'Aucun stock ouvert pour ce parc avec le produit « ' . ($ficheSortie->nom_produit ?? '-') . ' ».']);
+            if (!$stockOuvert) {
+                return $redirectBack(['parc_id' => 'Aucun stock ouvert pour ce parc avec le produit « ' . ($ficheSortie->nom_produit ?? '-') . ' ».']);
+            }
         }
 
         $poidsDecharge = (float) $validated['poids_pont'];
@@ -1457,14 +1508,14 @@ class DepenseController extends Controller
             'poids_pont' => $poidsDecharge,
             'prix_unitaire_camion' => $prixUnitaireCamion,
             'montant_camion' => $montantCamion,
-            'stock_id' => $stockOuvert->id,
-            'parc_id' => $parc->id,
-            'nom_parc' => $parc->nom,
+            'stock_id' => $stockOuvert?->id,
+            'parc_id' => $parc?->id,
+            'nom_parc' => $parc?->nom,
             'montant_agent' => $montantAgent !== null ? round($montantAgent, 2) : null,
         ]);
 
-        // Créer une sortie de stock PGF si la fiche a un pont et n'était pas déjà déchargée
-        if (!$dejaDecharge && $ficheSortie->id_pont && $poidsDecharge > 0) {
+        // Créer une sortie de stock PGF si la fiche a un pont gérable et n'était pas déjà déchargée
+        if (!$dejaDecharge && $pontGerable && $ficheSortie->id_pont && $poidsDecharge > 0) {
             // Trouver le stock actif PGF
             $stockActif = \App\Models\StockPgf::where('statut', 'actif')
                 ->orderBy('created_at', 'desc')

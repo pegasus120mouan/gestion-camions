@@ -213,7 +213,7 @@
 
           <div class="d-flex justify-content-end gap-2">
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-            <button type="submit" class="btn btn-primary" id="btnEnregistrerFiche" disabled title="Sélectionnez un pont et un produit avec un stock actif">
+            <button type="submit" class="btn btn-primary" id="btnEnregistrerFiche" disabled title="Complétez le formulaire (pont, agent, produit)">
               <i class="bx bx-save"></i> Enregistrer la fiche
             </button>
           </div>
@@ -229,6 +229,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // Mapping ponts
   var pontsMap = {!! json_encode(collect($ponts ?? [])->mapWithKeys(function($pont) {
       return [$pont['nom_pont'] . ' (' . $pont['code_pont'] . ')' => $pont['id_pont']];
+  })->toArray()) !!};
+  var pontsGerableMap = {!! json_encode(collect($ponts ?? [])->mapWithKeys(function($pont) {
+      return [(string) $pont['id_pont'] => !empty($pont['gerable'])];
   })->toArray()) !!};
 
   // Mapping agents
@@ -254,14 +257,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function mettreAJourBoutonEnregistrer() {
     if (!btnEnregistrerFiche) return;
+    var idPont = idPontHidden ? idPontHidden.value : '';
+    var pontGerable = idPont && pontsGerableMap[idPont];
     var peutEnregistrer = stockPontProduitValide
-      && idPontHidden && idPontHidden.value
+      && idPont
       && produitSelect && produitSelect.value
       && idAgentHidden && idAgentHidden.value;
     btnEnregistrerFiche.disabled = !peutEnregistrer;
     btnEnregistrerFiche.title = peutEnregistrer
       ? ''
-      : 'Aucun stock actif pour ce produit sur ce pont.';
+      : (pontGerable
+        ? 'Aucun stock actif pour ce produit sur ce pont.'
+        : 'Sélectionnez un pont, un agent et un produit.');
   }
 
   function afficherAlerteStock(message, type) {
@@ -300,7 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
       .then(function(data) {
         stockPontProduitValide = !!data.valid;
         if (data.valid) {
-          afficherAlerteStock(data.message, 'success');
+          afficherAlerteStock(data.message, data.gerable === false ? 'info' : 'success');
         } else {
           afficherAlerteStock(data.message || 'Aucun stock actif pour ce produit sur ce pont.', 'warning');
         }
@@ -439,7 +446,11 @@ document.addEventListener('DOMContentLoaded', function() {
         return false;
       }
       if (!stockPontProduitValide) {
-        alert('Aucun parc actif avec un stock ouvert pour ce produit sur ce pont. Verifiez le pont et le produit.');
+        var idPont = idPontHidden ? idPontHidden.value : '';
+        var pontGerable = idPont && pontsGerableMap[idPont];
+        alert(pontGerable
+          ? 'Aucun parc actif avec un stock ouvert pour ce produit sur ce pont. Verifiez le pont et le produit.'
+          : 'Veuillez selectionner un pont, un agent et un produit valides.');
         return false;
       }
 
