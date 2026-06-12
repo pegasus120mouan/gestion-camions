@@ -73,10 +73,10 @@ class CodeTransporteurController extends Controller
             \Log::error('API Error', ['message' => $e->getMessage()]);
         }
 
-        // Filtrer les véhicules déjà attribués
-        $vehiculesAttribues = $code->vehicules->pluck('vehicule_id')->toArray();
-        $vehiculesDisponibles = array_filter($vehiculesApi, function($v) use ($vehiculesAttribues) {
-            return !in_array($v['vehicules_id'] ?? 0, $vehiculesAttribues);
+        // Filtrer les véhicules déjà attribués à N'IMPORTE QUEL groupe
+        $tousVehiculesAttribues = CodeTransporteurVehicule::pluck('vehicule_id')->toArray();
+        $vehiculesDisponibles = array_filter($vehiculesApi, function($v) use ($tousVehiculesAttribues) {
+            return !in_array($v['vehicules_id'] ?? 0, $tousVehiculesAttribues);
         });
 
         return view('code_transporteurs.show', [
@@ -91,6 +91,13 @@ class CodeTransporteurController extends Controller
             'vehicule_id' => ['required', 'integer'],
             'matricule_vehicule' => ['required', 'string'],
         ]);
+
+        $dejaAttribue = CodeTransporteurVehicule::where('vehicule_id', $validated['vehicule_id'])->first();
+        if ($dejaAttribue) {
+            $autreGroupe = CodeTransporteur::find($dejaAttribue->code_transporteur_id);
+            return redirect()->route('code_transporteurs.show', $id)
+                ->with('error', 'Ce véhicule appartient déjà au groupe « ' . ($autreGroupe->nom ?? '?') . ' ».');
+        }
 
         CodeTransporteurVehicule::create([
             'code_transporteur_id' => $id,

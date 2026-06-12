@@ -11,10 +11,10 @@ use App\Models\ParticulierAgent;
 use App\Models\ParticulierAgentPrix;
 use App\Models\ParticulierGroupe;
 use App\Models\PontEtat;
-use App\Models\PrixAgent;
 use App\Models\Produit;
 use App\Models\Stock;
 use App\Models\Ticket;
+use App\Services\TicketPrixService;
 use App\Services\UsinesParProduitService;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -24,78 +24,9 @@ use Illuminate\Support\Facades\Http;
 
 class TicketController extends Controller
 {
-    private function typePrixPourMatricule(?string $matricule): string
-    {
-        if (!$matricule) {
-            return 'transporteur';
-        }
-        $link = \App\Models\CodeTransporteurVehicule::with('codeTransporteur')
-            ->where('matricule_vehicule', $matricule)
-            ->first();
-        if (!$link || !$link->codeTransporteur) {
-            return 'transporteur';
-        }
-        $nom = trim((string) $link->codeTransporteur->nom);
-        if ($nom === 'Camion PGF') {
-            return 'pgf';
-        }
-        if (strcasecmp($nom, 'Autre Camion') === 0 || strcasecmp($nom, 'Autre') === 0) {
-            return 'autre_camion';
-        }
-        return 'transporteur';
-    }
-
-    private function prixUnitairePrixAgent(int $idAgentApi, int $idUsine, ?int $produitId, ?string $dateTicket, string $type = 'transporteur'): ?float
-    {
-        if ($idAgentApi <= 0 || $idUsine <= 0) {
-            return null;
-        }
-
-        $date = $dateTicket ? Carbon::parse($dateTicket)->startOfDay() : now()->startOfDay();
-
-        $query = PrixAgent::where('id_agent', $idAgentApi)
-            ->where('id_usine', $idUsine)
-            ->where('type', $type)
-            ->where(fn ($q) => $q->whereNull('date_debut')->orWhereDate('date_debut', '<=', $date))
-            ->where(fn ($q) => $q->whereNull('date_fin')->orWhereDate('date_fin', '>=', $date));
-
-        if ($produitId) {
-            $query->where('produit_id', $produitId);
-        }
-
-        $match = $query->orderByDesc('date_debut')->first();
-
-        return $match ? (float) $match->prix : null;
-    }
-
-    private function prixUnitaireParticulierAgent($prixRecords, int $particulierAgentId, int $idUsine, ?string $dateTicket): ?float
-    {
-        if ($particulierAgentId <= 0 || $idUsine <= 0) {
-            return null;
-        }
-
-        $date = $dateTicket
-            ? Carbon::parse($dateTicket)->startOfDay()
-            : now()->startOfDay();
-
-        $match = $prixRecords
-            ->where('particulier_agent_id', $particulierAgentId)
-            ->where('id_usine', $idUsine)
-            ->filter(function (ParticulierAgentPrix $prix) use ($date) {
-                if ($prix->date_debut && $prix->date_debut->gt($date)) {
-                    return false;
-                }
-                if ($prix->date_fin && $prix->date_fin->lt($date)) {
-                    return false;
-                }
-
-                return true;
-            })
-            ->sortByDesc(fn (ParticulierAgentPrix $prix) => $prix->date_debut ?? $prix->created_at)
-            ->first();
-
-        return $match ? (float) $match->prix : null;
-    }
+    public function __construct(
+        private TicketPrixService $ticketPrixService
+    ) {}
 
     public function index(Request $request)
     {
@@ -209,37 +140,6 @@ class TicketController extends Controller
 
         $ticketsArray = [];
         foreach ($tickets as $ticket) {
-            $prixUnitaireAgent = null;
-            $montantCalcule = null;
-
-            if ($ticket->particulier_agent_id && $ticket->id_usine) {
-                $prixUnitaireAgent = $this->prixUnitaireParticulierAgent(
-                    $prixParticuliers,
-                    (int) $ticket->particulier_agent_id,
-                    (int) $ticket->id_usine,
-                    $ticket->date_ticket?->format('Y-m-d')
-                );
-
-                // Fallback : chercher dans prix_agents via l'id_agent API
-                if ($prixUnitaireAgent === null) {
-                    $idAgentApi = (int) ($ticket->particulierAgent?->id_agent ?? 0);
-                    if ($idAgentApi > 0) {
-                        $typeVehicule = $this->typePrixPourMatricule($ticket->matricule_vehicule);
-                        $prixUnitaireAgent = $this->prixUnitairePrixAgent(
-                            $idAgentApi,
-                            (int) $ticket->id_usine,
-                            null,
-                            $ticket->date_ticket?->format('Y-m-d'),
-                            $typeVehicule
-                        );
-                    }
-                }
-
-                if ($prixUnitaireAgent !== null && (float) $ticket->poids > 0) {
-                    $montantCalcule = $prixUnitaireAgent * (float) $ticket->poids;
-                }
-            }
-
             $ticketsArray[] = [
                 'id_ticket' => $ticket->id_ticket,
                 'numero_ticket' => $ticket->numero_ticket,
@@ -256,8 +156,8 @@ class TicketController extends Controller
                 'nom_groupe' => $ticket->particulierAgent?->groupe?->nom_groupe ?? '-',
                 'particulier_agent_id' => $ticket->particulier_agent_id,
                 'prix_unitaire' => $ticket->prix_unitaire,
-                'prix_unitaire_agent' => $prixUnitaireAgent,
-                'montant_calcule' => $montantCalcule,
+                'prix_unitaire_agent' => null,
+                'montant_calcule' => null,
                 'montant_paie' => $ticket->montant_paie,
                 'statut_ticket' => $ticket->statut_ticket,
                 'created_at' => $ticket->created_at ? $ticket->created_at->format('Y-m-d H:i:s') : null,
@@ -289,13 +189,21 @@ class TicketController extends Controller
                     'prix_unitaire_transport' => $fiche->prix_unitaire_transport,
                     'poids_unitaire_regime' => $fiche->poids_unitaire_regime,
                     'nom_produit' => $fiche->nom_produit,
+                    'produit_id' => $fiche->produit_id,
+                    'id_agent' => $fiche->id_agent,
+                    'nom_agent' => $fiche->nom_agent,
                 ];
             }
         }
 
-        // Ajouter les infos de fiche de sortie à chaque ticket
+        $ticketsById = collect($tickets)->keyBy('id_ticket');
+
+        // Ajouter les infos de fiche de sortie et calculer le prix unitaire
         foreach ($ticketsArray as &$ticket) {
             $idTicket = $ticket['id_ticket'] ?? null;
+            $produitId = null;
+            $idAgentFiche = null;
+
             if ($idTicket && isset($fichesSortie[$idTicket])) {
                 $ticket['fiche_id'] = $fichesSortie[$idTicket]['fiche_id'];
                 $ticket['origine'] = $fichesSortie[$idTicket]['origine'];
@@ -304,6 +212,13 @@ class TicketController extends Controller
                 $ticket['prix_unitaire_transport'] = $fichesSortie[$idTicket]['prix_unitaire_transport'];
                 $ticket['poids_unitaire_regime'] = $fichesSortie[$idTicket]['poids_unitaire_regime'];
                 $ticket['nom_produit'] = $fichesSortie[$idTicket]['nom_produit'];
+                $produitId = $fichesSortie[$idTicket]['produit_id'] ?? null;
+                $idAgentFiche = !empty($fichesSortie[$idTicket]['id_agent'])
+                    ? (int) $fichesSortie[$idTicket]['id_agent']
+                    : null;
+                if (($ticket['nom_agent'] ?? '-') === '-' && !empty($fichesSortie[$idTicket]['nom_agent'])) {
+                    $ticket['nom_agent'] = $fichesSortie[$idTicket]['nom_agent'];
+                }
             } else {
                 $ticket['fiche_id'] = null;
                 $ticket['origine'] = '';
@@ -312,6 +227,21 @@ class TicketController extends Controller
                 $ticket['prix_unitaire_transport'] = null;
                 $ticket['poids_unitaire_regime'] = null;
                 $ticket['nom_produit'] = null;
+            }
+
+            $modeleTicket = $ticketsById->get($idTicket);
+            if ($modeleTicket) {
+                $prixUnitaireAgent = $this->ticketPrixService->prixUnitairePourTicket(
+                    $modeleTicket,
+                    $produitId ? (int) $produitId : null,
+                    $ticket['date_ticket'] ?? null,
+                    $prixParticuliers,
+                    $idAgentFiche
+                );
+                $ticket['prix_unitaire_agent'] = $prixUnitaireAgent;
+                if ($prixUnitaireAgent !== null && (float) ($ticket['poids'] ?? 0) > 0) {
+                    $ticket['montant_calcule'] = $prixUnitaireAgent * (float) $ticket['poids'];
+                }
             }
         }
         unset($ticket);
@@ -655,9 +585,12 @@ class TicketController extends Controller
         $ticket = Ticket::with('particulierAgent.groupe')->findOrFail($id);
 
         $nomUsine = $this->nomUsinePourTicket($ticket->id_usine);
+
+        $ficheSortie = \App\Models\FicheSortie::where('id_ticket', $ticket->id_ticket)->first();
         $chargeMission = $ticket->particulierAgent
             ? $ticket->particulierAgent->nom_complet
-            : '—';
+            : ($ficheSortie?->nom_agent ?? ($ticket->id_agent ? '#' . $ticket->id_agent : '—'));
+        $nomGroupe = $ticket->particulierAgent?->groupe?->nom_groupe ?? null;
 
         $dateTicket = $ticket->date_ticket
             ? Carbon::parse($ticket->date_ticket)
@@ -671,20 +604,22 @@ class TicketController extends Controller
         $poids = (float) ($ticket->poids ?? 0);
         $poidsFormate = number_format($poids, 0, ',', ' ');
 
-        $prixUnitaire = null;
-        $montantCalcule = null;
-        if ($ticket->particulier_agent_id && $ticket->id_usine) {
-            $prixRecords = ParticulierAgentPrix::where('particulier_agent_id', $ticket->particulier_agent_id)->get();
-            $prixUnitaire = $this->prixUnitaireParticulierAgent(
-                $prixRecords,
-                (int) $ticket->particulier_agent_id,
-                (int) $ticket->id_usine,
-                $ticket->date_ticket?->format('Y-m-d')
-            );
-            if ($prixUnitaire !== null && $poids > 0) {
-                $montantCalcule = $prixUnitaire * $poids;
-            }
-        }
+        $produitId = $ficheSortie?->produit_id ? (int) $ficheSortie->produit_id : null;
+        $idAgentFiche = $ficheSortie?->id_agent ? (int) $ficheSortie->id_agent : null;
+        $prixUnitaire = $this->ticketPrixService->prixUnitairePourTicket(
+            $ticket,
+            $produitId,
+            $ticket->date_ticket?->format('Y-m-d'),
+            null,
+            $idAgentFiche
+        );
+        $montantCalcule = $this->ticketPrixService->montantPourTicket(
+            $ticket,
+            $produitId,
+            $ticket->date_ticket?->format('Y-m-d'),
+            null,
+            $idAgentFiche
+        );
         if ($montantCalcule === null && (float) ($ticket->prix_unitaire ?? 0) > 0 && $poids > 0) {
             $prixUnitaire = (float) $ticket->prix_unitaire;
             $montantCalcule = $prixUnitaire * $poids;
@@ -702,6 +637,7 @@ class TicketController extends Controller
         $pdf = Pdf::loadView('tickets.bordereau_pdf', [
             'logoPath' => $logoPath,
             'chargeMission' => strtoupper($chargeMission),
+            'nomGroupe' => $nomGroupe,
             'periodeDebut' => $formatCourt($dateTicket),
             'periodeFin' => $formatCourt($dateTicket),
             'nomUsine' => strtoupper($nomUsine),

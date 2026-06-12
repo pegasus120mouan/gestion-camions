@@ -12,10 +12,17 @@ class ParticulierAgentPrix extends Model
         'particulier_agent_id',
         'id_usine',
         'nom_usine',
+        'type_transporteur',
+        'produit_id',
         'prix',
         'date_debut',
         'date_fin',
     ];
+
+    public function produit()
+    {
+        return $this->belongsTo(Produit::class, 'produit_id');
+    }
 
     protected $casts = [
         'prix' => 'decimal:2',

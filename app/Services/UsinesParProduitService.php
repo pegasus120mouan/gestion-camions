@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\FicheSortie;
 use App\Models\Produit;
 use App\Models\Usine;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 
@@ -118,6 +119,11 @@ class UsinesParProduitService
      * @return list<array<string, mixed>>
      */
     private function fetchApiUsinesEnrichies(): array
+    {
+        return Cache::remember('usines_api_enrichies', 3600, fn () => $this->doFetchApiUsinesEnrichies());
+    }
+
+    private function doFetchApiUsinesEnrichies(): array
     {
         $mesUsinesUrl = (string) config('services.external_auth.mes_usines_url', 'https://api.objetombrepegasus.online/api/camions/mes_usines.php');
         $timeout = (int) config('services.external_auth.timeout', 10);

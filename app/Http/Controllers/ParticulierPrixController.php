@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\ParticulierAgent;
 use App\Models\ParticulierAgentPrix;
 use App\Models\ParticulierGroupe;
+use App\Models\Usine;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 class ParticulierPrixController extends Controller
 {
@@ -16,6 +18,9 @@ class ParticulierPrixController extends Controller
         $mesUsinesUrl = (string) config('services.external_auth.mes_usines_url');
         $timeout = (int) config('services.external_auth.timeout', 10);
 
+        $usines = [];
+
+        // Usines de l'API (sans produit_id)
         try {
             $response = Http::acceptJson()
                 ->withoutVerifying()
@@ -23,18 +28,92 @@ class ParticulierPrixController extends Controller
                 ->get($mesUsinesUrl);
 
             if ($response->successful()) {
-                return $response->json('usines') ?? [];
+                $usines = $response->json('usines') ?? [];
             }
         } catch (\Throwable $e) {
         }
 
-        return [];
+        // Usines locales avec produit_id
+        if (Schema::hasColumn('usines', 'produit_id')) {
+            $usinesLocales = Usine::whereNotNull('produit_id')
+                ->with('produit')
+                ->get();
+
+            foreach ($usinesLocales as $usine) {
+                $usines[] = [
+                    'id_usine' => $usine->id_usine ?? $usine->id,
+                    'nom_usine' => $usine->nom_usine,
+                    'produit_id' => $usine->produit_id,
+                    'source' => 'local',
+                ];
+            }
+        }
+
+        return $usines;
+    }
+
+    private function fetchAgentsApi(): array
+    {
+        $timeout = (int) config('services.external_auth.timeout', 10);
+        $agentsApi = [];
+
+        try {
+            $page = 1;
+            $hasMore = true;
+            while ($hasMore) {
+                $response = Http::acceptJson()
+                    ->withoutVerifying()
+                    ->timeout($timeout)
+                    ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php', ['page' => $page]);
+                if ($response->successful()) {
+                    $pageAgents = $response->json('agents') ?? [];
+                    if (empty($pageAgents)) {
+                        $hasMore = false;
+                    } else {
+                        $agentsApi = array_merge($agentsApi, $pageAgents);
+                        $pagination = $response->json('pagination');
+                        $currentPage = $pagination['current_page'] ?? $page;
+                        $lastPage = $pagination['last_page'] ?? 1;
+                        $hasMore = $currentPage < $lastPage;
+                        $page++;
+                    }
+                } else {
+                    $hasMore = false;
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        return $agentsApi;
+    }
+
+    private function syncAgentsApi(array $agentsApi): void
+    {
+        foreach ($agentsApi as $a) {
+            $idAgent = (int) ($a['id_agent'] ?? 0);
+            if ($idAgent <= 0) {
+                continue;
+            }
+            $exists = ParticulierAgent::where('id_agent', $idAgent)->exists();
+            if (!$exists) {
+                $nomComplet = trim((string) ($a['nom_complet'] ?? ''));
+                $parts = preg_split('/\s+/', $nomComplet, 2);
+                ParticulierAgent::create([
+                    'particulier_groupe_id' => null,
+                    'id_agent'    => $idAgent,
+                    'numero_agent' => $a['numero_agent'] ?? ('AGT-' . $idAgent),
+                    'nom'         => $parts[0] ?? $nomComplet,
+                    'prenoms'     => $parts[1] ?? '',
+                    'contact'     => $a['contact'] ?? null,
+                ]);
+            }
+        }
     }
 
     public function index(Request $request)
     {
         $query = ParticulierAgent::with(['groupe'])
             ->withCount('prix')
+            ->whereNull('id_agent')
             ->orderBy('nom')
             ->orderBy('prenoms');
 
@@ -73,12 +152,22 @@ class ParticulierPrixController extends Controller
     {
         $agent->load([
             'groupe',
-            'prix' => fn ($q) => $q->orderBy('nom_usine')->orderByDesc('date_debut')->orderByDesc('date_fin'),
+            'prix.produit',
         ]);
+
+        $produits = \App\Models\Produit::orderBy('nom')->get();
+        $codesTransporteurs = \App\Models\CodeTransporteur::orderBy('nom')->get();
+
+        $prixParProduit = $agent->prix->groupBy('produit_id')->map(function ($prixGroup) {
+            return $prixGroup->groupBy('type_transporteur');
+        });
 
         return view('particuliers.prix.show', [
             'agent' => $agent,
             'usines' => $this->fetchUsines(),
+            'produits' => $produits,
+            'codesTransporteurs' => $codesTransporteurs,
+            'prixParProduit' => $prixParProduit,
         ]);
     }
 
@@ -97,10 +186,14 @@ class ParticulierPrixController extends Controller
         int $idUsine,
         ?string $dateDebut,
         ?string $dateFin,
-        ?int $excludePrixId = null
+        ?int $excludePrixId = null,
+        ?string $typeTransporteur = null,
+        ?int $produitId = null
     ): ?ParticulierAgentPrix {
         $query = ParticulierAgentPrix::where('particulier_agent_id', $agent->id)
-            ->where('id_usine', $idUsine);
+            ->where('id_usine', $idUsine)
+            ->where('type_transporteur', $typeTransporteur) // Même type uniquement
+            ->where('produit_id', $produitId); // Même produit uniquement
 
         if ($excludePrixId) {
             $query->where('id', '!=', $excludePrixId);
@@ -137,11 +230,19 @@ class ParticulierPrixController extends Controller
         $validated = $request->validate([
             'id_usine' => ['required'],
             'nom_usine' => ['required', 'string', 'max:255'],
+            'type_transporteur' => ['nullable', 'string', 'max:255'],
+            'type_transporteur_hidden' => ['nullable', 'string', 'max:255'],
+            'produit_id' => ['nullable', 'integer'],
             'prix' => ['required', 'numeric', 'min:0'],
             'date_debut' => ['nullable', 'date'],
             'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
             'toutes_usines' => ['nullable', 'in:0,1'],
         ]);
+
+        // Utiliser type_transporteur_hidden si type_transporteur est vide (cas du champ disabled)
+        if (empty($validated['type_transporteur']) && !empty($validated['type_transporteur_hidden'])) {
+            $validated['type_transporteur'] = $validated['type_transporteur_hidden'];
+        }
 
         $dateDebut = $validated['date_debut'] ?? null;
         $dateFin = $validated['date_fin'] ?? null;
@@ -157,7 +258,7 @@ class ParticulierPrixController extends Controller
                     continue;
                 }
 
-                if ($this->prixUsineEnConflit($agent, $idUsine, $dateDebut, $dateFin)) {
+                if ($this->prixUsineEnConflit($agent, $idUsine, $dateDebut, $dateFin, null, $validated['type_transporteur'] ?? null, $validated['produit_id'] ?? null)) {
                     $ignored++;
                     continue;
                 }
@@ -166,6 +267,8 @@ class ParticulierPrixController extends Controller
                     'particulier_agent_id' => $agent->id,
                     'id_usine' => $idUsine,
                     'nom_usine' => $usine['nom_usine'] ?? '',
+                    'type_transporteur' => $validated['type_transporteur'] ?? null,
+                    'produit_id' => $validated['produit_id'] ?? null,
                     'prix' => $validated['prix'],
                     'date_debut' => $dateDebut,
                     'date_fin' => $dateFin,
@@ -183,7 +286,7 @@ class ParticulierPrixController extends Controller
         }
 
         $idUsine = (int) $validated['id_usine'];
-        $conflit = $this->prixUsineEnConflit($agent, $idUsine, $dateDebut, $dateFin);
+        $conflit = $this->prixUsineEnConflit($agent, $idUsine, $dateDebut, $dateFin, null, $validated['type_transporteur'] ?? null, $validated['produit_id'] ?? null);
 
         if ($conflit) {
             return back()->withInput()->withErrors([
@@ -196,6 +299,8 @@ class ParticulierPrixController extends Controller
             'particulier_agent_id' => $agent->id,
             'id_usine' => $idUsine,
             'nom_usine' => $validated['nom_usine'],
+            'type_transporteur' => $validated['type_transporteur'] ?? null,
+            'produit_id' => $validated['produit_id'] ?? null,
             'prix' => $validated['prix'],
             'date_debut' => $dateDebut,
             'date_fin' => $dateFin,
@@ -210,6 +315,8 @@ class ParticulierPrixController extends Controller
         abort_unless($prix->particulier_agent_id === $agent->id, 404);
 
         $validated = $request->validate([
+            'type_transporteur' => ['nullable', 'string', 'max:255'],
+            'produit_id' => ['nullable', 'integer'],
             'prix' => ['required', 'numeric', 'min:0'],
             'date_debut' => ['nullable', 'date'],
             'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
@@ -222,7 +329,9 @@ class ParticulierPrixController extends Controller
             (int) $prix->id_usine,
             $dateDebut,
             $dateFin,
-            $prix->id
+            $prix->id,
+            $validated['type_transporteur'] ?? null,
+            $validated['produit_id'] ?? null
         );
 
         if ($conflit) {

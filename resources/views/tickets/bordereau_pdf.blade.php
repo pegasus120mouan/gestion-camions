@@ -121,7 +121,7 @@
         <div class="doc-title">Bordereau de déchargement</div>
 
         <div class="meta">
-            <div><strong>CHARGE DE MISSION :</strong> {{ $chargeMission }}</div>
+            <div><strong>AGENT :</strong> {{ $chargeMission }}</div>
             <div><strong>Période du :</strong> {{ $periodeDebut }} au {{ $periodeFin }}</div>
         </div>
 
@@ -163,6 +163,9 @@
         </div>
 
         <div class="footer">
+            @if(!empty($nomGroupe))
+            <div style="text-align:left; margin-bottom: 10px;"><strong>Groupe :</strong> {{ $nomGroupe }}</div>
+            @endif
             <div>Fait à {{ $lieu }}, le {{ $dateDocument }}</div>
             <div class="signature">PGF</div>
         </div>

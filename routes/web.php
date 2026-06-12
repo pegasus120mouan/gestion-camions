@@ -25,6 +25,7 @@ use App\Http\Controllers\MontantChefChargeurController;
 use App\Http\Controllers\MontantFournisseurController;
 use App\Http\Controllers\MontantTransporteurController;
 use App\Http\Controllers\MontantAgentController;
+use App\Http\Controllers\MontantParticulierController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\FournisseurController;
 use App\Http\Controllers\ParcController;
@@ -360,6 +361,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/pisteurs/{pisteur}/prix', [PisteurController::class, 'storePrix'])->name('pisteurs.prix.store');
     Route::put('/pisteurs/{pisteur}/prix/{prix}', [PisteurController::class, 'updatePrix'])->name('pisteurs.prix.update');
     Route::delete('/pisteurs/{pisteur}/prix/{prix}', [PisteurController::class, 'destroyPrix'])->name('pisteurs.prix.destroy');
+
+    // Montant Agents particuliers (locaux)
+    Route::get('/gestion-financiere/montant-particulier', [MontantParticulierController::class, 'index'])->name('gestionfinanciere.montant_particulier');
+    Route::get('/gestion-financiere/particulier-financier/{agent}', [MontantParticulierController::class, 'show'])->name('gestionfinanciere.particulier.show');
+    Route::post('/gestion-financiere/particulier-financier/{agent}/paiement', [MontantParticulierController::class, 'storePaiement'])->name('gestionfinanciere.paiement_particulier.store');
 
     // Montant Agent (Pisteur)
     Route::get('/gestion-financiere/montant-agent', [MontantAgentController::class, 'index'])->name('gestionfinanciere.montant_agent');

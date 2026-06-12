@@ -8,6 +8,7 @@ use App\Models\FicheSortie;
 use App\Models\Stock;
 use App\Models\Usine;
 use App\Services\MontantAgentFicheService;
+use App\Services\UsinesParProduitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
@@ -147,14 +148,8 @@ class DepenseController extends Controller
             return true;
         }
 
-        if (!Schema::hasColumn('usines', 'produit_id')) {
-            return true;
-        }
-
-        return Usine::query()
-            ->where('produit_id', $produitId)
-            ->where('nom_usine', $nomUsine)
-            ->exists();
+        return app(UsinesParProduitService::class)
+            ->usineAppartientAuProduit($produitId, 'all', $nomUsine);
     }
 
     /**
@@ -163,7 +158,7 @@ class DepenseController extends Controller
     private function chargerDonneesUsinesProduitsFiches(): array
     {
         $produits = \App\Models\Produit::orderBy('nom')->get();
-        $usinesParProduit = $this->usinesLocalesParProduitPourSelect();
+        $usinesParProduit = app(UsinesParProduitService::class)->usinesParProduitPourSelect();
         $usinesFiltre = Schema::hasColumn('usines', 'produit_id')
             ? Usine::query()
                 ->orderBy('nom_usine')
@@ -649,7 +644,7 @@ class DepenseController extends Controller
 
         // Charger les produits
         $produits = \App\Models\Produit::orderBy('nom')->get();
-        $usinesParProduit = $this->usinesLocalesParProduitPourSelect();
+        $usinesParProduit = app(UsinesParProduitService::class)->usinesParProduitPourSelect();
 
         return view('depenses.index', [
             'depenses' => $depenses,

@@ -299,59 +299,20 @@
                     @endif
                   </div>
                   <div class="mb-2"><strong>Montant payé:</strong> {{ number_format((float)($t['montant_paie'] ?? 0), 0, ',', ' ') }} FCFA</div>
-                  @php
-                    $prixAgentAuto = $t['prix_unitaire_agent'] ?? null;
-                    $montantAgentsAuto = $t['montant_calcule'] ?? null;
-
-                    if ($prixAgentAuto === null) {
-                        $idAgent = $t['id_agent'] ?? 0;
-                        $idUsine = $t['id_usine'] ?? 0;
-                        $dateTicket = $t['date_ticket'] ?? $t['date_chargement_fiche'] ?? null;
-
-                        if ($idAgent && $idUsine) {
-                            $typeTransporteur = 'transporteur';
-                            $ctv = \App\Models\CodeTransporteurVehicule::with('codeTransporteur')
-                                ->where('matricule_vehicule', $t['matricule_vehicule'] ?? '')
-                                ->first();
-                            if ($ctv && $ctv->codeTransporteur) {
-                                $ctNom = trim((string) $ctv->codeTransporteur->nom);
-                                if ($ctNom === 'Camion PGF') {
-                                    $typeTransporteur = 'pgf';
-                                } elseif (strcasecmp($ctNom, 'Autre Camion') === 0 || strcasecmp($ctNom, 'Autre') === 0) {
-                                    $typeTransporteur = 'autre_camion';
-                                }
-                            }
-
-                            $queryPrix = \App\Models\PrixAgent::where('id_agent', $idAgent)
-                                ->where('id_usine', $idUsine)
-                                ->where('type', $typeTransporteur);
-
-                            if ($dateTicket) {
-                                $dateTicketParsed = \Carbon\Carbon::parse($dateTicket)->format('Y-m-d');
-                                $queryPrix->where(function($q) use ($dateTicketParsed) {
-                                    $q->where(function($q2) use ($dateTicketParsed) {
-                                        $q2->whereNull('date_debut')
-                                           ->orWhere('date_debut', '<=', $dateTicketParsed);
-                                    })->where(function($q3) use ($dateTicketParsed) {
-                                        $q3->whereNull('date_fin')
-                                           ->orWhere('date_fin', '>=', $dateTicketParsed);
-                                    });
-                                });
-                            }
-
-                            $prixAgentRecord = $queryPrix->first();
-                            if ($prixAgentRecord) {
-                                $prixAgentAuto = $prixAgentRecord->prix;
-                            }
-                        }
-
-                        if ($prixAgentAuto !== null && $poidsUsineModal > 0) {
-                            $montantAgentsAuto = $prixAgentAuto * $poidsUsineModal;
-                        }
-                    }
-                  @endphp
-                  <div class="mb-2"><strong>Prix unitaire Agent:</strong> {{ $prixAgentAuto !== null ? number_format($prixAgentAuto, 0, ',', ' ') . ' FCFA' : '-' }}</div>
-                  <div class="mb-2"><strong>Montant Agents:</strong> {{ $montantAgentsAuto !== null ? number_format($montantAgentsAuto, 0, ',', ' ') . ' FCFA' : '-' }}</div>
+                  <div class="mb-2"><strong>Prix unitaire Agent:</strong>
+                    @if(($t['prix_unitaire_agent'] ?? null) !== null)
+                      {{ number_format((float) $t['prix_unitaire_agent'], 0, ',', ' ') }} FCFA
+                    @else
+                      -
+                    @endif
+                  </div>
+                  <div class="mb-2"><strong>Montant Agents:</strong>
+                    @if(($t['montant_calcule'] ?? null) !== null)
+                      {{ number_format((float) $t['montant_calcule'], 0, ',', ' ') }} FCFA
+                    @else
+                      -
+                    @endif
+                  </div>
                 </div>
               </div>
             </div>

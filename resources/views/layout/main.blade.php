@@ -300,6 +300,12 @@
                     <div class="text-truncate" data-i18n="Accordion">Montant Pisteur</div>
                   </a>
                 </li>
+
+                <li class="menu-item {{ request()->routeIs('gestionfinanciere.montant_particulier', 'gestionfinanciere.particulier.*') ? 'active' : '' }}">
+                  <a href="{{ route('gestionfinanciere.montant_particulier') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Montant Agents Particuliers</div>
+                  </a>
+                </li>
                 <li class="menu-item">
                   <a href="{{ route('gestionfinanciere.synthese_produit') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Accordion">Synthèse par produit</div>
@@ -794,7 +800,7 @@
                 </li>
                 <li class="menu-item">
                   <a href="{{ route('particuliers.prix.index') }}" class="menu-link">
-                    <div class="text-truncate" data-i18n="Badges">Prix Unitaire</div>
+                    <div class="text-truncate" data-i18n="Badges">Prix Agents Particuliers</div>
                   </a>
                 </li>
                <!--  <li class="menu-item">

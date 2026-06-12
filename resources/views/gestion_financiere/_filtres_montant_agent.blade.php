@@ -45,9 +45,11 @@
       <div class="col-md-12 d-flex gap-2 flex-wrap">
         <button type="submit" class="btn btn-primary"><i class="bx bx-search me-1"></i>Filtrer</button>
         <a href="{{ $actionRoute }}" class="btn btn-outline-secondary">Réinitialiser</a>
+        @if($showSyntheseLink ?? true)
         <a href="{{ route('gestionfinanciere.synthese_produit', request()->only(['produit_id', 'usine', 'date_debut', 'date_fin'])) }}" class="btn btn-outline-info">
           <i class="bx bx-pie-chart-alt me-1"></i>Synthèse par produit
         </a>
+        @endif
       </div>
     </form>
     @if(!empty($filtresActifs))
