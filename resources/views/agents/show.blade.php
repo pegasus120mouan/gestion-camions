@@ -2,23 +2,46 @@
 @section('content')
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
-    
-    <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
         <a href="{{ route('agents.index') }}" class="text-muted mb-2 d-inline-block">
-          <i class="bx bx-arrow-back me-1"></i> Retour aux agents
+          <i class="bx bx-arrow-back me-1"></i> Retour à la liste
         </a>
         <h4 class="mb-0">
-          <i class="bx bx-user text-primary me-2"></i>
-          {{ $agent['nom_complet'] ?? 'Agent' }}
+          <i class="bx bx-user text-primary me-2"></i>{{ $agent['nom_complet'] ?? 'Agent' }}
         </h4>
-        <small class="text-muted">N° Agent: {{ $agent['numero_agent'] ?? '-' }} | Contact: {{ $agent['contact'] ?? '-' }}</small>
+        <small class="text-muted">
+          N° {{ $agent['numero_agent'] ?? '-' }}
+          @if(!empty($agent['chef_equipe']['nom_complet']))
+            | Chef d'équipe : {{ $agent['chef_equipe']['nom_complet'] }}
+          @endif
+          @if(!empty($agent['contact'])) | Contact : {{ $agent['contact'] }} @endif
+        </small>
       </div>
+      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAddPrix">
+        <i class="bx bx-plus me-1"></i>Ajouter un prix
+      </button>
     </div>
 
+    @if(session('success'))
+      <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
+    @if($errors->any())
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <ul class="mb-0">
+          @foreach($errors->all() as $error)
+            <li>{{ $error }}</li>
+          @endforeach
+        </ul>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
     <div class="row">
-      <!-- Informations de l'agent -->
       <div class="col-md-4">
         <div class="card mb-4">
           <div class="card-header bg-primary text-white">
@@ -26,7 +49,7 @@
           </div>
           <div class="card-body">
             <div class="mb-3">
-              <label class="form-label text-muted">Numéro Agent</label>
+              <label class="form-label text-muted">N° agent</label>
               <p class="fw-bold mb-0">{{ $agent['numero_agent'] ?? '-' }}</p>
             </div>
             <div class="mb-3">
@@ -40,7 +63,7 @@
             <div class="mb-3">
               <label class="form-label text-muted">Chef d'équipe</label>
               <p class="fw-bold mb-0">
-                @if(!empty($agent['chef_equipe']))
+                @if(!empty($agent['chef_equipe']['nom_complet']))
                   <span class="badge bg-label-primary">{{ $agent['chef_equipe']['nom_complet'] }}</span>
                 @else
                   -
@@ -59,84 +82,103 @@
             </div>
           </div>
         </div>
+
+        <div class="card mb-4 border-0 shadow-sm">
+          <div class="card-header bg-gradient-info text-white" style="background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);">
+            <h5 class="mb-0 text-white"><i class="bx bx-truck me-2"></i>Codes Transporteurs</h5>
+          </div>
+          <div class="card-body p-3">
+            <div class="d-flex flex-column gap-3">
+              @foreach($codesTransporteurs as $code)
+                @php
+                  $typeSlug = $typeParCodeNom[$code->nom] ?? 'transporteur';
+                  $countPrix = $prixCountsParType[$typeSlug] ?? 0;
+                  $colors = match(true) {
+                    str_contains($code->nom, 'PGF') => ['#ff9500', '#ffb347', '#fff5e6'],
+                    str_contains($code->nom, 'Pisteur') || str_contains($code->nom, 'pisteur') => ['#00c6ff', '#0072ff', '#e6f7ff'],
+                    default => ['#6c757d', '#adb5bd', '#f8f9fa'],
+                  };
+                @endphp
+                <a href="javascript:void(0)" onclick="showTransporteurSection('section-{{ Str::slug($code->nom) }}')" class="text-decoration-none">
+                  <div class="transporteur-card d-flex align-items-center justify-content-between p-3 rounded-3 shadow-sm"
+                       style="background: {{ $colors[2] }}; border-left: 5px solid {{ $colors[0] }}; transition: all 0.3s ease; cursor: pointer;"
+                       onmouseover="this.style.transform='translateX(5px)'; this.style.boxShadow='0 8px 20px rgba(0,0,0,0.15)';"
+                       onmouseout="this.style.transform='translateX(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';">
+                    <div class="d-flex align-items-center">
+                      <div class="icon-circle me-3 d-flex align-items-center justify-content-center"
+                           style="width: 45px; height: 45px; background: linear-gradient(135deg, {{ $colors[0] }} 0%, {{ $colors[1] }} 100%); border-radius: 50%; box-shadow: 0 4px 10px {{ $colors[0] }}40;">
+                        <i class="bx bx-truck text-white fs-5"></i>
+                      </div>
+                      <div>
+                        <h6 class="mb-0 fw-bold" style="color: {{ $colors[0] }};">{{ $code->nom }}</h6>
+                        <small class="text-muted">{{ $countPrix }} prix configuré{{ $countPrix > 1 ? 's' : '' }}</small>
+                      </div>
+                    </div>
+                    <i class="bx bx-chevron-right fs-4" style="color: {{ $colors[0] }};"></i>
+                  </div>
+                </a>
+              @endforeach
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="col-md-8">
-        <div class="card mb-4">
-          <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 text-white"><i class="bx bx-money me-2"></i>Prix avec Camion Pisteur</h5>
-            <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddPrixTransporteur">
-              <i class="bx bx-plus me-1"></i>Ajouter
-            </button>
-          </div>
-          <div class="card-body pb-0">
-            <p class="text-muted small mb-3"><i class="bx bx-package me-1"></i>Produits — développez un produit pour voir les prix par usine</p>
-            @include('agents._prix_accordion_produit', [
-              'accordionId' => 'accordionPrixTransporteur',
-              'groupesPrix' => $prixTransporteurParProduit ?? [],
-              'modalAddId' => 'modalAddPrixTransporteur',
-              'editModalPrefix' => 'modalEditPrixTrans',
-              'agent' => $agent,
-            ])
-          </div>
-        </div>
+      <div class="col-md-8" id="prixContainer">
+        @php
+          $defaultCodeNom = null;
+          $maxPrixCount = 0;
+          foreach ($codesTransporteurs as $code) {
+            $slug = $typeParCodeNom[$code->nom] ?? 'transporteur';
+            $count = $prixCountsParType[$slug] ?? 0;
+            if ($count > $maxPrixCount) {
+              $maxPrixCount = $count;
+              $defaultCodeNom = $code->nom;
+            }
+          }
+          if (!$defaultCodeNom && $codesTransporteurs->isNotEmpty()) {
+            $defaultCodeNom = $codesTransporteurs->first()->nom;
+          }
+        @endphp
+        @foreach($codesTransporteurs as $code)
+          @php
+            $typeSlug = $typeParCodeNom[$code->nom] ?? 'transporteur';
+          @endphp
+          @include('agents._prix_show_type_section', [
+            'codeNom' => $code->nom,
+            'typeSlug' => $typeSlug,
+            'defaultVisible' => $code->nom === $defaultCodeNom,
+          ])
+        @endforeach
 
-        <div class="card mb-4">
-          <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 text-white"><i class="bx bx-money me-2"></i>Prix avec Camion PGF</h5>
-            <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddPrixPgf">
-              <i class="bx bx-plus me-1"></i>Ajouter
-            </button>
+        @if($prixAll->isEmpty())
+          <div class="card">
+            <div class="card-body text-center py-5">
+              <i class="bx bx-money text-muted" style="font-size: 48px;"></i>
+              <p class="text-muted mt-3">Aucun prix unitaire configuré</p>
+              <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAddPrix">
+                <i class="bx bx-plus me-1"></i>Ajouter un premier prix
+              </button>
+            </div>
           </div>
-          <div class="card-body pb-0">
-            <p class="text-muted small mb-3"><i class="bx bx-package me-1"></i>Produits — prix par usine pour ce type de camion</p>
-            @include('agents._prix_accordion_produit', [
-              'accordionId' => 'accordionPrixPgf',
-              'groupesPrix' => $prixPgfParProduit ?? [],
-              'modalAddId' => 'modalAddPrixPgf',
-              'editModalPrefix' => 'modalEditPrixPgf',
-              'agent' => $agent,
-            ])
-          </div>
-        </div>
-
-        <div class="card mb-4">
-          <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-            <h5 class="mb-0 text-dark"><i class="bx bx-money me-2"></i>Prix avec autre Camion</h5>
-            <button type="button" class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#modalAddPrixAutreCamion">
-              <i class="bx bx-plus me-1"></i>Ajouter
-            </button>
-          </div>
-          <div class="card-body pb-0">
-            <p class="text-muted small mb-3"><i class="bx bx-package me-1"></i>Produits — prix par usine pour ce type de camion</p>
-            @include('agents._prix_accordion_produit', [
-              'accordionId' => 'accordionPrixAutre',
-              'groupesPrix' => $prixAutreParProduit ?? [],
-              'modalAddId' => 'modalAddPrixAutreCamion',
-              'editModalPrefix' => 'modalEditPrixAutre',
-              'agent' => $agent,
-            ])
-          </div>
-        </div>
+        @endif
       </div>
     </div>
-
   </div>
 </div>
 
-<!-- Modal Ajouter Prix Transporteur -->
-<div class="modal fade" id="modalAddPrixTransporteur" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="modalAddPrix" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
-      <form method="POST" action="{{ route('agents.prix.store', ['id_agent' => $agent['id_agent']]) }}" class="agent-prix-add-form">
+      <form method="POST" action="{{ route('agents.prix.store', ['id_agent' => $agent['id_agent']]) }}" id="formAddPrix" class="agent-prix-add-form">
         @csrf
-        <input type="hidden" name="type" value="transporteur">
+        <input type="hidden" name="type" id="inputTypeAdd" value="pgf">
         <div class="modal-header bg-primary text-white">
-          <h5 class="modal-title text-white">Ajouter Prix Transporteur</h5>
+          <h5 class="modal-title text-white">Ajouter un prix unitaire</h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          @include('agents._prix_form_fields', ['prixPlaceholder' => 'Ex: 50'])
+          @include('agents._prix_form_fields', ['prixPlaceholder' => 'Ex: 150'])
+          <p class="text-muted small mb-0 mt-2">Plusieurs prix sont possibles pour la même usine si les périodes ne se chevauchent pas.</p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
@@ -147,62 +189,15 @@
   </div>
 </div>
 
-<!-- Modal Ajouter Prix PGF -->
-<div class="modal fade" id="modalAddPrixPgf" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="POST" action="{{ route('agents.prix.store', ['id_agent' => $agent['id_agent']]) }}" class="agent-prix-add-form">
-        @csrf
-        <input type="hidden" name="type" value="pgf">
-        <div class="modal-header bg-success text-white">
-          <h5 class="modal-title text-white">Ajouter Prix PGF</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          @include('agents._prix_form_fields', ['prixPlaceholder' => 'Ex: 30'])
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-success">Enregistrer</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<!-- Modal Ajouter Prix autre Camion -->
-<div class="modal fade" id="modalAddPrixAutreCamion" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="POST" action="{{ route('agents.prix.store', ['id_agent' => $agent['id_agent']]) }}" class="agent-prix-add-form">
-        @csrf
-        <input type="hidden" name="type" value="autre_camion">
-        <div class="modal-header bg-warning text-dark">
-          <h5 class="modal-title text-dark">Ajouter Prix autre Camion</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          @include('agents._prix_form_fields', ['prixPlaceholder' => 'Ex: 40'])
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-warning">Enregistrer</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<!-- Modals pour modifier les prix -->
-@foreach($prixTransporteur ?? [] as $prix)
-<div class="modal fade" id="modalEditPrixTrans{{ $prix->id }}" tabindex="-1" aria-hidden="true">
+@foreach($prixAll as $prix)
+<div class="modal fade" id="modalEditPrix{{ $prix->id }}" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <form method="POST" action="{{ route('agents.prix.update', ['id_agent' => $agent['id_agent'], 'prix_id' => $prix->id]) }}">
         @csrf
         @method('PUT')
         <div class="modal-header bg-primary text-white">
-          <h5 class="modal-title text-white">Modifier Prix — {{ $prix->nom_produit ?? '?' }} / {{ $prix->nom_usine }}</h5>
+          <h5 class="modal-title text-white">Modifier — {{ $prix->nom_produit ?? '?' }} / {{ $prix->nom_usine }}</h5>
           <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
@@ -224,80 +219,6 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
           <button type="submit" class="btn btn-primary">Enregistrer</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-@endforeach
-
-@foreach($prixAutreCamion ?? [] as $prix)
-<div class="modal fade" id="modalEditPrixAutre{{ $prix->id }}" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="POST" action="{{ route('agents.prix.update', ['id_agent' => $agent['id_agent'], 'prix_id' => $prix->id]) }}">
-        @csrf
-        @method('PUT')
-        <div class="modal-header bg-warning text-dark">
-          <h5 class="modal-title text-dark">Modifier Prix autre Camion — {{ $prix->nom_produit ?? '?' }} / {{ $prix->nom_usine }}</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">Prix (FCFA) <span class="text-danger">*</span></label>
-            <input type="number" name="prix" class="form-control" required min="0" value="{{ $prix->prix }}">
-          </div>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Date début</label>
-              <input type="date" name="date_debut" class="form-control" value="{{ $prix->date_debut ? $prix->date_debut->format('Y-m-d') : '' }}">
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Date fin</label>
-              <input type="date" name="date_fin" class="form-control" value="{{ $prix->date_fin ? $prix->date_fin->format('Y-m-d') : '' }}">
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-warning">Enregistrer</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-@endforeach
-
-@foreach($prixPgf ?? [] as $prix)
-<div class="modal fade" id="modalEditPrixPgf{{ $prix->id }}" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="POST" action="{{ route('agents.prix.update', ['id_agent' => $agent['id_agent'], 'prix_id' => $prix->id]) }}">
-        @csrf
-        @method('PUT')
-        <div class="modal-header bg-success text-white">
-          <h5 class="modal-title text-white">Modifier Prix PGF — {{ $prix->nom_produit ?? '?' }} / {{ $prix->nom_usine }}</h5>
-          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">Prix (FCFA) <span class="text-danger">*</span></label>
-            <input type="number" name="prix" class="form-control" required min="0" value="{{ $prix->prix }}">
-          </div>
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Date début</label>
-              <input type="date" name="date_debut" class="form-control" value="{{ $prix->date_debut ? $prix->date_debut->format('Y-m-d') : '' }}">
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Date fin</label>
-              <input type="date" name="date_fin" class="form-control" value="{{ $prix->date_fin ? $prix->date_fin->format('Y-m-d') : '' }}">
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-success">Enregistrer</button>
         </div>
       </form>
     </div>
@@ -307,6 +228,7 @@
 
 <script>
 var usinesParProduitAgent = {!! json_encode($usinesParProduit ?? []) !!};
+var typeParCodeNom = {!! json_encode($typeParCodeNom ?? []) !!};
 
 function usinesAgentPourProduit(produitId) {
   if (!produitId) return [];
@@ -353,46 +275,117 @@ function syncNomUsineAgent(form) {
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  document.querySelectorAll('.btn-ajouter-prix-produit').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var produitId = this.dataset.produitId || '';
-      var modalId = this.getAttribute('data-bs-target');
-      if (!modalId) return;
-      var modalEl = document.querySelector(modalId);
-      if (!modalEl) return;
-      var form = modalEl.querySelector('.agent-prix-add-form');
-      if (!form) return;
-      var produitSelect = form.querySelector('.agent-prix-produit');
-      if (produitSelect && produitId) {
-        produitSelect.value = produitId;
-        remplirUsinesAgentPrix(form, produitId);
-        syncNomUsineAgent(form);
-      }
-    });
+function showTransporteurSection(sectionId) {
+  document.querySelectorAll('.prix-section').forEach(function(section) {
+    section.style.display = 'none';
   });
 
-  document.querySelectorAll('.agent-prix-add-form').forEach(function(form) {
-    var produitSelect = form.querySelector('.agent-prix-produit');
-    var usineSelect = form.querySelector('.agent-prix-usine');
+  var section = document.getElementById(sectionId);
+  if (section) {
+    section.style.display = 'block';
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
 
-    if (produitSelect) {
-      produitSelect.addEventListener('change', function() {
-        remplirUsinesAgentPrix(form, this.value);
-        syncNomUsineAgent(form);
-      });
-      remplirUsinesAgentPrix(form, produitSelect.value);
+function setTypeCamion(typeSlug) {
+  document.getElementById('inputTypeAdd').value = typeSlug;
+  var form = document.getElementById('formAddPrix');
+  var produitSelect = form.querySelector('.agent-prix-produit');
+  if (produitSelect) {
+    produitSelect.value = '';
+    remplirUsinesAgentPrix(form, '');
+  }
+}
+
+function setTypeAndProduit(typeSlug, produitId) {
+  document.getElementById('inputTypeAdd').value = typeSlug;
+  var form = document.getElementById('formAddPrix');
+  var produitSelect = form.querySelector('.agent-prix-produit');
+  if (produitSelect) {
+    produitSelect.value = produitId || '';
+    remplirUsinesAgentPrix(form, produitId || '');
+    syncNomUsineAgent(form);
+  }
+}
+
+function changePage(tableId, direction) {
+  var tableDiv = document.getElementById(tableId);
+  if (!tableDiv) return;
+
+  var currentPage = parseInt(tableDiv.getAttribute('data-current-page')) || 1;
+  var totalPages = parseInt(tableDiv.getAttribute('data-total-pages')) || 1;
+  var newPage = currentPage + direction;
+
+  if (newPage < 1 || newPage > totalPages) return;
+
+  tableDiv.setAttribute('data-current-page', newPage);
+
+  tableDiv.querySelectorAll('.prix-row').forEach(function(row) {
+    var rowIndex = parseInt(row.getAttribute('data-row-index'));
+    var rowPage = Math.floor(rowIndex / 10) + 1;
+    row.classList.toggle('d-none', rowPage !== newPage);
+  });
+
+  var pageInfo = tableDiv.querySelector('.page-info');
+  if (pageInfo) {
+    pageInfo.textContent = 'Page ' + newPage + ' / ' + totalPages;
+  }
+
+  var btnPrev = tableDiv.querySelector('.btn-prev');
+  var btnNext = tableDiv.querySelector('.btn-next');
+  if (btnPrev) btnPrev.disabled = newPage === 1;
+  if (btnNext) btnNext.disabled = newPage === totalPages;
+}
+
+function toggleProduitTable(tableId, button) {
+  var section = button.closest('.card-body');
+  section.querySelectorAll('.produit-table').forEach(function(table) {
+    table.style.display = 'none';
+  });
+
+  var selectedTable = document.getElementById(tableId);
+  if (selectedTable) {
+    selectedTable.style.display = 'block';
+    selectedTable.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.produit-table').forEach(function(table) {
+    var totalPages = parseInt(table.getAttribute('data-total-pages')) || 1;
+    if (totalPages > 1) {
+      changePage(table.id, 0);
     }
+  });
 
-    if (usineSelect) {
-      usineSelect.addEventListener('change', function() {
-        syncNomUsineAgent(form);
-      });
-    }
+  var form = document.getElementById('formAddPrix');
+  if (!form) return;
 
-    form.addEventListener('submit', function() {
+  var produitSelect = form.querySelector('.agent-prix-produit');
+  var usineSelect = form.querySelector('.agent-prix-usine');
+
+  if (produitSelect) {
+    produitSelect.addEventListener('change', function() {
+      remplirUsinesAgentPrix(form, this.value);
       syncNomUsineAgent(form);
     });
+    remplirUsinesAgentPrix(form, produitSelect.value);
+  }
+
+  if (usineSelect) {
+    usineSelect.addEventListener('change', function() {
+      syncNomUsineAgent(form);
+    });
+  }
+
+  form.addEventListener('submit', function() {
+    syncNomUsineAgent(form);
+  });
+
+  document.getElementById('modalAddPrix').addEventListener('hidden.bs.modal', function() {
+    form.reset();
+    document.getElementById('inputTypeAdd').value = 'pgf';
+    remplirUsinesAgentPrix(form, '');
   });
 });
 </script>

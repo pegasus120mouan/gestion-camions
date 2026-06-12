@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CodeTransporteur;
 use App\Models\PrixAgent;
 use App\Models\Produit;
 use App\Services\UsinesParProduitService;
@@ -99,6 +100,18 @@ class AgentController extends Controller
                     ->orWhere('date_fin', '>=', $dateDebut ?? now()->format('Y-m-d'));
             })
             ->exists();
+    }
+
+    private function typeSlugPourCodeTransporteur(string $nom): string
+    {
+        if (str_contains($nom, 'PGF')) {
+            return 'pgf';
+        }
+        if (strcasecmp(trim($nom), 'Autre Camion') === 0 || strcasecmp(trim($nom), 'Autre') === 0) {
+            return 'autre_camion';
+        }
+
+        return 'transporteur';
     }
 
     public function index(Request $request)
@@ -226,16 +239,36 @@ class AgentController extends Controller
         $prixPgf = $orderPrix(PrixAgent::where('id_agent', $id_agent)->where('type', 'pgf'))->get();
         $prixAutreCamion = $orderPrix(PrixAgent::where('id_agent', $id_agent)->where('type', 'autre_camion'))->get();
 
+        $codesTransporteurs = CodeTransporteur::orderBy('nom')->get();
+        $typeParCodeNom = [];
+        foreach ($codesTransporteurs as $code) {
+            $typeParCodeNom[$code->nom] = $this->typeSlugPourCodeTransporteur($code->nom);
+        }
+
+        $prixParTypeSlug = [
+            'transporteur' => $this->grouperPrixParProduit($prixTransporteur, $produits),
+            'pgf' => $this->grouperPrixParProduit($prixPgf, $produits),
+            'autre_camion' => $this->grouperPrixParProduit($prixAutreCamion, $produits),
+        ];
+
+        $prixCountsParType = [
+            'transporteur' => $prixTransporteur->count(),
+            'pgf' => $prixPgf->count(),
+            'autre_camion' => $prixAutreCamion->count(),
+        ];
+
         return view('agents.show', [
             'agent' => $agent,
             'produits' => $produits,
             'usinesParProduit' => $usinesParProduit,
+            'codesTransporteurs' => $codesTransporteurs,
+            'typeParCodeNom' => $typeParCodeNom,
+            'prixParTypeSlug' => $prixParTypeSlug,
+            'prixCountsParType' => $prixCountsParType,
+            'prixAll' => $prixTransporteur->merge($prixPgf)->merge($prixAutreCamion),
             'prixTransporteur' => $prixTransporteur,
             'prixPgf' => $prixPgf,
             'prixAutreCamion' => $prixAutreCamion,
-            'prixTransporteurParProduit' => $this->grouperPrixParProduit($prixTransporteur, $produits),
-            'prixPgfParProduit' => $this->grouperPrixParProduit($prixPgf, $produits),
-            'prixAutreParProduit' => $this->grouperPrixParProduit($prixAutreCamion, $produits),
         ]);
     }
 
