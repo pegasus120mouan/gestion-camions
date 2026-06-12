@@ -2,15 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BordereauAgent;
 use App\Models\PaiementAgent;
+use App\Services\BordereauAgentService;
 use App\Services\MontantAgentReportingService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
 class MontantAgentController extends Controller
 {
     public function __construct(
-        private MontantAgentReportingService $reporting
+        private MontantAgentReportingService $reporting,
+        private BordereauAgentService $bordereauAgent
     ) {}
 
     public function index(Request $request)
@@ -190,6 +194,7 @@ class MontantAgentController extends Controller
         $montantDu = (int) round($this->reporting->calculerMontantDuAgent($id_agent, $filtres));
         $montantDuGlobal = (int) round($this->reporting->calculerMontantDuAgent($id_agent, ['id_agent' => $id_agent]));
         $paiements = PaiementAgent::where('id_agent', $id_agent)
+            ->with('bordereau')
             ->orderBy('date_paiement', 'desc')
             ->orderBy('id', 'desc')
             ->get();
@@ -197,13 +202,34 @@ class MontantAgentController extends Controller
         $resteAPayer = $montantDuGlobal - $montantPaye;
 
         $fichesAvecMontant = $this->reporting->fichesAvecMontant($filtres);
+        $idsFichesBordereau = $this->bordereauAgent->ficheIdsDejaBorderees($id_agent);
+        if ($idsFichesBordereau !== []) {
+            $fichesAvecMontant = array_values(array_filter(
+                $fichesAvecMontant,
+                fn ($item) => !in_array((int) $item['fiche']->id, $idsFichesBordereau, true)
+            ));
+        }
         $groupesProduitUsine = $this->reporting->grouperParProduitEtUsine($fichesAvecMontant);
         $options = $this->reporting->optionsFiltres();
+        $bordereaux = BordereauAgent::where('id_agent', $id_agent)
+            ->orderBy('date_generation', 'desc')
+            ->orderBy('id', 'desc')
+            ->get();
+
+        $nomComplet = trim((string) ($agent['nom_complet'] ?? ''));
+        if ($nomComplet === '') {
+            $nomComplet = trim(($agent['nom_agent'] ?? '') . ' ' . ($agent['prenom_agent'] ?? ''));
+        }
 
         return view('gestion_financiere.agent_financier_detail', [
             'agent' => $agent,
+            'exempleNumeroBordereau' => $this->bordereauAgent->exempleNumero(
+                $agent['numero_agent'] ?? null,
+                $nomComplet
+            ),
             'fichesAvecMontant' => $fichesAvecMontant,
             'groupesProduitUsine' => $groupesProduitUsine,
+            'bordereaux' => $bordereaux,
             'paiements' => $paiements,
             'montantDu' => $montantDu,
             'montantDuGlobal' => $montantDuGlobal,
@@ -277,5 +303,187 @@ class MontantAgentController extends Controller
         PaiementAgent::create(array_merge($validated, ['id_agent' => $id_agent]));
 
         return back()->with('success', 'Paiement enregistré avec succès.');
+    }
+
+    public function storePaiementBordereau(Request $request, int $id_agent, int $id)
+    {
+        if (!$this->findAgentById($id_agent)) {
+            return redirect()->route('gestionfinanciere.montant_agent')
+                ->withErrors(['error' => 'Agent non trouvé.']);
+        }
+
+        $bordereau = BordereauAgent::where('id_agent', $id_agent)->findOrFail($id);
+
+        $validated = $request->validate([
+            'montant' => ['required', 'integer', 'min:1'],
+            'date_paiement' => ['required', 'date'],
+            'mode_paiement' => ['nullable', 'string', 'max:50'],
+            'reference' => ['nullable', 'string', 'max:100'],
+            'commentaire' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $reste = (int) round($bordereau->reste_a_payer);
+        if ($validated['montant'] > $reste) {
+            return back()->withErrors([
+                'montant' => 'Le montant dépasse le reste à payer du bordereau (' . number_format($reste, 0, ',', ' ') . ' FCFA).',
+            ]);
+        }
+
+        PaiementAgent::create([
+            'id_agent' => $id_agent,
+            'id_bordereau' => $bordereau->id,
+            'montant' => $validated['montant'],
+            'date_paiement' => $validated['date_paiement'],
+            'mode_paiement' => $validated['mode_paiement'] ?? null,
+            'reference' => $validated['reference'] ?? null,
+            'commentaire' => $validated['commentaire'] ?? null,
+        ]);
+
+        $bordereau->update([
+            'montant_paye' => (float) $bordereau->montant_paye + $validated['montant'],
+        ]);
+
+        return back()->with('success', 'Paiement de ' . number_format($validated['montant'], 0, ',', ' ') . ' FCFA enregistré pour le bordereau ' . $bordereau->numero . '.');
+    }
+
+    public function fichesEligiblesBordereau(Request $request, int $id_agent)
+    {
+        if (!$this->findAgentById($id_agent)) {
+            return response()->json(['message' => 'Agent non trouvé.'], 404);
+        }
+
+        $validated = $request->validate([
+            'date_debut' => ['required', 'date'],
+            'date_fin' => ['required', 'date', 'after_or_equal:date_debut'],
+        ]);
+
+        $fiches = $this->bordereauAgent->fichesEligibles(
+            $id_agent,
+            $validated['date_debut'],
+            $validated['date_fin']
+        );
+
+        return response()->json([
+            'fiches' => $fiches,
+            'total_montant' => (int) collect($fiches)->sum('montant'),
+            'total_poids' => (float) collect($fiches)->sum('poids'),
+        ]);
+    }
+
+    public function storeBordereau(Request $request, int $id_agent)
+    {
+        $agent = $this->findAgentById($id_agent);
+        if (!$agent) {
+            return redirect()->route('gestionfinanciere.montant_agent')
+                ->withErrors(['error' => 'Agent non trouvé.']);
+        }
+
+        $validated = $request->validate([
+            'date_debut' => ['required', 'date'],
+            'date_fin' => ['required', 'date', 'after_or_equal:date_debut'],
+            'fiche_ids' => ['required', 'array', 'min:1'],
+            'fiche_ids.*' => ['integer'],
+        ]);
+
+        $fichesData = $this->bordereauAgent->construireFichesData($id_agent, $validated['fiche_ids']);
+
+        if ($fichesData === []) {
+            return back()->withErrors(['error' => 'Aucune fiche valide sélectionnée (déjà bordereau ou introuvable).']);
+        }
+
+        $nomComplet = trim((string) ($agent['nom_complet'] ?? ''));
+        if ($nomComplet === '') {
+            $nomComplet = trim(($agent['nom_agent'] ?? '') . ' ' . ($agent['prenom_agent'] ?? ''));
+        }
+
+        $bordereau = BordereauAgent::create([
+            'id_agent' => $id_agent,
+            'numero' => $this->bordereauAgent->genererNumero(
+                $agent['numero_agent'] ?? null,
+                $nomComplet
+            ),
+            'agent_nom' => $nomComplet,
+            'agent_numero' => $agent['numero_agent'] ?? null,
+            'date_generation' => now()->toDateString(),
+            'date_debut' => $validated['date_debut'],
+            'date_fin' => $validated['date_fin'],
+            'montant_total' => collect($fichesData)->sum('montant'),
+            'poids_total' => collect($fichesData)->sum('poids'),
+            'fiches_data' => $fichesData,
+        ]);
+
+        $this->bordereauAgent->assignerFichesAuBordereau(
+            $bordereau,
+            collect($fichesData)->pluck('fiche_id')->all()
+        );
+
+        return redirect()->route('gestionfinanciere.agent.bordereau.show', [
+            'id_agent' => $id_agent,
+            'id' => $bordereau->id,
+        ])->with('success', 'Bordereau ' . $bordereau->numero . ' généré avec succès.');
+    }
+
+    public function showBordereau(int $id_agent, int $id)
+    {
+        $agent = $this->findAgentById($id_agent);
+        if (!$agent) {
+            return redirect()->route('gestionfinanciere.montant_agent')
+                ->withErrors(['error' => 'Agent non trouvé.']);
+        }
+
+        $bordereau = BordereauAgent::where('id_agent', $id_agent)->findOrFail($id);
+        $groupesUsine = $this->bordereauAgent->grouperParUsine($bordereau->fiches_data ?? []);
+
+        return view('gestion_financiere.bordereau_agent_show', [
+            'agent' => $agent,
+            'bordereau' => $bordereau,
+            'groupesUsine' => $groupesUsine,
+        ]);
+    }
+
+    public function exportBordereauPdf(int $id_agent, int $id)
+    {
+        $agent = $this->findAgentById($id_agent);
+        if (!$agent) {
+            abort(404);
+        }
+
+        $bordereau = BordereauAgent::where('id_agent', $id_agent)->findOrFail($id);
+        $groupesUsine = $this->bordereauAgent->grouperParUsine($bordereau->fiches_data ?? []);
+
+        $nomComplet = trim((string) ($agent['nom_complet'] ?? ''));
+        if ($nomComplet === '') {
+            $nomComplet = trim(($agent['nom_agent'] ?? '') . ' ' . ($agent['prenom_agent'] ?? ''));
+        }
+
+        $logoPath = public_path('img/logo/logo.png');
+        if (!file_exists($logoPath)) {
+            $logoPath = null;
+        }
+
+        $pdf = Pdf::loadView('gestion_financiere.bordereau_agent_pdf', [
+            'bordereau' => $bordereau,
+            'groupesUsine' => $groupesUsine,
+            'agentNom' => $nomComplet,
+            'agentNumero' => $agent['numero_agent'] ?? '',
+            'logoPath' => $logoPath,
+            'dateCreation' => ($bordereau->created_at ?? now())->format('d/m/Y \à H:i'),
+        ]);
+
+        $pdf->setPaper('A4', 'portrait');
+
+        $filename = 'bordereau_' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $bordereau->numero) . '.pdf';
+
+        return $pdf->stream($filename);
+    }
+
+    public function destroyBordereau(int $id_agent, int $id)
+    {
+        $bordereau = BordereauAgent::where('id_agent', $id_agent)->findOrFail($id);
+        $this->bordereauAgent->libererFichesDuBordereau($bordereau);
+        $bordereau->delete();
+
+        return redirect()->route('gestionfinanciere.agent.show', ['id_agent' => $id_agent])
+            ->with('success', 'Bordereau supprimé.');
     }
 }

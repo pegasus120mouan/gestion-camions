@@ -371,6 +371,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/gestion-financiere/montant-agent', [MontantAgentController::class, 'index'])->name('gestionfinanciere.montant_agent');
     Route::get('/gestion-financiere/synthese-produit', [MontantAgentController::class, 'syntheseProduit'])->name('gestionfinanciere.synthese_produit');
     Route::get('/gestion-financiere/agent-financier/{id_agent}', [MontantAgentController::class, 'show'])->name('gestionfinanciere.agent.show');
+    Route::get('/gestion-financiere/agent-financier/{id_agent}/bordereaux/fiches-eligibles', [MontantAgentController::class, 'fichesEligiblesBordereau'])->name('gestionfinanciere.agent.bordereau.fiches');
+    Route::post('/gestion-financiere/agent-financier/{id_agent}/bordereaux', [MontantAgentController::class, 'storeBordereau'])->name('gestionfinanciere.agent.bordereau.store');
+    Route::get('/gestion-financiere/agent-financier/{id_agent}/bordereaux/{id}', [MontantAgentController::class, 'showBordereau'])->name('gestionfinanciere.agent.bordereau.show');
+    Route::get('/gestion-financiere/agent-financier/{id_agent}/bordereaux/{id}/pdf', [MontantAgentController::class, 'exportBordereauPdf'])->name('gestionfinanciere.agent.bordereau.pdf');
+    Route::delete('/gestion-financiere/agent-financier/{id_agent}/bordereaux/{id}', [MontantAgentController::class, 'destroyBordereau'])->name('gestionfinanciere.agent.bordereau.destroy');
+    Route::post('/gestion-financiere/agent-financier/{id_agent}/bordereaux/{id}/paiement', [MontantAgentController::class, 'storePaiementBordereau'])->name('gestionfinanciere.agent.bordereau.paiement.store');
     Route::post('/gestion-financiere/agent-financier/{id_agent}/paiement', [MontantAgentController::class, 'storePaiement'])->name('gestionfinanciere.paiement_agent.store');
 
     // Montant Chef Chargeur

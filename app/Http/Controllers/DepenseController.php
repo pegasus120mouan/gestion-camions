@@ -8,6 +8,7 @@ use App\Models\FicheSortie;
 use App\Models\PontEtat;
 use App\Models\Stock;
 use App\Models\Usine;
+use App\Services\FicheSortieNumeroService;
 use App\Services\MontantAgentFicheService;
 use App\Services\UsinesParProduitService;
 use Illuminate\Http\Request;
@@ -967,6 +968,12 @@ class DepenseController extends Controller
             $codePont = trim($matches[2]);
         }
 
+        if ($nomPont === '') {
+            $nomPont = PontEtat::query()
+                ->where('id_pont', (int) $validated['id_pont'])
+                ->value('nom_pont') ?? '';
+        }
+
         // Extraire nom_agent et numero_agent depuis "Nom Agent (NUMERO)"
         $nomAgent = '';
         $numeroAgent = '';
@@ -982,7 +989,10 @@ class DepenseController extends Controller
             $nomProduit = $produit ? $produit->nom : null;
         }
 
+        $numeroFiche = app(FicheSortieNumeroService::class)->generer($nomPont, (int) $validated['id_pont']);
+
         $ficheSortie = \App\Models\FicheSortie::create([
+            'numero_fiche' => $numeroFiche,
             'vehicule_id' => $vehiculeId,
             'matricule_vehicule' => $matricule,
             'stock_id' => $stockActif?->id,
@@ -1010,6 +1020,7 @@ class DepenseController extends Controller
                 'success' => true,
                 'message' => 'Fiche de sortie créée avec succès.',
                 'fiche_id' => $ficheSortie->id,
+                'numero_fiche' => $numeroFiche,
             ]);
         }
 
@@ -1171,6 +1182,12 @@ class DepenseController extends Controller
             } catch (\Throwable $e) {}
         }
 
+        if (empty($nomPont)) {
+            $nomPont = PontEtat::query()
+                ->where('id_pont', (int) $validated['id_pont'])
+                ->value('nom_pont') ?? '';
+        }
+
         // Extraire nom_agent et numero_agent depuis "Nom Agent (NUMERO)"
         $nomAgent = '';
         $numeroAgent = '';
@@ -1203,7 +1220,10 @@ class DepenseController extends Controller
             } catch (\Throwable $e) {}
         }
 
+        $numeroFiche = app(FicheSortieNumeroService::class)->generer($nomPont, (int) $validated['id_pont']);
+
         FicheSortie::create([
+            'numero_fiche' => $numeroFiche,
             'vehicule_id' => $validated['vehicule_id'],
             'matricule_vehicule' => $matricule,
             'id_pont' => $validated['id_pont'],
@@ -1224,7 +1244,7 @@ class DepenseController extends Controller
             'poids_unitaire_regime' => 0,
         ]);
 
-        return redirect()->route('fiches_sortie.index')->with('success', 'Fiche de sortie créée avec succès.');
+        return redirect()->route('fiches_sortie.index')->with('success', 'Fiche de sortie ' . $numeroFiche . ' créée avec succès.');
     }
 
     public function storeFromList(Request $request)

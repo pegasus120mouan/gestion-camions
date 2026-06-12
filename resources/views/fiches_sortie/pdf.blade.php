@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Fiche de Sortie - {{ $fiche->matricule_vehicule }}</title>
+    <title>Fiche de Sortie - {{ $fiche->numero_fiche ?? $fiche->matricule_vehicule }}</title>
     <style>
         @page {
             margin: 5mm;
@@ -188,7 +188,7 @@
     <div class="header">
         <div class="company-name">PGF Africa Scoops</div>
         <h1>FICHE DE SORTIE</h1>
-        <div class="doc-number">N° {{ str_pad($fiche->id, 6, '0', STR_PAD_LEFT) }}</div>
+        <div class="doc-number">N° {{ $fiche->numero_fiche ?? str_pad($fiche->id, 6, '0', STR_PAD_LEFT) }}</div>
     </div>
 
     <table class="two-cols">
@@ -279,7 +279,7 @@
 
     <div class="footer">
         <span class="footer-left">Imprimé le {{ $printedAt }} par {{ $printedBy }}</span>
-        <span class="footer-right">Document N° {{ str_pad($fiche->id, 6, '0', STR_PAD_LEFT) }} | Exemplaire {{ $i }}</span>
+        <span class="footer-right">Document N° {{ $fiche->numero_fiche ?? str_pad($fiche->id, 6, '0', STR_PAD_LEFT) }} | Exemplaire {{ $i }}</span>
     </div>
 </div>
 @endfor

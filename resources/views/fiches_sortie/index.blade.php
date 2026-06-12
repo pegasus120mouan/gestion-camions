@@ -125,6 +125,7 @@
           <thead>
             <tr>
               <th>Date chargement</th>
+              <th>N° fiche</th>
               <th>Vehicule</th>
               <th>Pont</th>
               <th>Agent</th>
@@ -140,6 +141,7 @@
             @forelse($fiches as $f)
               <tr>
                 <td>{{ $f->date_chargement ? $f->date_chargement->format('d-m-Y') : '-' }}</td>
+                <td><strong>{{ $f->numero_fiche ?? ('#' . $f->id) }}</strong></td>
                 <td>
                   <a href="#" data-bs-toggle="modal" data-bs-target="#modalDechargement{{ $f->id }}" class="text-primary text-decoration-none">
                     <strong>{{ $f->matricule_vehicule }}</strong>
@@ -195,7 +197,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="10" class="text-center">Aucune fiche de sortie</td>
+                <td colspan="11" class="text-center">Aucune fiche de sortie</td>
               </tr>
             @endforelse
           </tbody>

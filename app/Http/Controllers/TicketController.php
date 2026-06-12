@@ -14,6 +14,7 @@ use App\Models\PontEtat;
 use App\Models\Produit;
 use App\Models\Stock;
 use App\Models\Ticket;
+use App\Services\FicheSortieNumeroService;
 use App\Services\TicketPrixService;
 use App\Services\UsinesParProduitService;
 use Carbon\Carbon;
@@ -457,7 +458,10 @@ class TicketController extends Controller
                 $nomAgent = trim($agent->nom . ' ' . $agent->prenoms);
                 $numeroAgent = $agent->numero_agent ?? '';
 
+                $numeroFiche = app(FicheSortieNumeroService::class)->generer($nomPont, $idPont);
+
                 FicheSortie::create([
+                    'numero_fiche'       => $numeroFiche,
                     'stock_id'           => $stock->id,
                     'parc_id'            => $parc?->id,
                     'nom_parc'           => $parc?->nom ?? '',

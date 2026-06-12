@@ -477,6 +477,12 @@ document.addEventListener('DOMContentLoaded', function() {
           
           // Afficher le modal de succès
           var successModal = new bootstrap.Modal(document.getElementById('modalSuccessFiche'));
+          var numeroEl = document.getElementById('successFicheNumero');
+          if (numeroEl) {
+            numeroEl.textContent = data.numero_fiche
+              ? 'Numéro de fiche : ' + data.numero_fiche
+              : '';
+          }
           successModal.show();
           
           // Rediriger après 2 secondes
@@ -508,7 +514,8 @@ document.addEventListener('DOMContentLoaded', function() {
           <i class="bx bx-check-circle text-success" style="font-size: 5rem;"></i>
         </div>
         <h4 class="text-success mb-3">Fiche créée avec succès !</h4>
-        <p class="text-muted mb-0">Vous allez être redirigé vers la liste des fiches de sortie...</p>
+        <p class="text-muted mb-0" id="successFicheNumero"></p>
+        <p class="text-muted mb-0 mt-2">Vous allez être redirigé vers la liste des fiches de sortie...</p>
         <div class="mt-3">
           <div class="spinner-border spinner-border-sm text-primary" role="status">
             <span class="visually-hidden">Chargement...</span>

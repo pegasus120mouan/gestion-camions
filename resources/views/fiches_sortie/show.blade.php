@@ -3,7 +3,7 @@
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h4 class="mb-0">Détails de la fiche de sortie</h4>
+      <h4 class="mb-0">Détails de la fiche {{ $fiche->numero_fiche ?? ('#' . $fiche->id) }}</h4>
       <div class="d-flex gap-2">
         @if(!$fiche->id_ticket)
           <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAssocierTicket">
@@ -24,6 +24,10 @@
           </div>
           <div class="card-body">
             <table class="table table-borderless">
+              <tr>
+                <th width="40%">N° fiche</th>
+                <td><span class="badge bg-dark fs-6">{{ $fiche->numero_fiche ?? ('#' . $fiche->id) }}</span></td>
+              </tr>
               <tr>
                 <th width="40%">Matricule</th>
                 <td><span class="badge bg-primary fs-6">{{ $fiche->matricule_vehicule }}</span></td>

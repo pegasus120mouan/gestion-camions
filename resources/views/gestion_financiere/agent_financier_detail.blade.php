@@ -1,6 +1,7 @@
 @extends('layout.main')
 @section('content')
-<div class="content-wrapper">
+@include('gestion_financiere._table_financiere_styles')
+<div class="content-wrapper gf-financier-page">
   <div class="container-xxl flex-grow-1 container-p-y">
     @php
       $nomComplet = $agent['nom_complet'] ?? trim(($agent['nom_agent'] ?? '') . ' ' . ($agent['prenom_agent'] ?? ''));
@@ -83,34 +84,99 @@
     <div class="row">
       <div class="col-12">
         <div class="card mb-4">
-          <div class="card-header" style="background-color: #f8d7da; border-bottom: 1px solid #f5c2c7;">
+          <div class="card-header d-flex justify-content-between align-items-center" style="background-color: #f8d7da; border-bottom: 1px solid #f5c2c7;">
             <h5 class="card-title mb-0" style="color: #842029;">
-              <i class="bx bx-layer me-2"></i>Ventilation par produit et usine
+              <i class="bx bx-file me-2"></i>Gestion bordereaux
             </h5>
+            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#modalGenererBordereau">
+              <i class="bx bx-plus me-1"></i>Générer un bordereau
+            </button>
           </div>
-          <div class="card-body p-0">
-            @forelse($groupesProduitUsine as $groupe)
-              <div class="border-bottom p-3">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                  <h6 class="mb-0">
-                    <span class="badge bg-label-primary">{{ $groupe['produit'] }}</span>
-                    <span class="text-danger fw-bold ms-2">{{ number_format($groupe['montant_total'], 0, ',', ' ') }} FCFA</span>
-                  </h6>
-                  <small class="text-muted">{{ $groupe['nb_fiches'] }} fiche(s) · {{ number_format($groupe['poids_total'], 0, ',', ' ') }} kg</small>
-                </div>
-                @foreach($groupe['usines'] as $blocUsine)
-                  <div class="ms-3 mb-2">
-                    <div class="fw-medium text-secondary mb-1">
-                      <i class="bx bx-buildings me-1"></i>{{ $blocUsine['usine'] }}
-                      — {{ number_format($blocUsine['montant_total'], 0, ',', ' ') }} FCFA
-                      <small class="text-muted">({{ $blocUsine['nb_fiches'] }} fiche(s))</small>
-                    </div>
-                  </div>
-                @endforeach
-              </div>
-            @empty
-              <p class="text-center text-muted py-4 mb-0">Aucune fiche pour ces critères</p>
-            @endforelse
+          <div class="table-responsive gf-table-wrap">
+            <table class="table table-sm table-bordered table-hover align-middle gf-table-financier mb-0">
+              <thead>
+                <tr>
+                  <th>N° bordereau</th>
+                  <th>Généré le</th>
+                  <th>Période</th>
+                  <th class="text-end">Fiches</th>
+                  <th class="text-end">Poids</th>
+                  <th class="text-end">Montant</th>
+                  <th class="text-end">Montant payé</th>
+                  <th class="text-end">Reste à payer</th>
+                  <th class="text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @forelse($bordereaux ?? [] as $bordereau)
+                  @php
+                    $resteBordereau = (int) round($bordereau->reste_a_payer);
+                    $montantPayeBordereau = (int) round((float) ($bordereau->montant_paye ?? 0));
+                  @endphp
+                  <tr>
+                    <td>
+                      <a href="{{ route('gestionfinanciere.agent.bordereau.pdf', ['id_agent' => $idAgent, 'id' => $bordereau->id]) }}" target="_blank" rel="noopener" class="fw-bold text-primary text-decoration-none" title="Ouvrir la liste des fiches (PDF)">
+                        {{ $bordereau->numero }}
+                      </a>
+                    </td>
+                    <td>{{ $bordereau->date_generation ? $bordereau->date_generation->format('d/m/Y') : '-' }}</td>
+                    <td>
+                      {{ $bordereau->date_debut ? $bordereau->date_debut->format('d/m/Y') : '-' }}
+                      →
+                      {{ $bordereau->date_fin ? $bordereau->date_fin->format('d/m/Y') : '-' }}
+                    </td>
+                    <td class="text-end">{{ count($bordereau->fiches_data ?? []) }}</td>
+                    <td class="text-end">{{ number_format((float) $bordereau->poids_total, 0, ',', ' ') }} kg</td>
+                    <td class="text-end text-danger fw-bold">{{ number_format((float) $bordereau->montant_total, 0, ',', ' ') }} FCFA</td>
+                    <td class="text-end text-success">{{ number_format($montantPayeBordereau, 0, ',', ' ') }} FCFA</td>
+                    <td class="text-end">
+                      @if($resteBordereau > 0)
+                        <span class="text-danger fw-bold">{{ number_format($resteBordereau, 0, ',', ' ') }} FCFA</span>
+                      @else
+                        <span class="text-muted">0 FCFA</span>
+                      @endif
+                    </td>
+                    <td class="text-center">
+                      @if($resteBordereau > 0)
+                        <button type="button"
+                          class="btn btn-sm btn-outline-success btn-paiement-bordereau"
+                          title="Enregistrer un paiement"
+                          data-bs-toggle="modal"
+                          data-bs-target="#modalPaiementBordereau"
+                          data-bordereau-id="{{ $bordereau->id }}"
+                          data-bordereau-numero="{{ $bordereau->numero }}"
+                          data-bordereau-reste="{{ $resteBordereau }}">
+                          <i class="bx bx-money"></i>
+                        </button>
+                      @endif
+                      <a href="{{ route('gestionfinanciere.agent.bordereau.pdf', ['id_agent' => $idAgent, 'id' => $bordereau->id]) }}" target="_blank" class="btn btn-sm btn-outline-info" title="PDF">
+                        <i class="bx bx-printer"></i>
+                      </a>
+                      <form method="POST" action="{{ route('gestionfinanciere.agent.bordereau.destroy', ['id_agent' => $idAgent, 'id' => $bordereau->id]) }}" class="d-inline" onsubmit="return confirm('Supprimer ce bordereau ?')">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer"><i class="bx bx-trash"></i></button>
+                      </form>
+                    </td>
+                  </tr>
+                @empty
+                  <tr>
+                    <td colspan="9" class="text-center text-muted py-4">Aucun bordereau généré pour cet agent</td>
+                  </tr>
+                @endforelse
+              </tbody>
+              @if(($bordereaux ?? collect())->count() > 0)
+                <tfoot>
+                  <tr>
+                    <td colspan="5" class="text-end"><strong>Totaux</strong></td>
+                    <td class="text-end text-danger fw-bold">{{ number_format($bordereaux->sum('montant_total'), 0, ',', ' ') }} FCFA</td>
+                    <td class="text-end text-success fw-bold">{{ number_format($bordereaux->sum('montant_paye'), 0, ',', ' ') }} FCFA</td>
+                    <td class="text-end text-danger fw-bold">{{ number_format($bordereaux->sum(fn ($b) => $b->reste_a_payer), 0, ',', ' ') }} FCFA</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              @endif
+            </table>
           </div>
         </div>
 
@@ -120,9 +186,9 @@
               <i class="bx bx-file me-2"></i>Détail des fiches ({{ count($fichesAvecMontant) }})
             </h5>
           </div>
-          <div class="table-responsive">
-            <table class="table table-sm table-hover mb-0">
-              <thead class="table-light">
+          <div class="table-responsive gf-table-wrap">
+            <table class="table table-sm table-bordered table-hover align-middle gf-table-financier mb-0">
+              <thead>
                 <tr>
                   <th>Date</th>
                   <th>Véhicule</th>
@@ -205,11 +271,12 @@
               <i class="bx bx-plus"></i> Ajouter
             </button>
           </div>
-          <div class="table-responsive">
-            <table class="table table-sm mb-0">
+          <div class="table-responsive gf-table-wrap">
+            <table class="table table-sm table-bordered table-hover align-middle gf-table-financier mb-0">
               <thead>
                 <tr>
                   <th>Date</th>
+                  <th>Bordereau</th>
                   <th>Mode</th>
                   <th class="text-end">Montant</th>
                 </tr>
@@ -218,6 +285,13 @@
                 @forelse($paiements as $paiement)
                   <tr>
                     <td>{{ $paiement->date_paiement ? $paiement->date_paiement->format('d/m/Y') : '-' }}</td>
+                    <td>
+                      @if($paiement->bordereau)
+                        <span class="badge bg-label-primary">{{ $paiement->bordereau->numero }}</span>
+                      @else
+                        <span class="text-muted">Global</span>
+                      @endif
+                    </td>
                     <td>
                       @if($paiement->mode_paiement)
                         <span class="badge bg-info">{{ $paiement->mode_paiement }}</span>
@@ -229,14 +303,14 @@
                   </tr>
                 @empty
                   <tr>
-                    <td colspan="3" class="text-center">Aucun paiement</td>
+                    <td colspan="4" class="text-center">Aucun paiement</td>
                   </tr>
                 @endforelse
               </tbody>
               @if($paiements->count() > 0)
                 <tfoot>
                   <tr class="table-success">
-                    <td colspan="2"><strong>Total</strong></td>
+                    <td colspan="3"><strong>Total</strong></td>
                     <td class="text-end"><strong>{{ number_format($montantPaye, 0, ',', ' ') }} FCFA</strong></td>
                   </tr>
                 </tfoot>
@@ -294,5 +368,280 @@
   </div>
 </div>
 
+<div class="modal fade" id="modalPaiementBordereau" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-money me-2"></i>Paiement bordereau</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="formPaiementBordereau" method="POST" action="">
+        @csrf
+        <div class="modal-body">
+          <div class="alert alert-secondary mb-2">
+            <strong>Bordereau :</strong> <span id="paiementBordereauNumero">—</span>
+          </div>
+          <div class="alert alert-info">
+            <strong>Reste à payer :</strong> <span id="paiementBordereauReste">0</span> FCFA
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Montant (FCFA)</label>
+            <input type="number" name="montant" id="paiementBordereauMontant" class="form-control" required min="1" step="1" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Date de paiement</label>
+            <input type="date" name="date_paiement" class="form-control" required value="{{ date('Y-m-d') }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Mode de paiement</label>
+            <select name="mode_paiement" class="form-select">
+              <option value="">-- Sélectionner --</option>
+              <option value="Espèces">Espèces</option>
+              <option value="Virement">Virement</option>
+              <option value="Chèque">Chèque</option>
+              <option value="Mobile Money">Mobile Money</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Référence</label>
+            <input type="text" name="reference" class="form-control" placeholder="Optionnel" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-success"><i class="bx bx-save me-1"></i>Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 @include('gestion_financiere._filtres_montant_agent_js')
+
+<div class="modal fade" id="modalGenererBordereau" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-file me-2"></i>Générer un bordereau</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ route('gestionfinanciere.agent.bordereau.store', ['id_agent' => $idAgent]) }}" id="formGenererBordereau">
+        @csrf
+        <div class="modal-body">
+          <p class="text-muted small mb-3">
+            Un numéro de bordereau sera attribué automatiquement à la génération
+            @if(!empty($exempleNumeroBordereau))
+              (ex.&nbsp;: <strong>{{ $exempleNumeroBordereau }}</strong>).
+            @else
+              (ex.&nbsp;: <strong>BORD-XX1</strong>).
+            @endif
+          </p>
+          <div class="row g-3 align-items-end mb-3">
+            <div class="col-md-4">
+              <label class="form-label">Période début <span class="text-danger">*</span></label>
+              <input type="date" name="date_debut" id="bordereau_date_debut" class="form-control" required>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Période fin <span class="text-danger">*</span></label>
+              <input type="date" name="date_fin" id="bordereau_date_fin" class="form-control" required>
+            </div>
+            <div class="col-md-4">
+              <button type="button" class="btn btn-outline-primary w-100" id="btnChargerFichesBordereau">
+                <i class="bx bx-search me-1"></i>Charger les fiches déchargées
+              </button>
+            </div>
+          </div>
+
+          <div id="bordereauChargement" class="text-center py-4 d-none">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="text-muted mt-2 mb-0">Chargement des fiches…</p>
+          </div>
+
+          <div id="bordereauAucuneFiche" class="alert alert-warning d-none mb-0">
+            Aucune fiche déchargée disponible sur cette période (fiches déjà incluses dans un bordereau exclues).
+          </div>
+
+          <div id="bordereauListeFiches" class="d-none">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnToutSelectionnerBordereau">Tout sélectionner</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnToutDeselectionnerBordereau">Tout désélectionner</button>
+              </div>
+              <div class="text-end">
+                <span class="badge bg-label-info me-1" id="bordereauNbSelection">0 fiche(s)</span>
+                <span class="badge bg-label-danger" id="bordereauMontantSelection">0 FCFA</span>
+              </div>
+            </div>
+            <div class="table-responsive gf-table-wrap" style="max-height: 360px; overflow-y: auto;">
+              <table class="table table-sm table-bordered table-hover align-middle gf-table-financier mb-0">
+                <thead class="sticky-top">
+                  <tr>
+                    <th style="width:40px"><input type="checkbox" id="checkAllFichesBordereau" checked></th>
+                    <th>N° fiche</th>
+                    <th>N° ticket</th>
+                    <th>Déchargement</th>
+                    <th>Véhicule</th>
+                    <th>Produit</th>
+                    <th>Usine</th>
+                    <th class="text-end">Poids</th>
+                    <th class="text-end">Montant</th>
+                  </tr>
+                </thead>
+                <tbody id="tbodyFichesBordereau"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-danger" id="btnSubmitBordereau" disabled>
+            <i class="bx bx-check me-1"></i>Générer le bordereau
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var urlFiches = @json(route('gestionfinanciere.agent.bordereau.fiches', ['id_agent' => $idAgent]));
+  var tbody = document.getElementById('tbodyFichesBordereau');
+  var listeBlock = document.getElementById('bordereauListeFiches');
+  var aucuneBlock = document.getElementById('bordereauAucuneFiche');
+  var chargementBlock = document.getElementById('bordereauChargement');
+  var btnSubmit = document.getElementById('btnSubmitBordereau');
+  var nbSel = document.getElementById('bordereauNbSelection');
+  var montantSel = document.getElementById('bordereauMontantSelection');
+  var checkAll = document.getElementById('checkAllFichesBordereau');
+
+  function formatNombre(n) {
+    return new Intl.NumberFormat('fr-FR').format(n);
+  }
+
+  function majTotauxSelection() {
+    var checks = tbody.querySelectorAll('.fiche-bordereau-check:checked');
+    var montant = 0;
+    checks.forEach(function(c) {
+      montant += parseInt(c.dataset.montant || '0', 10);
+    });
+    nbSel.textContent = checks.length + ' fiche(s)';
+    montantSel.textContent = formatNombre(montant) + ' FCFA';
+    btnSubmit.disabled = checks.length === 0;
+    if (checkAll) {
+      var all = tbody.querySelectorAll('.fiche-bordereau-check');
+      checkAll.checked = all.length > 0 && checks.length === all.length;
+    }
+  }
+
+  function renderFiches(fiches) {
+    tbody.innerHTML = '';
+    fiches.forEach(function(f) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td><input type="checkbox" class="form-check-input fiche-bordereau-check" name="fiche_ids[]" value="' + f.fiche_id + '" data-montant="' + f.montant + '" checked></td>' +
+        '<td><small>' + (f.numero_fiche || ('#' + f.fiche_id)) + '</small></td>' +
+        '<td><small>' + (f.numero_ticket || '—') + '</small></td>' +
+        '<td><small>' + (f.date_dechargement ? f.date_dechargement.split('-').reverse().join('/') : '-') + '</small></td>' +
+        '<td>' + (f.matricule_vehicule || '-') + '</td>' +
+        '<td><small>' + (f.nom_produit || '—') + '</small></td>' +
+        '<td><small>' + (f.usine || '—') + '</small></td>' +
+        '<td class="text-end">' + formatNombre(Math.round(f.poids || 0)) + '</td>' +
+        '<td class="text-end text-danger">' + formatNombre(f.montant || 0) + '</td>';
+      tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('.fiche-bordereau-check').forEach(function(c) {
+      c.addEventListener('change', majTotauxSelection);
+    });
+
+    listeBlock.classList.remove('d-none');
+    majTotauxSelection();
+  }
+
+  document.getElementById('btnChargerFichesBordereau').addEventListener('click', function() {
+    var debut = document.getElementById('bordereau_date_debut').value;
+    var fin = document.getElementById('bordereau_date_fin').value;
+    if (!debut || !fin) {
+      alert('Indiquez la période début et fin.');
+      return;
+    }
+
+    listeBlock.classList.add('d-none');
+    aucuneBlock.classList.add('d-none');
+    chargementBlock.classList.remove('d-none');
+    btnSubmit.disabled = true;
+
+    var params = new URLSearchParams({ date_debut: debut, date_fin: fin });
+    fetch(urlFiches + '?' + params.toString(), {
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        chargementBlock.classList.add('d-none');
+        if (!data.fiches || data.fiches.length === 0) {
+          aucuneBlock.classList.remove('d-none');
+          return;
+        }
+        renderFiches(data.fiches);
+      })
+      .catch(function() {
+        chargementBlock.classList.add('d-none');
+        alert('Impossible de charger les fiches.');
+      });
+  });
+
+  if (checkAll) {
+    checkAll.addEventListener('change', function() {
+      tbody.querySelectorAll('.fiche-bordereau-check').forEach(function(c) {
+        c.checked = checkAll.checked;
+      });
+      majTotauxSelection();
+    });
+  }
+
+  document.getElementById('btnToutSelectionnerBordereau').addEventListener('click', function() {
+    tbody.querySelectorAll('.fiche-bordereau-check').forEach(function(c) { c.checked = true; });
+    majTotauxSelection();
+  });
+
+  document.getElementById('btnToutDeselectionnerBordereau').addEventListener('click', function() {
+    tbody.querySelectorAll('.fiche-bordereau-check').forEach(function(c) { c.checked = false; });
+    majTotauxSelection();
+  });
+
+  document.getElementById('formGenererBordereau').addEventListener('submit', function(e) {
+    if (tbody.querySelectorAll('.fiche-bordereau-check:checked').length === 0) {
+      e.preventDefault();
+      alert('Sélectionnez au moins une fiche.');
+    }
+  });
+
+  document.getElementById('modalGenererBordereau').addEventListener('hidden.bs.modal', function() {
+    tbody.innerHTML = '';
+    listeBlock.classList.add('d-none');
+    aucuneBlock.classList.add('d-none');
+    chargementBlock.classList.add('d-none');
+    btnSubmit.disabled = true;
+  });
+
+  var urlPaiementBordereauBase = @json(url('/gestion-financiere/agent-financier/' . $idAgent . '/bordereaux'));
+  var formPaiementBordereau = document.getElementById('formPaiementBordereau');
+  var inputMontantBordereau = document.getElementById('paiementBordereauMontant');
+
+  document.querySelectorAll('.btn-paiement-bordereau').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var id = btn.getAttribute('data-bordereau-id');
+      var numero = btn.getAttribute('data-bordereau-numero');
+      var reste = parseInt(btn.getAttribute('data-bordereau-reste') || '0', 10);
+
+      formPaiementBordereau.action = urlPaiementBordereauBase + '/' + id + '/paiement';
+      document.getElementById('paiementBordereauNumero').textContent = numero || '—';
+      document.getElementById('paiementBordereauReste').textContent = formatNombre(reste);
+      inputMontantBordereau.max = reste;
+      inputMontantBordereau.value = reste > 0 ? reste : '';
+    });
+  });
+})();
+</script>
 @endsection

@@ -69,6 +69,10 @@ class MontantAgentReportingService
             $query->whereDate('date_dechargement', '<=', $filtres['date_fin']);
         }
 
+        if (!empty($filtres['sans_bordereau'])) {
+            $query->whereNull('bordereau_agent_id');
+        }
+
         return $query;
     }
 

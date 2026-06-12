@@ -498,17 +498,13 @@
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Véhicule <span class="text-danger">*</span></label>
-              <select name="matricule_vehicule" id="ticket_matricule_vehicule" class="form-select" required>
-                <option value="">-- Sélectionner un véhicule --</option>
-                @foreach($vehiculesApi ?? [] as $v)
-                  <option value="{{ $v['matricule_vehicule'] ?? '' }}"
-                    data-vehicule-id="{{ $v['vehicules_id'] ?? '' }}"
-                    @selected(old('matricule_vehicule') == ($v['matricule_vehicule'] ?? ''))>
-                    {{ $v['matricule_vehicule'] ?? '' }}
-                  </option>
-                @endforeach
-              </select>
+              <div class="position-relative">
+                <input type="text" id="ticket_vehicule_search" class="form-control" placeholder="Tapez le matricule..." autocomplete="off" required value="{{ old('matricule_vehicule') }}" />
+                <div id="ticket_vehicule_dropdown" class="dropdown-menu w-100 shadow-sm" style="max-height: 250px; overflow-y: auto; display: none;"></div>
+              </div>
+              <input type="hidden" name="matricule_vehicule" id="ticket_matricule_vehicule" value="{{ old('matricule_vehicule') }}" />
               <input type="hidden" name="vehicule_id" id="ticket_vehicule_id" value="{{ old('vehicule_id') }}" />
+              <small class="text-muted">Saisissez quelques caractères puis choisissez un matricule dans la liste.</small>
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">Poids (kg)</label>
@@ -599,6 +595,79 @@ var agentsParGroupe = @json(
 );
 var oldParticulierGroupeId = @json(old('particulier_groupe_id'));
 var oldParticulierAgentId = @json(old('particulier_agent_id'));
+var oldMatriculeVehicule = @json(old('matricule_vehicule'));
+var oldVehiculeId = @json(old('vehicule_id'));
+var vehiculesTicket = @json(
+  collect($vehiculesApi ?? [])->map(function ($v) {
+    return [
+      'matricule' => $v['matricule_vehicule'] ?? '',
+      'id' => $v['vehicules_id'] ?? '',
+    ];
+  })->filter(fn ($v) => ($v['matricule'] ?? '') !== '')->values()
+);
+var vehiculesTicketMap = {};
+vehiculesTicket.forEach(function(v) {
+  vehiculesTicketMap[v.matricule] = v.id;
+});
+
+function syncVehiculeTicketHiddenFields() {
+  var matricule = $('#ticket_vehicule_search').val().trim();
+  var vehiculeId = vehiculesTicketMap[matricule] || '';
+  $('#ticket_matricule_vehicule').val(matricule);
+  $('#ticket_vehicule_id').val(vehiculeId);
+}
+
+function selectVehiculeTicket(matricule, vehiculeId) {
+  $('#ticket_vehicule_search').val(matricule);
+  $('#ticket_matricule_vehicule').val(matricule);
+  $('#ticket_vehicule_id').val(vehiculeId);
+  $('#ticket_vehicule_dropdown').hide();
+}
+
+function renderVehiculesTicketDropdown() {
+  var search = $('#ticket_vehicule_search').val().trim().toLowerCase();
+  var $dropdown = $('#ticket_vehicule_dropdown');
+  $dropdown.empty();
+
+  if (!search) {
+    $dropdown.hide();
+    syncVehiculeTicketHiddenFields();
+    return;
+  }
+
+  var matches = vehiculesTicket.filter(function(v) {
+    return v.matricule.toLowerCase().indexOf(search) !== -1;
+  }).slice(0, 50);
+
+  if (matches.length === 0) {
+    $dropdown.append('<span class="dropdown-item text-muted disabled">Aucun véhicule trouvé</span>');
+  } else {
+    matches.forEach(function(v) {
+      $dropdown.append(
+        '<a href="#" class="dropdown-item ticket-vehicule-option" data-matricule="' +
+        $('<div>').text(v.matricule).html() +
+        '" data-vehicule-id="' + v.id + '">' +
+        $('<div>').text(v.matricule).html() +
+        '</a>'
+      );
+    });
+  }
+
+  $dropdown.show();
+  syncVehiculeTicketHiddenFields();
+}
+
+function initVehiculeTicketAutocomplete() {
+  if (oldMatriculeVehicule) {
+    $('#ticket_vehicule_search').val(oldMatriculeVehicule);
+    $('#ticket_matricule_vehicule').val(oldMatriculeVehicule);
+    if (oldVehiculeId) {
+      $('#ticket_vehicule_id').val(oldVehiculeId);
+    } else if (vehiculesTicketMap[oldMatriculeVehicule]) {
+      $('#ticket_vehicule_id').val(vehiculesTicketMap[oldMatriculeVehicule]);
+    }
+  }
+}
 
 function remplirAgentsTicket(groupeId, selectedAgentId) {
   var $agentSelect = $('#ticket_particulier_agent_id');
@@ -639,17 +708,8 @@ $(document).ready(function() {
     if ($('#ticket_particulier_agent_id').hasClass('select2-hidden-accessible')) {
       $('#ticket_particulier_agent_id').select2('destroy');
     }
-    if ($('#ticket_matricule_vehicule').hasClass('select2-hidden-accessible')) {
-      $('#ticket_matricule_vehicule').select2('destroy');
-    }
 
-    $('#ticket_matricule_vehicule').select2({
-      theme: 'bootstrap-5',
-      dropdownParent: $('#modalAddTicket .modal-body'),
-      placeholder: '-- Sélectionner un véhicule --',
-      allowClear: true,
-      width: '100%'
-    });
+    initVehiculeTicketAutocomplete();
 
     if ($('#ticket_id_pont').hasClass('select2-hidden-accessible')) {
       $('#ticket_id_pont').select2('destroy');
@@ -714,9 +774,43 @@ $(document).ready(function() {
     remplirAgentsTicket($(this).val(), null);
   });
 
-  $('#ticket_matricule_vehicule').on('change', function() {
-    var vid = $(this).find('option:selected').data('vehicule-id') || '';
-    $('#ticket_vehicule_id').val(vid);
+  $('#ticket_vehicule_search').on('input focus', function() {
+    renderVehiculesTicketDropdown();
+  });
+
+  $(document).on('click', '.ticket-vehicule-option', function(e) {
+    e.preventDefault();
+    selectVehiculeTicket($(this).data('matricule'), $(this).data('vehicule-id'));
+  });
+
+  $(document).on('click', function(e) {
+    if (!$(e.target).closest('#ticket_vehicule_search, #ticket_vehicule_dropdown').length) {
+      $('#ticket_vehicule_dropdown').hide();
+    }
+  });
+
+  $('#modalAddTicket form').on('submit', function(e) {
+    var matricule = $('#ticket_vehicule_search').val().trim();
+    var vehiculeId = vehiculesTicketMap[matricule];
+
+    if (!matricule || vehiculeId === undefined || vehiculeId === '') {
+      e.preventDefault();
+      alert('Veuillez sélectionner un véhicule valide dans la liste.');
+      $('#ticket_vehicule_search').focus();
+      return false;
+    }
+
+    $('#ticket_matricule_vehicule').val(matricule);
+    $('#ticket_vehicule_id').val(vehiculeId);
+  });
+
+  $('#modalAddTicket').on('hidden.bs.modal', function() {
+    if (!oldMatriculeVehicule) {
+      $('#ticket_vehicule_search').val('');
+      $('#ticket_matricule_vehicule').val('');
+      $('#ticket_vehicule_id').val('');
+    }
+    $('#ticket_vehicule_dropdown').hide();
   });
 
   // Usines par produit

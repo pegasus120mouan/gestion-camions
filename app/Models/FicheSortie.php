@@ -9,6 +9,7 @@ class FicheSortie extends Model
     protected $table = 'fiches_sortie';
 
     protected $fillable = [
+        'numero_fiche',
         'stock_id',
         'parc_id',
         'nom_parc',
@@ -21,6 +22,7 @@ class FicheSortie extends Model
         'produit_id',
         'nom_produit',
         'id_agent',
+        'bordereau_agent_id',
         'nom_agent',
         'numero_agent',
         'id_chef_chargeur',
