@@ -1333,11 +1333,24 @@ class DepenseController extends Controller
             }
         }
 
+        $chauffeur = \App\Models\Chauffeur::findForCamionAtDate(
+            $ficheSortie->matricule_vehicule,
+            $ficheSortie->vehicule_id ? (int) $ficheSortie->vehicule_id : null,
+            $ficheSortie->date_chargement ?? $ficheSortie->created_at
+        );
+
+        $parcsParPont = \App\Models\Parc::where('statut', 'actif')
+            ->get()
+            ->groupBy('id_pont');
+
         return view('fiches_sortie.show', [
             'fiche' => $ficheSortie,
             'chefChargeur' => $chefChargeur,
             'paiementChargeur' => $paiementChargeur,
             'prixUnitaireChargeur' => $prixUnitaireChargeur,
+            'chauffeur' => $chauffeur,
+            'parcsParPont' => $parcsParPont,
+            'gerableParPont' => $this->gerableParPontMap(),
         ]);
     }
 

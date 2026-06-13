@@ -148,7 +148,13 @@
             @forelse($fiches as $f)
               <tr>
                 <td>{{ $f->date_chargement ? $f->date_chargement->format('d-m-Y') : '-' }}</td>
-                <td><strong>{{ $f->numero_fiche ?? ('#' . $f->id) }}</strong></td>
+                <td>
+                  <a href="{{ route('fiches_sortie.show', ['fiche_id' => $f->id]) }}"
+                    class="btn btn-sm btn-outline-dark fw-semibold"
+                    title="Voir le détail de la fiche">
+                    {{ $f->numero_fiche ?? ('#' . $f->id) }}
+                  </a>
+                </td>
                 <td>
                   <a href="#" data-bs-toggle="modal" data-bs-target="#modalDechargement{{ $f->id }}" class="text-primary text-decoration-none">
                     <strong>{{ $f->matricule_vehicule }}</strong>
@@ -187,9 +193,6 @@
                 </td>
                 <td>
                   <div class="d-flex gap-1">
-                    <a href="{{ route('fiches_sortie.show', ['fiche_id' => $f->id]) }}" class="btn btn-sm btn-outline-primary" title="Voir">
-                      <i class="bx bx-show"></i>
-                    </a>
                     <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalEditFiche{{ $f->id }}" title="Modifier">
                       <i class="bx bx-edit"></i>
                     </button>

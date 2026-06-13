@@ -341,6 +341,11 @@
                     <div class="text-truncate" data-i18n="Alerts">Reçu de paiement</div>
                   </a>
                 </li>
+                <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.chauffeurs_salaires.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Alerts">Gestion Salaires Chauffeurs</div>
+                  </a>
+                </li>
                <!-- <li class="menu-item">
                   <a href="ui-badges.html" class="menu-link">
                     <div class="text-truncate" data-i18n="Badges">Badges</div>
@@ -449,6 +454,12 @@
               <a href="{{ route('chargeurs.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-group" style="color: #ff9f43;"></i>
                 <div class="text-truncate" data-i18n="Chargeurs">Chargeurs</div>
+              </a>
+            </li>
+            <li class="menu-item {{ request()->routeIs('chauffeurs.*') ? 'active' : '' }}">
+              <a href="{{ route('chauffeurs.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-car" style="color: #ff9f43;"></i>
+                <div class="text-truncate" data-i18n="Chauffeurs">Gestion Chauffeurs</div>
               </a>
             </li>
             <li class="menu-item {{ request()->routeIs('bilan-vehicule.*') ? 'active' : '' }}">
@@ -652,13 +663,13 @@
             </li>-->
             <!-- Components -->
             <li class="menu-header small text-uppercase"><span class="menu-header-text">Components</span></li>
-            <!-- Cards -->
+            <!-- Cards
             <li class="menu-item">
               <a href="{{ route('groupes.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-group"></i>
                 <div class="text-truncate" data-i18n="Basic">Groupe PGF</div>
               </a>
-            </li>
+            </li> -->
              <li class="menu-item">
               <a href="{{ route('code_transporteurs.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-code-alt"></i>
@@ -687,12 +698,6 @@
                 <li class="menu-item">
                   <a href="{{ route('camions.camions_pgf') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Accordion">Mes camions PGF</div>
-                  </a>
-                </li>
-
-                <li class="menu-item">
-                  <a href="#" class="menu-link">
-                    <div class="text-truncate" data-i18n="Accordion">Mes tickets PDF</div>
                   </a>
                 </li>
                <!-- <li class="menu-item">

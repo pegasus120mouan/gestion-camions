@@ -21,11 +21,13 @@ use App\Http\Controllers\PlanteurController;
 use App\Http\Controllers\MinioProxyController;
 use App\Http\Controllers\ChefChargeurController;
 use App\Http\Controllers\ChargeurController;
+use App\Http\Controllers\ChauffeurController;
 use App\Http\Controllers\MontantChefChargeurController;
 use App\Http\Controllers\MontantFournisseurController;
 use App\Http\Controllers\MontantTransporteurController;
 use App\Http\Controllers\MontantAgentController;
 use App\Http\Controllers\RecuPaiementController;
+use App\Http\Controllers\ChauffeurSalaireController;
 use App\Http\Controllers\MontantParticulierController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\FournisseurController;
@@ -213,6 +215,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/gestion-financiere/recus-paiement', [RecuPaiementController::class, 'index'])->name('gestionfinanciere.recus.index');
     Route::get('/gestion-financiere/recus-paiement/{id}/pdf', [RecuPaiementController::class, 'pdf'])->name('gestionfinanciere.recus.pdf');
 
+    Route::get('/gestion-financiere/salaires-chauffeurs', [ChauffeurSalaireController::class, 'index'])->name('gestionfinanciere.chauffeurs_salaires.index');
+    Route::get('/gestion-financiere/salaires-chauffeurs/{chauffeur}', [ChauffeurSalaireController::class, 'show'])->name('gestionfinanciere.chauffeurs_salaires.show');
+    Route::post('/gestion-financiere/salaires-chauffeurs/{chauffeur}/avances', [ChauffeurSalaireController::class, 'storeAvance'])->name('gestionfinanciere.chauffeurs_salaires.avance.store');
+    Route::post('/gestion-financiere/salaires-chauffeurs/{chauffeur}/paiements', [ChauffeurSalaireController::class, 'storePaiement'])->name('gestionfinanciere.chauffeurs_salaires.paiement.store');
+
     Route::resource('utilisateurs', UtilisateurController::class)->except(['show']);
 
     Route::get('/commis', [CommisController::class, 'index'])->name('commis.index');
@@ -350,6 +357,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/chargeurs', [ChargeurController::class, 'store'])->name('chargeurs.store');
     Route::put('/chargeurs/{chargeur}', [ChargeurController::class, 'update'])->name('chargeurs.update');
     Route::delete('/chargeurs/{chargeur}', [ChargeurController::class, 'destroy'])->name('chargeurs.destroy');
+
+    // Chauffeurs
+    Route::get('/chauffeurs', [ChauffeurController::class, 'index'])->name('chauffeurs.index');
+    Route::post('/chauffeurs', [ChauffeurController::class, 'store'])->name('chauffeurs.store');
+    Route::put('/chauffeurs/{chauffeur}', [ChauffeurController::class, 'update'])->name('chauffeurs.update');
+    Route::delete('/chauffeurs/{chauffeur}', [ChauffeurController::class, 'destroy'])->name('chauffeurs.destroy');
 
     // Bilan par véhicule
     Route::get('/bilan-vehicule', [BilanVehiculeController::class, 'index'])->name('bilan-vehicule.index');
