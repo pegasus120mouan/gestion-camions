@@ -101,6 +101,7 @@
         .val { font-size: 10.5px; }
         .val.montant { font-weight: bold; color: #b00020; }
         .val.montant-zero { font-weight: bold; color: #006400; }
+        .val.montant-credit { font-weight: bold; color: #856404; }
 
         /* ── Signatures ── */
         .sigs {
@@ -210,6 +211,10 @@
             <tr>
                 <td class="lbl">Reste à payer</td>
                 <td class="val {{ $resteAPayer > 0 ? 'montant' : 'montant-zero' }}">{{ number_format($resteAPayer, 0, ',', ' ') }} FCFA</td>
+            </tr>
+            <tr>
+                <td class="lbl">Solde compte</td>
+                <td class="val {{ $soldeCompte > 0 ? 'montant' : ($soldeCompte < 0 ? 'montant-credit' : 'montant-zero') }}">{{ number_format($soldeCompte, 0, ',', ' ') }} FCFA</td>
             </tr>
         </table>
 

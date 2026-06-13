@@ -2,11 +2,15 @@
 
 namespace App\Services;
 
+use App\Models\BordereauAgent;
 use App\Models\PaiementAgent;
 use Illuminate\Support\Facades\Http;
 
 class RecuPaiementService
 {
+    public function __construct(
+        private MontantAgentReportingService $reporting
+    ) {}
     public function genererNumero(PaiementAgent $paiement): string
     {
         $date = $paiement->date_paiement ?? now();
@@ -96,6 +100,11 @@ class RecuPaiementService
         $montantPayeLigne = (int) $paiement->montant;
         $reste = max(0, (int) round((float) ($bordereau?->reste_a_payer ?? 0)));
 
+        $idAgent = (int) $paiement->id_agent;
+        $montantDuGlobal = (int) round($this->reporting->calculerMontantDuAgent($idAgent, ['id_agent' => $idAgent]));
+        $montantPayeTotal = (int) round((float) BordereauAgent::where('id_agent', $idAgent)->sum('montant_paye'));
+        $soldeCompte = $montantDuGlobal - $montantPayeTotal;
+
         $dateHeure = ($paiement->created_at ?? $paiement->date_paiement ?? now())->format('d/m/Y H:i');
         $dateFait = ($paiement->date_paiement ?? now())->format('d/m/Y');
 
@@ -119,6 +128,7 @@ class RecuPaiementService
             'montantPaye' => $montantPayeLigne,
             'sourcePaiement' => $source,
             'resteAPayer' => $reste,
+            'soldeCompte' => $soldeCompte,
             'nomCaissier' => $nomCaissier ?: 'Caissier',
             'nomRecepteur' => $nomAgent,
             'logoPath' => $logoPath,

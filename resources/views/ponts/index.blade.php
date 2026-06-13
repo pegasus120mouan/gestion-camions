@@ -37,6 +37,7 @@
             <tr>
               <th>Code</th>
               <th>Nom</th>
+              <th>Gérant</th>
               <th>Stock disponible</th>
               <th class="text-end">Solde</th>
               <th>Statut</th>
@@ -66,6 +67,7 @@
                     {{ $p['nom_pont'] ?? '' }}
                   </a>
                 </td>
+                <td>{{ $p['gerant'] ?: '-' }}</td>
                 <td>
                   <strong>{{ number_format((float)($p['stock_disponible'] ?? 0), 0, ',', ' ') }} kg</strong>
                 </td>
@@ -113,7 +115,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="6" class="text-center">
+                <td colspan="7" class="text-center">
                   @if(!empty($search))
                     Aucun pont trouvé pour « {{ $search }} »
                   @else
