@@ -34,9 +34,9 @@
           <div class="row g-3">
             <div class="col-md-3">
               <label class="form-label">Véhicule</label>
-              <select name="vehicule" class="form-select">
+              <select name="vehicule" id="filtre_vehicule" class="form-select">
                 <option value="">Tous les véhicules</option>
-                @foreach($vehicules ?? [] as $v)
+                @foreach($vehiculesFiltre ?? $vehicules ?? [] as $v)
                   <option value="{{ $v['matricule_vehicule'] ?? '' }}" {{ request('vehicule') == ($v['matricule_vehicule'] ?? '') ? 'selected' : '' }}>
                     {{ $v['matricule_vehicule'] ?? '' }}
                   </option>
@@ -45,7 +45,7 @@
             </div>
             <div class="col-md-3">
               <label class="form-label">Pont</label>
-              <select name="pont" class="form-select">
+              <select name="pont" id="filtre_pont" class="form-select">
                 <option value="">Tous les ponts</option>
                 @foreach($ponts ?? [] as $p)
                   <option value="{{ $p['nom_pont'] ?? '' }}" {{ request('pont') == ($p['nom_pont'] ?? '') ? 'selected' : '' }}>
@@ -57,7 +57,7 @@
             <div class="col-md-3">
               <label class="form-label">Produit</label>
               <select name="produit_id" id="filtre_produit" class="form-select">
-                <option value="">Tous les produits</option>
+                <option value="" {{ !request()->filled('produit_id') ? 'selected' : '' }}>Tous les produits</option>
                 @foreach($produits ?? [] as $produit)
                   <option value="{{ $produit->id }}" {{ (string) request('produit_id') === (string) $produit->id ? 'selected' : '' }}>
                     {{ $produit->nom }}
@@ -78,7 +78,7 @@
             </div>
             <div class="col-md-3">
               <label class="form-label">Chef Chargeur</label>
-              <select name="chef_chargeur" class="form-select">
+              <select name="chef_chargeur" id="filtre_chef_chargeur" class="form-select">
                 <option value="">Tous les chefs chargeurs</option>
                 @foreach($chefChargeurs ?? [] as $cc)
                   <option value="{{ $cc->id }}" {{ request('chef_chargeur') == $cc->id ? 'selected' : '' }}>
@@ -114,6 +114,13 @@
         </form>
       </div>
     </div>
+
+    @if(!empty($filtresActifs))
+      <div class="alert alert-info py-2 mb-3">
+        <strong>{{ $fiches->total() }}</strong> fiche(s) trouvée(s) avec les filtres appliqués.
+        Les cartes colorées en haut affichent les <strong>totaux globaux</strong> (toutes les fiches).
+      </div>
+    @endif
 
     <div class="card">
       <div class="table-responsive text-nowrap">
@@ -197,7 +204,49 @@
               </tr>
             @empty
               <tr>
-                <td colspan="11" class="text-center">Aucune fiche de sortie</td>
+                <td colspan="11" class="text-center py-4">
+                  <p class="text-muted mb-2">Aucune fiche ne correspond à votre recherche.</p>
+                  @if(!empty($filtresActifs))
+                    <p class="small mb-2">
+                      Filtres actifs :
+                      @if(request('vehicule'))<span class="badge bg-label-primary me-1">Véhicule {{ request('vehicule') }}</span>@endif
+                      @if(request('produit_id'))
+                        @php $produitFiltre = ($produits ?? collect())->firstWhere('id', (int) request('produit_id')); @endphp
+                        @if($produitFiltre)<span class="badge bg-label-info me-1">Produit {{ $produitFiltre->nom }}</span>@endif
+                      @endif
+                      @if(request('pont'))<span class="badge bg-label-secondary me-1">Pont {{ request('pont') }}</span>@endif
+                      @if(request('usine'))<span class="badge bg-label-secondary me-1">Usine {{ request('usine') }}</span>@endif
+                    </p>
+                    @if(request('vehicule') && request('produit_id'))
+                      @php
+                        $produitsVehicule = \App\Models\FicheSortie::where('matricule_vehicule', request('vehicule'))
+                          ->pluck('nom_produit')
+                          ->filter()
+                          ->unique()
+                          ->values();
+                        $nomProduitFiltre = ($produits ?? collect())->firstWhere('id', (int) request('produit_id'))?->nom;
+                        $urlSansProduit = route('fiches_sortie.index', collect(request()->query())->except('produit_id')->all());
+                      @endphp
+                      @if($nomProduitFiltre && $produitsVehicule->isNotEmpty() && !$produitsVehicule->contains($nomProduitFiltre))
+                        <div class="alert alert-warning d-inline-block text-start small mb-2">
+                          Le véhicule <strong>{{ request('vehicule') }}</strong> a des fiches en
+                          <strong>{{ $produitsVehicule->implode(', ') }}</strong>, pas en {{ $nomProduitFiltre }}.
+                          <div class="mt-2 d-flex flex-wrap gap-2">
+                            <a href="{{ $urlSansProduit }}" class="btn btn-sm btn-warning">
+                              <i class="bx bx-filter-alt me-1"></i>Produit : Tous
+                            </a>
+                            <a href="{{ route('fiches_sortie.index') }}" class="btn btn-sm btn-outline-secondary">
+                              <i class="bx bx-refresh me-1"></i>Réinitialiser
+                            </a>
+                          </div>
+                        </div>
+                      @endif
+                    @endif
+                    <a href="{{ route('fiches_sortie.index') }}" class="btn btn-sm btn-outline-secondary">
+                      <i class="bx bx-refresh me-1"></i>Réinitialiser les filtres
+                    </a>
+                  @endif
+                </td>
               </tr>
             @endforelse
           </tbody>
@@ -498,6 +547,12 @@
             @elseif(!$pontGerable)
               <p class="mb-0 text-muted"><small>Pont non gérable — le déchargement n'impacte pas le stock.</small></p>
             @endif
+            @if($f->usine)
+              <p class="mb-0 mt-1 text-danger">
+                <strong>Le nom de l'usine est</strong>
+                <span class="fw-bold">{{ $f->usine }}</span>
+              </p>
+            @endif
           </div>
           @if($pontGerable)
           <div class="mb-3">
@@ -642,6 +697,7 @@ document.addEventListener('DOMContentLoaded', function() {
         filtreUsine.appendChild(opt);
       });
       filtreUsine.disabled = false;
+      refreshFiltreUsineSelect2();
     }
     function majFiltreUsines() {
       var produitId = filtreProduit.value;
@@ -653,6 +709,12 @@ document.addEventListener('DOMContentLoaded', function() {
       remplirSelectUsines(filtreUsine, produitId, usineFiltreInitiale);
       filtreUsine.options[0].textContent = 'Toutes les usines';
       usineFiltreInitiale = '';
+      refreshFiltreUsineSelect2();
+    }
+    function refreshFiltreUsineSelect2() {
+      if (window.jQuery && jQuery(filtreUsine).hasClass('select2-hidden-accessible')) {
+        jQuery(filtreUsine).trigger('change.select2');
+      }
     }
     filtreProduit.addEventListener('change', function() {
       usineFiltreInitiale = '';
@@ -725,6 +787,75 @@ document.addEventListener('DOMContentLoaded', function () {
   @foreach($fiches as $f)
   calculerMontantCamion({{ $f->id }});
   @endforeach
+});
+</script>
+@endsection
+
+@section('page-styles')
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<style>
+  .select2-container--bootstrap-5 .select2-selection { min-height: 38px; }
+  .select2-container { width: 100% !important; }
+</style>
+@endsection
+
+@section('page-scripts')
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+$(document).ready(function() {
+  var filtres = [
+    { id: '#filtre_vehicule', placeholder: 'Rechercher un véhicule…' },
+    { id: '#filtre_pont', placeholder: 'Rechercher un pont…' },
+    { id: '#filtre_produit', placeholder: 'Rechercher un produit…' },
+    { id: '#filtre_usine', placeholder: 'Rechercher une usine…' },
+    { id: '#filtre_chef_chargeur', placeholder: 'Rechercher un chef chargeur…' },
+  ];
+
+  function matcherAvecOptionTous(params, data) {
+    if (data.text === undefined || data.text === null) {
+      return null;
+    }
+    if (data.id === '' || data.id === null || data.id === undefined) {
+      return data;
+    }
+    if ($.trim(params.term) === '') {
+      return data;
+    }
+    if (data.text.toUpperCase().indexOf(params.term.toUpperCase()) >= 0) {
+      return data;
+    }
+    return null;
+  }
+
+  filtres.forEach(function(f) {
+    var $el = $(f.id);
+    if (!$el.length) return;
+    var opts = {
+      theme: 'bootstrap-5',
+      placeholder: f.placeholder,
+      allowClear: true,
+      width: '100%',
+      language: {
+        noResults: function() { return 'Aucun résultat'; },
+        searching: function() { return 'Recherche…'; }
+      }
+    };
+    if (f.id === '#filtre_produit') {
+      opts.placeholder = undefined;
+      opts.allowClear = false;
+      opts.matcher = matcherAvecOptionTous;
+    }
+    $el.select2(opts);
+  });
+
+  $('#filtre_produit').on('change', function() {
+    setTimeout(function() {
+      if ($('#filtre_usine').hasClass('select2-hidden-accessible')) {
+        $('#filtre_usine').trigger('change.select2');
+      }
+    }, 0);
+  });
 });
 </script>
 @endsection

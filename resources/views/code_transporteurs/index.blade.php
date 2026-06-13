@@ -26,6 +26,54 @@
       </div>
     @endif
 
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="mb-0"><i class="bx bx-search me-2"></i>Rechercher un véhicule</h5>
+      </div>
+      <div class="card-body">
+        <form method="GET" action="{{ route('code_transporteurs.index') }}" class="row g-3 align-items-end">
+          <div class="col-md-6">
+            <label class="form-label">Véhicule</label>
+            <select name="vehicule_id" id="recherche_vehicule" class="form-select">
+              <option value="" {{ !request()->filled('vehicule_id') ? 'selected' : '' }}>Choisir un véhicule…</option>
+              @foreach($vehicules ?? [] as $v)
+                <option value="{{ $v['vehicule_id'] }}" {{ (string) request('vehicule_id') === (string) $v['vehicule_id'] ? 'selected' : '' }}>
+                  {{ $v['matricule_vehicule'] }}
+                </option>
+              @endforeach
+            </select>
+          </div>
+          <div class="col-md-6 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bx bx-search me-1"></i>Rechercher
+            </button>
+            @if(request()->filled('vehicule_id'))
+              <a href="{{ route('code_transporteurs.index') }}" class="btn btn-outline-secondary">
+                <i class="bx bx-x me-1"></i>Effacer
+              </a>
+            @endif
+          </div>
+        </form>
+
+        @if(request()->filled('vehicule_id'))
+          @if($groupeTrouve)
+            <div class="alert alert-success mt-3 mb-0">
+              <i class="bx bx-check-circle me-1"></i>
+              Le véhicule <strong>{{ $matriculeRecherche }}</strong> appartient au groupe
+              <a href="{{ route('code_transporteurs.show', $groupeTrouve->id) }}" class="alert-link fw-bold">
+                {{ $groupeTrouve->nom }}
+              </a>.
+            </div>
+          @else
+            <div class="alert alert-warning mt-3 mb-0">
+              <i class="bx bx-info-circle me-1"></i>
+              Le véhicule <strong>{{ $matriculeRecherche ?: request('vehicule_id') }}</strong> n'est assigné à aucun groupe transporteur.
+            </div>
+          @endif
+        @endif
+      </div>
+    </div>
+
     <div class="card">
       <div class="table-responsive">
         <table class="table table-hover">
@@ -129,4 +177,31 @@
   </div>
 </div>
 @endforeach
+@endsection
+
+@section('page-styles')
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<style>
+  .select2-container--bootstrap-5 .select2-selection { min-height: 38px; }
+  .select2-container { width: 100% !important; }
+</style>
+@endsection
+
+@section('page-scripts')
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+$(document).ready(function() {
+  $('#recherche_vehicule').select2({
+    theme: 'bootstrap-5',
+    placeholder: 'Choisir un véhicule…',
+    allowClear: true,
+    width: '100%',
+    language: {
+      noResults: function() { return 'Aucun véhicule trouvé'; },
+      searching: function() { return 'Recherche…'; }
+    }
+  });
+});
+</script>
 @endsection

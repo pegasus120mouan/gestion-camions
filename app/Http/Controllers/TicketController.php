@@ -15,6 +15,7 @@ use App\Models\Produit;
 use App\Models\Stock;
 use App\Models\Ticket;
 use App\Services\FicheSortieNumeroService;
+use App\Services\ParticulierAgentsApiService;
 use App\Services\TicketPrixService;
 use App\Services\UsinesParProduitService;
 use Carbon\Carbon;
@@ -26,7 +27,8 @@ use Illuminate\Support\Facades\Http;
 class TicketController extends Controller
 {
     public function __construct(
-        private TicketPrixService $ticketPrixService
+        private TicketPrixService $ticketPrixService,
+        private ParticulierAgentsApiService $particulierAgentsApiService,
     ) {}
 
     public function index(Request $request)
@@ -297,6 +299,11 @@ class TicketController extends Controller
             ->orderBy('nom_groupe')
             ->get();
 
+        $agentsParGroupe = $this->particulierAgentsApiService->agentsParGroupePourSelect(
+            $groupesParticuliers,
+            $agentsApi
+        );
+
         // Ponts gérables (depuis pont_etats)
         $pontEtatsGerables = PontEtat::where('gerable', true)->get();
         $idsPontsGerables = $pontEtatsGerables->pluck('id_pont')->toArray();
@@ -359,6 +366,7 @@ class TicketController extends Controller
             'agents' => $agentsApi,
             'agentsPgf' => $agentsPgf,
             'groupesParticuliers' => $groupesParticuliers,
+            'agentsParGroupe' => $agentsParGroupe,
             'pontsGerables' => $pontsGerables,
             'tousLesPonts' => $tousLesPonts,
             'produitsLocaux' => $produitsLocaux,
@@ -378,7 +386,7 @@ class TicketController extends Controller
             'poids'                => ['nullable', 'numeric', 'min:0'],
             'id_usine'             => ['required', 'integer', 'min:1'],
             'particulier_groupe_id'=> ['required', 'exists:particulier_groupes,id'],
-            'particulier_agent_id' => ['required', 'exists:particulier_agents,id'],
+            'agent_ref'            => ['required', 'string', 'regex:/^(api|local):\d+$/'],
             'prix_unitaire'        => ['nullable', 'numeric', 'min:0'],
             'statut_ticket'        => ['nullable', 'in:soldé,non soldé'],
             'id_pont'              => ['nullable', 'integer', 'min:1'],
@@ -386,15 +394,12 @@ class TicketController extends Controller
             'produit_id'           => ['nullable', 'integer', 'min:1'],
         ]);
 
-        $agent = ParticulierAgent::where('id', $validated['particulier_agent_id'])
-            ->where('particulier_groupe_id', $validated['particulier_groupe_id'])
-            ->first();
-
-        if (!$agent) {
-            return back()->withInput()->withErrors([
-                'particulier_agent_id' => 'Cet agent n\'appartient pas au groupe sélectionné.',
-            ]);
-        }
+        $agentsApi = $this->particulierAgentsApiService->fetchAll($request);
+        $agent = $this->particulierAgentsApiService->resolveAgentForTicket(
+            (int) $validated['particulier_groupe_id'],
+            (string) $validated['agent_ref'],
+            $agentsApi
+        );
 
         $ticket = Ticket::create([
             'numero_ticket'       => $validated['numero_ticket'],

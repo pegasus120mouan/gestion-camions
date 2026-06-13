@@ -25,6 +25,7 @@ use App\Http\Controllers\MontantChefChargeurController;
 use App\Http\Controllers\MontantFournisseurController;
 use App\Http\Controllers\MontantTransporteurController;
 use App\Http\Controllers\MontantAgentController;
+use App\Http\Controllers\RecuPaiementController;
 use App\Http\Controllers\MontantParticulierController;
 use App\Http\Controllers\ServiceController;
 use App\Http\Controllers\FournisseurController;
@@ -209,6 +210,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/gestionfinanciere/sorties', [GestionFinanciereController::class, 'sorties'])->name('gestionfinanciere.sorties');
     Route::post('/gestionfinanciere/sorties', [GestionFinanciereController::class, 'storeSortie'])->name('gestionfinanciere.sorties.store');
+    Route::get('/gestion-financiere/recus-paiement', [RecuPaiementController::class, 'index'])->name('gestionfinanciere.recus.index');
+    Route::get('/gestion-financiere/recus-paiement/{id}/pdf', [RecuPaiementController::class, 'pdf'])->name('gestionfinanciere.recus.pdf');
 
     Route::resource('utilisateurs', UtilisateurController::class)->except(['show']);
 

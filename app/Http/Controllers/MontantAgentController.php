@@ -45,7 +45,7 @@ class MontantAgentController extends Controller
 
             $montantDu = (int) round($this->reporting->calculerMontantDuAgent($idAgent, $filtres));
             $montantDuGlobal = (int) round($this->reporting->calculerMontantDuAgent($idAgent, ['id_agent' => $idAgent]));
-            $montantPaye = (int) PaiementAgent::where('id_agent', $idAgent)->sum('montant');
+            $montantPaye = $this->montantPayeAgent($idAgent);
             $filtresActifs = $this->reporting->filtresActifs($filtres);
 
             if ($filtresActifs && $montantDu === 0) {
@@ -194,11 +194,12 @@ class MontantAgentController extends Controller
         $montantDu = (int) round($this->reporting->calculerMontantDuAgent($id_agent, $filtres));
         $montantDuGlobal = (int) round($this->reporting->calculerMontantDuAgent($id_agent, ['id_agent' => $id_agent]));
         $paiements = PaiementAgent::where('id_agent', $id_agent)
+            ->whereNotNull('id_bordereau')
             ->with('bordereau')
             ->orderBy('date_paiement', 'desc')
             ->orderBy('id', 'desc')
             ->get();
-        $montantPaye = (int) $paiements->sum('montant');
+        $montantPaye = $this->montantPayeAgent($id_agent);
         $resteAPayer = $montantDuGlobal - $montantPaye;
 
         $fichesAvecMontant = $this->reporting->fichesAvecMontant($filtres);
@@ -285,24 +286,16 @@ class MontantAgentController extends Controller
         return null;
     }
 
+    private function montantPayeAgent(int $idAgent): int
+    {
+        return (int) round((float) BordereauAgent::where('id_agent', $idAgent)->sum('montant_paye'));
+    }
+
     public function storePaiement(Request $request, int $id_agent)
     {
-        if (!$this->findAgentById($id_agent)) {
-            return redirect()->route('gestionfinanciere.montant_agent')
-                ->withErrors(['error' => 'Agent non trouvé.']);
-        }
-
-        $validated = $request->validate([
-            'montant' => ['required', 'integer', 'min:1'],
-            'date_paiement' => ['required', 'date'],
-            'mode_paiement' => ['nullable', 'string', 'max:50'],
-            'reference' => ['nullable', 'string', 'max:100'],
-            'commentaire' => ['nullable', 'string', 'max:500'],
+        return back()->withErrors([
+            'error' => 'Les paiements doivent être enregistrés sur un bordereau (bouton paiement dans la section Gestion bordereaux).',
         ]);
-
-        PaiementAgent::create(array_merge($validated, ['id_agent' => $id_agent]));
-
-        return back()->with('success', 'Paiement enregistré avec succès.');
     }
 
     public function storePaiementBordereau(Request $request, int $id_agent, int $id)
@@ -338,6 +331,16 @@ class MontantAgentController extends Controller
             'reference' => $validated['reference'] ?? null,
             'commentaire' => $validated['commentaire'] ?? null,
         ]);
+
+        $paiement = PaiementAgent::query()
+            ->where('id_agent', $id_agent)
+            ->where('id_bordereau', $bordereau->id)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($paiement) {
+            app(\App\Services\RecuPaiementService::class)->assignerNumero($paiement);
+        }
 
         $bordereau->update([
             'montant_paye' => (float) $bordereau->montant_paye + $validated['montant'],

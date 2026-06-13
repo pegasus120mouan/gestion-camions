@@ -336,6 +336,11 @@
                     <div class="text-truncate" data-i18n="Alerts">Demande de sortie</div>
                   </a>
                 </li>
+                <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.recus.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Alerts">Reçu de paiement</div>
+                  </a>
+                </li>
                <!-- <li class="menu-item">
                   <a href="ui-badges.html" class="menu-link">
                     <div class="text-truncate" data-i18n="Badges">Badges</div>

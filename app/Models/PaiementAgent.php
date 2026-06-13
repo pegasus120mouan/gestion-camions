@@ -9,6 +9,7 @@ class PaiementAgent extends Model
     protected $table = 'paiements_agent';
 
     protected $fillable = [
+        'numero_recu',
         'id_agent',
         'id_bordereau',
         'montant',

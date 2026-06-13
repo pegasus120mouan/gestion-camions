@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\ParticulierAgent;
 use App\Models\ParticulierGroupe;
+use Illuminate\Database\UniqueConstraintViolationException;
+use App\Services\ParticulierAgentsApiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -90,24 +92,41 @@ class ParticulierController extends Controller
 
             $groupeId = (int) $request->input('particulier_groupe_id');
             $idAgent = (int) $request->input('id_agent');
+            $numeroAgent = (string) $request->input('numero_api', 'AGT-' . $idAgent);
 
-            $already = ParticulierAgent::where('particulier_groupe_id', $groupeId)
-                ->where('id_agent', $idAgent)
-                ->exists();
+            $existing = ParticulierAgent::query()
+                ->where(function ($query) use ($idAgent, $numeroAgent) {
+                    $query->where('id_agent', $idAgent)
+                        ->orWhere('numero_agent', $numeroAgent);
+                })
+                ->with('groupe')
+                ->first();
 
-            if ($already) {
+            if ($existing) {
+                if ((int) $existing->particulier_groupe_id === $groupeId) {
+                    $message = 'Cet agent est déjà dans ce groupe.';
+                } else {
+                    $groupeNom = $existing->groupe?->nom_groupe ?? 'un autre groupe';
+                    $message = 'Cet agent est déjà affecté au groupe « ' . $groupeNom . ' ».';
+                }
+
                 return redirect()->route('particuliers.show', $groupeId)
-                    ->with('error', 'Cet agent est déjà dans le groupe.');
+                    ->withErrors(['agent' => $message]);
             }
 
-            ParticulierAgent::create([
-                'particulier_groupe_id' => $groupeId,
-                'id_agent' => $idAgent,
-                'numero_agent' => (string) $request->input('numero_api', 'AGT-' . $idAgent),
-                'nom' => (string) $request->input('nom_api', ''),
-                'prenoms' => (string) $request->input('prenoms_api', ''),
-                'contact' => (string) $request->input('contact_api', ''),
-            ]);
+            try {
+                ParticulierAgent::create([
+                    'particulier_groupe_id' => $groupeId,
+                    'id_agent' => $idAgent,
+                    'numero_agent' => $numeroAgent,
+                    'nom' => (string) $request->input('nom_api', ''),
+                    'prenoms' => (string) $request->input('prenoms_api', ''),
+                    'contact' => (string) $request->input('contact_api', ''),
+                ]);
+            } catch (UniqueConstraintViolationException) {
+                return redirect()->route('particuliers.show', $groupeId)
+                    ->withErrors(['agent' => 'Cet agent est déjà enregistré dans un groupe particulier.']);
+            }
 
             return redirect()->route('particuliers.show', $groupeId)
                 ->with('success', 'Agent ajouté avec succès.');
@@ -121,7 +140,13 @@ class ParticulierController extends Controller
             'contact' => ['nullable', 'string', 'max:50'],
         ]);
 
-        ParticulierAgent::create($validated);
+        try {
+            ParticulierAgent::create($validated);
+        } catch (UniqueConstraintViolationException) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['numero_agent' => 'Ce numéro d\'agent est déjà utilisé.']);
+        }
 
         $redirect = $request->input('redirect');
         if ($redirect === 'show') {
@@ -156,38 +181,19 @@ class ParticulierController extends Controller
         return redirect()->back()->with('success', 'Agent supprimé avec succès.');
     }
 
+    private function extraireMotCleGroupe(string $nomGroupe): string
+    {
+        return app(ParticulierAgentsApiService::class)->extraireMotCleGroupe($nomGroupe);
+    }
+
+    private function filtrerAgentsApiPourGroupe(string $nomGroupe, array $agentsApi): array
+    {
+        return app(ParticulierAgentsApiService::class)->filtrerPourGroupe($nomGroupe, $agentsApi);
+    }
+
     private function fetchAgentsApi(Request $request): array
     {
-        $mesAgentsUrl = (string) config('services.external_auth.mes_agents_url');
-        $timeout = (int) config('services.external_auth.timeout', 10);
-        $phpsessid = (string) $request->session()->get('external_auth.phpsessid', '');
-        $all = [];
-        $page = 1;
-
-        try {
-            while (true) {
-                $response = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                    ->get($mesAgentsUrl, ['page' => $page]);
-
-                if (!$response->successful()) break;
-
-                $batch = $response->json('agents') ?? [];
-                if (empty($batch)) break;
-
-                foreach ($batch as $a) {
-                    if (is_array($a)) $all[] = $a;
-                }
-
-                $pagination = $response->json('pagination') ?? [];
-                if ($page >= (int) ($pagination['last_page'] ?? 1)) break;
-                $page++;
-            }
-        } catch (\Throwable $e) {}
-
-        return $all;
+        return app(ParticulierAgentsApiService::class)->fetchAll($request);
     }
 
     public function show(Request $request, int $id)
@@ -195,22 +201,28 @@ class ParticulierController extends Controller
         $groupe = ParticulierGroupe::with('agents')->findOrFail($id);
 
         $agentsApi = $this->fetchAgentsApi($request);
+        $agentsGroupeApi = $this->filtrerAgentsApiPourGroupe($groupe->nom_groupe, $agentsApi);
 
-        $idsDejaPresents = $groupe->agents->pluck('id_agent')->filter()->map(fn($v) => (int)$v)->toArray();
+        $idsDejaUtilises = ParticulierAgent::query()
+            ->whereNotNull('id_agent')
+            ->pluck('id_agent')
+            ->map(fn ($idAgent) => (int) $idAgent)
+            ->unique()
+            ->values()
+            ->all();
 
-        $agentsDisponibles = array_values(array_filter($agentsApi, function ($a) use ($idsDejaPresents) {
-            return !in_array((int) ($a['id_agent'] ?? 0), $idsDejaPresents, true);
+        $agentsDisponibles = array_values(array_filter($agentsGroupeApi, function ($a) use ($idsDejaUtilises) {
+            return !in_array((int) ($a['id_agent'] ?? 0), $idsDejaUtilises, true);
         }));
 
-        $agentsById = [];
-        foreach ($agentsApi as $a) {
-            $agentsById[(int) ($a['id_agent'] ?? 0)] = $a;
-        }
+        $agentsLocauxByIdAgent = $groupe->agents->keyBy(fn ($a) => (int) ($a->id_agent ?? 0));
 
         return view('particuliers.show', [
             'groupe' => $groupe,
+            'agentsGroupeApi' => $agentsGroupeApi,
+            'agentsLocauxByIdAgent' => $agentsLocauxByIdAgent,
             'agentsDisponibles' => $agentsDisponibles,
-            'agentsById' => $agentsById,
+            'agentsApiTotal' => count($agentsApi),
             'prochainNumero' => $this->prochainNumeroAgent(),
         ]);
     }

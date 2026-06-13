@@ -306,7 +306,7 @@ class DepenseController extends Controller
 
         // Filtre par véhicule
         if ($request->filled('vehicule')) {
-            $query->where('matricule_vehicule', $request->input('vehicule'));
+            $query->where('matricule_vehicule', trim((string) $request->input('vehicule')));
         }
 
         // Filtre par pont
@@ -316,7 +316,14 @@ class DepenseController extends Controller
 
         // Filtre par produit
         if ($request->filled('produit_id')) {
-            $query->where('produit_id', $request->input('produit_id'));
+            $produitId = (int) $request->input('produit_id');
+            $nomProduit = \App\Models\Produit::find($produitId)?->nom;
+            $query->where(function ($sub) use ($produitId, $nomProduit) {
+                $sub->where('produit_id', $produitId);
+                if ($nomProduit) {
+                    $sub->orWhere('nom_produit', $nomProduit);
+                }
+            });
         }
 
         // Filtre par usine
@@ -424,9 +431,31 @@ class DepenseController extends Controller
         $fichesEnAttente = FicheSortie::whereNull('date_dechargement')->count();
         $fichesDechargees = FicheSortie::whereNotNull('date_dechargement')->count();
 
+        $matriculesFiltre = FicheSortie::query()
+            ->distinct()
+            ->orderBy('matricule_vehicule')
+            ->pluck('matricule_vehicule')
+            ->filter()
+            ->values()
+            ->all();
+        $vehiculesFiltre = array_map(
+            fn (string $matricule) => ['matricule_vehicule' => $matricule],
+            $matriculesFiltre
+        );
+
+        $filtresActifs = $request->filled('vehicule')
+            || $request->filled('pont')
+            || $request->filled('produit_id')
+            || $request->filled('usine')
+            || $request->filled('chef_chargeur')
+            || $request->filled('date_debut')
+            || $request->filled('date_fin');
+
         return view('fiches_sortie.index', [
             'fiches' => $fiches,
             'vehicules' => $vehicules,
+            'vehiculesFiltre' => $vehiculesFiltre,
+            'filtresActifs' => $filtresActifs,
             'ponts' => $ponts,
             'agents' => $agents,
             'usines' => $donneesUsinesProduits['usinesFiltre'],

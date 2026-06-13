@@ -565,9 +565,12 @@
             </div>
             <div class="col-md-6 mb-3">
               <label class="form-label">Agent <span class="text-danger">*</span></label>
-              <select name="particulier_agent_id" id="ticket_particulier_agent_id" class="form-select" required disabled>
-                <option value="">-- Sélectionner d'abord un groupe --</option>
-              </select>
+              <div class="position-relative">
+                <input type="text" id="ticket_agent_search" class="form-control" placeholder="Tapez numéro ou nom d'agent..." autocomplete="off" disabled value="" />
+                <div id="ticket_agent_dropdown" class="dropdown-menu w-100 shadow-sm" style="max-height: 250px; overflow-y: auto; display: none;"></div>
+              </div>
+              <input type="hidden" name="agent_ref" id="ticket_agent_ref" value="{{ old('agent_ref') }}" />
+              <small class="text-muted">Saisissez quelques caractères puis choisissez un agent dans la liste.</small>
             </div>
           </div>
         </div>
@@ -583,18 +586,10 @@
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
-var agentsParGroupe = @json(
-  ($groupesParticuliers ?? collect())->mapWithKeys(function ($groupe) {
-    return [$groupe->id => $groupe->agents->map(function ($agent) {
-      return [
-        'id' => $agent->id,
-        'label' => ($agent->numero_agent ? $agent->numero_agent . ' — ' : '') . trim($agent->nom . ' ' . $agent->prenoms),
-      ];
-    })->values()];
-  })
-);
+var agentsParGroupe = @json($agentsParGroupe ?? []);
+var agentsTicketCourants = [];
 var oldParticulierGroupeId = @json(old('particulier_groupe_id'));
-var oldParticulierAgentId = @json(old('particulier_agent_id'));
+var oldAgentRef = @json(old('agent_ref'));
 var oldMatriculeVehicule = @json(old('matricule_vehicule'));
 var oldVehiculeId = @json(old('vehicule_id'));
 var vehiculesTicket = @json(
@@ -669,32 +664,103 @@ function initVehiculeTicketAutocomplete() {
   }
 }
 
-function remplirAgentsTicket(groupeId, selectedAgentId) {
-  var $agentSelect = $('#ticket_particulier_agent_id');
-  $agentSelect.empty();
+function agentLabelParRef(agentRef) {
+  if (!agentRef) return '';
+  for (var i = 0; i < agentsTicketCourants.length; i++) {
+    if (String(agentsTicketCourants[i].id) === String(agentRef)) {
+      return agentsTicketCourants[i].label;
+    }
+  }
+  return '';
+}
 
-  if (!groupeId) {
-    $agentSelect.append('<option value="">-- Sélectionner d\'abord un groupe --</option>');
-    $agentSelect.prop('disabled', true);
-    $agentSelect.trigger('change.select2');
+function resetAgentTicketSelection() {
+  $('#ticket_agent_ref').val('');
+  $('#ticket_agent_search').val('');
+}
+
+function selectAgentTicket(agentRef, label) {
+  $('#ticket_agent_ref').val(agentRef);
+  $('#ticket_agent_search').val(label);
+  $('#ticket_agent_dropdown').hide();
+}
+
+function renderAgentsTicketDropdown() {
+  var search = $('#ticket_agent_search').val().trim().toLowerCase();
+  var $dropdown = $('#ticket_agent_dropdown');
+  $dropdown.empty();
+
+  if (!$('#ticket_agent_search').prop('disabled') && !search) {
+    $dropdown.hide();
     return;
   }
 
-  var agents = agentsParGroupe[groupeId] || [];
-  $agentSelect.append('<option value="">-- Sélectionner un agent --</option>');
-
-  if (agents.length === 0) {
-    $agentSelect.append('<option value="" disabled>Aucun agent dans ce groupe</option>');
-    $agentSelect.prop('disabled', true);
-  } else {
-    agents.forEach(function(agent) {
-      var selected = selectedAgentId && String(selectedAgentId) === String(agent.id) ? ' selected' : '';
-      $agentSelect.append('<option value="' + agent.id + '"' + selected + '>' + agent.label + '</option>');
-    });
-    $agentSelect.prop('disabled', false);
+  if ($('#ticket_agent_search').prop('disabled')) {
+    $dropdown.hide();
+    return;
   }
 
-  $agentSelect.trigger('change.select2');
+  var matches = agentsTicketCourants.filter(function(agent) {
+    if (!search) return true;
+    return agent.label.toLowerCase().indexOf(search) !== -1;
+  }).slice(0, 50);
+
+  if (matches.length === 0) {
+    $dropdown.append('<span class="dropdown-item text-muted disabled">Aucun agent trouvé</span>');
+  } else {
+    matches.forEach(function(agent) {
+      $dropdown.append(
+        '<a href="#" class="dropdown-item ticket-agent-option" data-agent-ref="' +
+        $('<div>').text(agent.id).html() +
+        '" data-agent-label="' +
+        $('<div>').text(agent.label).html() +
+        '">' +
+        $('<div>').text(agent.label).html() +
+        '</a>'
+      );
+    });
+  }
+
+  $dropdown.show();
+}
+
+function remplirAgentsTicket(groupeId, selectedAgentRef) {
+  var $search = $('#ticket_agent_search');
+  var groupeData = agentsParGroupe[groupeId] || {};
+  agentsTicketCourants = groupeData.agents || [];
+
+  resetAgentTicketSelection();
+
+  if (!groupeId) {
+    $search.prop('disabled', true).attr('placeholder', 'Sélectionnez d\'abord un groupe...');
+    $('#ticket_agent_dropdown').hide();
+    return;
+  }
+
+  if (agentsTicketCourants.length === 0) {
+    var videLabel = (groupeData.source || 'api') === 'local'
+      ? 'Aucun agent enregistré pour ce groupe'
+      : 'Aucun agent trouvé pour ce groupe';
+    $search.prop('disabled', true).attr('placeholder', videLabel);
+    $('#ticket_agent_dropdown').hide();
+    return;
+  }
+
+  $search.prop('disabled', false).attr('placeholder', 'Tapez numéro ou nom d\'agent...');
+
+  if (selectedAgentRef) {
+    var label = agentLabelParRef(selectedAgentRef);
+    if (label) {
+      selectAgentTicket(selectedAgentRef, label);
+    }
+  }
+}
+
+function initAgentTicketAutocomplete() {
+  var groupeInit = oldParticulierGroupeId || $('#ticket_particulier_groupe_id').val();
+  if (groupeInit) {
+    remplirAgentsTicket(groupeInit, oldAgentRef || $('#ticket_agent_ref').val());
+  }
 }
 
 $(document).ready(function() {
@@ -705,11 +771,9 @@ $(document).ready(function() {
     if ($('#ticket_particulier_groupe_id').hasClass('select2-hidden-accessible')) {
       $('#ticket_particulier_groupe_id').select2('destroy');
     }
-    if ($('#ticket_particulier_agent_id').hasClass('select2-hidden-accessible')) {
-      $('#ticket_particulier_agent_id').select2('destroy');
-    }
 
     initVehiculeTicketAutocomplete();
+    initAgentTicketAutocomplete();
 
     if ($('#ticket_id_pont').hasClass('select2-hidden-accessible')) {
       $('#ticket_id_pont').select2('destroy');
@@ -758,20 +822,39 @@ $(document).ready(function() {
       allowClear: true,
       width: '100%'
     });
-
-    $('#ticket_particulier_agent_id').select2({
-      theme: 'bootstrap-5',
-      dropdownParent: $('#modalAddTicket .modal-body'),
-      placeholder: '-- Sélectionner un agent --',
-      allowClear: true,
-      width: '100%'
-    });
-
-    remplirAgentsTicket(oldParticulierGroupeId, oldParticulierAgentId);
   });
 
   $('#ticket_particulier_groupe_id').on('change', function() {
     remplirAgentsTicket($(this).val(), null);
+  });
+
+  $('#ticket_agent_search').on('input focus', function() {
+    if ($('#ticket_agent_ref').val() && $(this).val() === agentLabelParRef($('#ticket_agent_ref').val())) {
+      $(this).val('');
+      $('#ticket_agent_ref').val('');
+    }
+    renderAgentsTicketDropdown();
+  });
+
+  $(document).on('click', '.ticket-agent-option', function(e) {
+    e.preventDefault();
+    selectAgentTicket($(this).attr('data-agent-ref'), $(this).attr('data-agent-label'));
+  });
+
+  $(document).on('click', function(e) {
+    if (!$(e.target).closest('#ticket_agent_search, #ticket_agent_dropdown').length) {
+      $('#ticket_agent_dropdown').hide();
+    }
+  });
+
+  $('#modalAddTicket form').on('submit', function(e) {
+    if (!$('#ticket_agent_ref').val()) {
+      e.preventDefault();
+      $('#ticket_agent_search').addClass('is-invalid').focus();
+      renderAgentsTicketDropdown();
+      return false;
+    }
+    $('#ticket_agent_search').removeClass('is-invalid');
   });
 
   $('#ticket_vehicule_search').on('input focus', function() {

@@ -66,7 +66,7 @@
           <div class="card-body">
             <h6 class="card-title" style="color: #0f5132;">Montant payé</h6>
             <h3 class="mb-0" style="color: #0f5132;">{{ number_format($montantPaye, 0, ',', ' ') }} FCFA</h3>
-            <small class="text-muted">Paiements globaux à l’agent</small>
+            <small class="text-muted">Somme des paiements enregistrés sur les bordereaux</small>
           </div>
         </div>
       </div>
@@ -194,6 +194,7 @@
                   <th>Véhicule</th>
                   <th>Produit</th>
                   <th>Usine</th>
+                  <th>N° ticket</th>
                   <th class="text-end">Poids</th>
                   <th class="text-end">PU</th>
                   <th class="text-end">Montant</th>
@@ -214,6 +215,13 @@
                           @endif
                         </td>
                         <td><small>{{ $item['fiche']->usine ?? '—' }}</small></td>
+                        <td>
+                          @if($item['fiche']->numero_ticket)
+                            <code class="small">{{ $item['fiche']->numero_ticket }}</code>
+                          @else
+                            <span class="text-muted">—</span>
+                          @endif
+                        </td>
                         <td class="text-end">
                           @if(($item['poids_effectif'] ?? 0) > 0)
                             {{ number_format((float) $item['poids_effectif'], 0, ',', ' ') }}
@@ -232,28 +240,28 @@
                       </tr>
                     @endforeach
                     <tr class="table-secondary">
-                      <td colspan="4" class="text-end"><strong>Sous-total {{ $blocUsine['usine'] }}</strong></td>
+                      <td colspan="5" class="text-end"><strong>Sous-total {{ $blocUsine['usine'] }}</strong></td>
                       <td class="text-end"><strong>{{ number_format($blocUsine['poids_total'], 0, ',', ' ') }}</strong></td>
                       <td></td>
                       <td class="text-end text-danger"><strong>{{ number_format($blocUsine['montant_total'], 0, ',', ' ') }} FCFA</strong></td>
                     </tr>
                   @endforeach
                   <tr class="table-warning">
-                    <td colspan="4" class="text-end"><strong>Total {{ $groupe['produit'] }}</strong></td>
+                    <td colspan="5" class="text-end"><strong>Total {{ $groupe['produit'] }}</strong></td>
                     <td class="text-end"><strong>{{ number_format($groupe['poids_total'], 0, ',', ' ') }}</strong></td>
                     <td></td>
                     <td class="text-end text-danger"><strong>{{ number_format($groupe['montant_total'], 0, ',', ' ') }} FCFA</strong></td>
                   </tr>
                 @empty
                   <tr>
-                    <td colspan="7" class="text-center">Aucune fiche</td>
+                    <td colspan="8" class="text-center">Aucune fiche</td>
                   </tr>
                 @endforelse
               </tbody>
               @if(count($fichesAvecMontant) > 0)
                 <tfoot>
                   <tr class="table-danger">
-                    <td colspan="6" class="text-end"><strong>Total affiché</strong></td>
+                    <td colspan="7" class="text-end"><strong>Total affiché</strong></td>
                     <td class="text-end"><strong>{{ number_format($montantDu, 0, ',', ' ') }} FCFA</strong></td>
                   </tr>
                 </tfoot>
@@ -266,10 +274,10 @@
       <div class="col-12">
         <div class="card">
           <div class="card-header d-flex justify-content-between align-items-center" style="background-color: #d1e7dd; border-bottom: 1px solid #badbcc;">
-            <h5 class="card-title mb-0" style="color: #0f5132;"><i class="bx bx-plus-circle me-2"></i>Paiements ({{ $paiements->count() }})</h5>
-            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalPaiementAgentDetail">
-              <i class="bx bx-plus"></i> Ajouter
-            </button>
+            <div>
+              <h5 class="card-title mb-0" style="color: #0f5132;"><i class="bx bx-plus-circle me-2"></i>Paiements via bordereaux ({{ $paiements->count() }})</h5>
+              <small class="text-muted">Utilisez le bouton <i class="bx bx-money"></i> sur un bordereau pour enregistrer un paiement</small>
+            </div>
           </div>
           <div class="table-responsive gf-table-wrap">
             <table class="table table-sm table-bordered table-hover align-middle gf-table-financier mb-0">
@@ -279,6 +287,7 @@
                   <th>Bordereau</th>
                   <th>Mode</th>
                   <th class="text-end">Montant</th>
+                  <th class="text-center">Reçu</th>
                 </tr>
               </thead>
               <tbody>
@@ -289,7 +298,7 @@
                       @if($paiement->bordereau)
                         <span class="badge bg-label-primary">{{ $paiement->bordereau->numero }}</span>
                       @else
-                        <span class="text-muted">Global</span>
+                        <span class="text-muted">—</span>
                       @endif
                     </td>
                     <td>
@@ -300,17 +309,22 @@
                       @endif
                     </td>
                     <td class="text-end text-success">{{ number_format($paiement->montant, 0, ',', ' ') }} FCFA</td>
+                    <td class="text-center">
+                      <a href="{{ route('gestionfinanciere.recus.pdf', $paiement->id) }}" target="_blank" class="btn btn-sm btn-outline-danger" title="Reçu PDF">
+                        <i class="bx bx-file"></i>
+                      </a>
+                    </td>
                   </tr>
                 @empty
                   <tr>
-                    <td colspan="4" class="text-center">Aucun paiement</td>
+                    <td colspan="5" class="text-center text-muted py-4">Aucun paiement enregistré sur un bordereau</td>
                   </tr>
                 @endforelse
               </tbody>
               @if($paiements->count() > 0)
                 <tfoot>
                   <tr class="table-success">
-                    <td colspan="3"><strong>Total</strong></td>
+                    <td colspan="4"><strong>Total</strong></td>
                     <td class="text-end"><strong>{{ number_format($montantPaye, 0, ',', ' ') }} FCFA</strong></td>
                   </tr>
                 </tfoot>
@@ -319,51 +333,6 @@
           </div>
         </div>
       </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal fade" id="modalPaiementAgentDetail" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title text-white"><i class="bx bx-money me-2"></i>Nouveau paiement</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <form action="{{ route('gestionfinanciere.paiement_agent.store', ['id_agent' => $idAgent]) }}" method="POST">
-        @csrf
-        <div class="modal-body">
-          <div class="alert alert-info">
-            <strong>Reste à payer (global):</strong> {{ number_format($resteAPayer, 0, ',', ' ') }} FCFA
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Montant (FCFA)</label>
-            <input type="number" name="montant" class="form-control" required min="1" step="1" />
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Date de paiement</label>
-            <input type="date" name="date_paiement" class="form-control" required value="{{ date('Y-m-d') }}">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Mode de paiement</label>
-            <select name="mode_paiement" class="form-select">
-              <option value="">-- Sélectionner --</option>
-              <option value="Espèces">Espèces</option>
-              <option value="Virement">Virement</option>
-              <option value="Chèque">Chèque</option>
-              <option value="Mobile Money">Mobile Money</option>
-            </select>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Référence</label>
-            <input type="text" name="reference" class="form-control" placeholder="Optionnel" />
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-primary"><i class="bx bx-save me-1"></i>Enregistrer</button>
-        </div>
-      </form>
     </div>
   </div>
 </div>
