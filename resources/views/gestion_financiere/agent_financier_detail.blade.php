@@ -355,7 +355,8 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Montant (FCFA)</label>
-            <input type="number" name="montant" id="paiementBordereauMontant" class="form-control" required min="1" step="1" />
+            <input type="text" name="montant" id="paiementBordereauMontant" class="form-control montant-input-bordereau" required placeholder="Ex: 4 685 000" inputmode="numeric" autocomplete="off" />
+            <small class="text-muted">Vous pouvez saisir un montant supérieur au reste du bordereau.</small>
           </div>
           <div class="mb-3">
             <label class="form-label">Date de paiement</label>
@@ -488,6 +489,14 @@
     return new Intl.NumberFormat('fr-FR').format(n);
   }
 
+  function formatMontantSaisie(value) {
+    var digits = String(value || '').replace(/\D/g, '');
+    if (!digits) {
+      return '';
+    }
+    return parseInt(digits, 10).toLocaleString('fr-FR').replace(/\u202F/g, ' ').replace(/,/g, ' ');
+  }
+
   function majTotauxSelection() {
     var checks = tbody.querySelectorAll('.fiche-bordereau-check:checked');
     var montant = 0;
@@ -598,6 +607,25 @@
   var formPaiementBordereau = document.getElementById('formPaiementBordereau');
   var inputMontantBordereau = document.getElementById('paiementBordereauMontant');
 
+  if (inputMontantBordereau) {
+    inputMontantBordereau.addEventListener('input', function() {
+      var cursorPos = this.selectionStart;
+      var oldLength = this.value.length;
+      this.value = formatMontantSaisie(this.value);
+      var newLength = this.value.length;
+      cursorPos = cursorPos + (newLength - oldLength);
+      this.setSelectionRange(cursorPos, cursorPos);
+    });
+  }
+
+  if (formPaiementBordereau) {
+    formPaiementBordereau.addEventListener('submit', function() {
+      if (inputMontantBordereau) {
+        inputMontantBordereau.value = inputMontantBordereau.value.replace(/\s/g, '');
+      }
+    });
+  }
+
   document.querySelectorAll('.btn-paiement-bordereau').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var id = btn.getAttribute('data-bordereau-id');
@@ -607,8 +635,7 @@
       formPaiementBordereau.action = urlPaiementBordereauBase + '/' + id + '/paiement';
       document.getElementById('paiementBordereauNumero').textContent = numero || '—';
       document.getElementById('paiementBordereauReste').textContent = formatNombre(reste);
-      inputMontantBordereau.max = reste;
-      inputMontantBordereau.value = reste > 0 ? reste : '';
+      inputMontantBordereau.value = reste > 0 ? formatMontantSaisie(String(reste)) : '';
     });
   });
 })();

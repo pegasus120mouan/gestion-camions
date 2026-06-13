@@ -315,13 +315,6 @@ class MontantAgentController extends Controller
             'commentaire' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $reste = (int) round($bordereau->reste_a_payer);
-        if ($validated['montant'] > $reste) {
-            return back()->withErrors([
-                'montant' => 'Le montant dépasse le reste à payer du bordereau (' . number_format($reste, 0, ',', ' ') . ' FCFA).',
-            ]);
-        }
-
         PaiementAgent::create([
             'id_agent' => $id_agent,
             'id_bordereau' => $bordereau->id,
