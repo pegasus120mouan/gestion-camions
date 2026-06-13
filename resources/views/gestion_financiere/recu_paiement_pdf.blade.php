@@ -209,7 +209,7 @@
                 <td class="val">{{ $sourcePaiement }}</td>
             </tr>
             <tr>
-                <td class="lbl">Reste à payer</td>
+                <td class="lbl">Reste à payer sur ce Bordereau</td>
                 <td class="val {{ $resteAPayer > 0 ? 'montant' : 'montant-zero' }}">{{ number_format($resteAPayer, 0, ',', ' ') }} FCFA</td>
             </tr>
             <tr>

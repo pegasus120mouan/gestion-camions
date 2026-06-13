@@ -18,7 +18,6 @@ class RecuPaiementController extends Controller
     {
         $queryAgents = PaiementAgent::query()
             ->with('bordereau')
-            ->whereNotNull('id_bordereau')
             ->orderByDesc('date_paiement')
             ->orderByDesc('id');
 
@@ -73,7 +72,7 @@ class RecuPaiementController extends Controller
         $paiementsParticuliers = $queryParticuliers->paginate(15, ['*'], 'page_particulier')->withQueryString();
 
         $totaux = [
-            'agents' => (int) PaiementAgent::whereNotNull('id_bordereau')->sum('montant'),
+            'agents' => (int) PaiementAgent::sum('montant'),
             'particuliers' => (int) PaiementParticulierAgent::sum('montant'),
         ];
 

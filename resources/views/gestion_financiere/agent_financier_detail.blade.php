@@ -30,6 +30,11 @@
     @if(session('success'))
       <div class="alert alert-success alert-dismissible fade show" role="alert">
         {{ session('success') }}
+        @if(session('recu_paiement_id'))
+          <a href="{{ route('gestionfinanciere.recus.pdf', session('recu_paiement_id')) }}" target="_blank" class="alert-link ms-2">
+            <i class="bx bx-file me-1"></i>Voir le reçu
+          </a>
+        @endif
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
       </div>
     @endif
@@ -40,6 +45,7 @@
       'filtresActifs' => $filtresActifs,
       'produits' => $produits,
       'usines' => $usines,
+      'showAvanceButton' => true,
     ])
 
     <div class="row mb-4">
@@ -66,7 +72,7 @@
           <div class="card-body">
             <h6 class="card-title" style="color: #0f5132;">Montant payé</h6>
             <h3 class="mb-0" style="color: #0f5132;">{{ number_format($montantPaye, 0, ',', ' ') }} FCFA</h3>
-            <small class="text-muted">Somme des paiements enregistrés sur les bordereaux</small>
+            <small class="text-muted">Paiements bordereaux + avances</small>
           </div>
         </div>
       </div>
@@ -275,8 +281,8 @@
         <div class="card">
           <div class="card-header d-flex justify-content-between align-items-center" style="background-color: #d1e7dd; border-bottom: 1px solid #badbcc;">
             <div>
-              <h5 class="card-title mb-0" style="color: #0f5132;"><i class="bx bx-plus-circle me-2"></i>Paiements via bordereaux ({{ $paiements->count() }})</h5>
-              <small class="text-muted">Utilisez le bouton <i class="bx bx-money"></i> sur un bordereau pour enregistrer un paiement</small>
+              <h5 class="card-title mb-0" style="color: #0f5132;"><i class="bx bx-plus-circle me-2"></i>Paiements et avances ({{ $paiements->count() }})</h5>
+              <small class="text-muted">Paiements sur bordereaux ou avances directes</small>
             </div>
           </div>
           <div class="table-responsive gf-table-wrap">
@@ -298,7 +304,7 @@
                       @if($paiement->bordereau)
                         <span class="badge bg-label-primary">{{ $paiement->bordereau->numero }}</span>
                       @else
-                        <span class="text-muted">—</span>
+                        <span class="badge bg-label-success">Avance</span>
                       @endif
                     </td>
                     <td>
@@ -317,15 +323,16 @@
                   </tr>
                 @empty
                   <tr>
-                    <td colspan="5" class="text-center text-muted py-4">Aucun paiement enregistré sur un bordereau</td>
+                    <td colspan="5" class="text-center text-muted py-4">Aucun paiement enregistré</td>
                   </tr>
                 @endforelse
               </tbody>
               @if($paiements->count() > 0)
                 <tfoot>
                   <tr class="table-success">
-                    <td colspan="4"><strong>Total</strong></td>
+                    <td colspan="3"><strong>Total</strong></td>
                     <td class="text-end"><strong>{{ number_format($montantPaye, 0, ',', ' ') }} FCFA</strong></td>
+                    <td></td>
                   </tr>
                 </tfoot>
               @endif
@@ -333,6 +340,56 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalAvanceAgent" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-wallet me-2"></i>Avance agent</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ route('gestionfinanciere.agent.avance.store', ['id_agent' => $idAgent]) }}" id="formAvanceAgent">
+        @csrf
+        <div class="modal-body">
+          <div class="alert alert-info">
+            <strong>Reste à payer :</strong> {{ number_format($resteAPayer, 0, ',', ' ') }} FCFA
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Montant avance (FCFA) <span class="text-danger">*</span></label>
+            <input type="text" name="montant" id="avanceAgentMontant" class="form-control" required placeholder="Ex: 1 000 000" inputmode="numeric" autocomplete="off" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Date de paiement</label>
+            <input type="date" name="date_paiement" class="form-control" required value="{{ date('Y-m-d') }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Mode de paiement</label>
+            <select name="mode_paiement" class="form-select">
+              <option value="Espèces" selected>Espèces</option>
+              <option value="Virement">Virement</option>
+              <option value="Chèque">Chèque</option>
+              <option value="Mobile Money">Mobile Money</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Référence</label>
+            <input type="text" name="reference" class="form-control" placeholder="Optionnel" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Commentaire</label>
+            <input type="text" name="commentaire" class="form-control" value="Avance" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-success" id="btnSubmitAvance" disabled>
+            <i class="bx bx-save me-1"></i>Enregistrer
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -638,6 +695,57 @@
       inputMontantBordereau.value = reste > 0 ? formatMontantSaisie(String(reste)) : '';
     });
   });
+
+  var inputAvanceMontant = document.getElementById('avanceAgentMontant');
+  var btnSubmitAvance = document.getElementById('btnSubmitAvance');
+  var formAvanceAgent = document.getElementById('formAvanceAgent');
+
+  function syncAvanceSubmitButton() {
+    if (!btnSubmitAvance || !inputAvanceMontant) return;
+    var digits = String(inputAvanceMontant.value || '').replace(/\D/g, '');
+    btnSubmitAvance.disabled = !digits || parseInt(digits, 10) < 1;
+  }
+
+  if (inputAvanceMontant) {
+    inputAvanceMontant.addEventListener('input', function() {
+      var cursorPos = this.selectionStart;
+      var oldLength = this.value.length;
+      this.value = formatMontantSaisie(this.value);
+      var newLength = this.value.length;
+      cursorPos = cursorPos + (newLength - oldLength);
+      this.setSelectionRange(cursorPos, cursorPos);
+      syncAvanceSubmitButton();
+    });
+  }
+
+  if (formAvanceAgent) {
+    formAvanceAgent.addEventListener('submit', function() {
+      if (inputAvanceMontant) {
+        inputAvanceMontant.value = inputAvanceMontant.value.replace(/\s/g, '');
+      }
+      if (btnSubmitAvance) {
+        btnSubmitAvance.disabled = true;
+        btnSubmitAvance.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enregistrement…';
+      }
+    });
+  }
+
+  var modalAvanceAgent = document.getElementById('modalAvanceAgent');
+  if (modalAvanceAgent) {
+    modalAvanceAgent.addEventListener('shown.bs.modal', syncAvanceSubmitButton);
+    modalAvanceAgent.addEventListener('hidden.bs.modal', function() {
+      if (inputAvanceMontant) inputAvanceMontant.value = '';
+      if (btnSubmitAvance) {
+        btnSubmitAvance.disabled = true;
+        btnSubmitAvance.innerHTML = '<i class="bx bx-save me-1"></i>Enregistrer';
+      }
+    });
+  }
 })();
 </script>
+@if(session('recu_paiement_id'))
+<script>
+  window.open(@json(route('gestionfinanciere.recus.pdf', session('recu_paiement_id'))), '_blank');
+</script>
+@endif
 @endsection

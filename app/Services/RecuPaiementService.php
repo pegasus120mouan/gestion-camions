@@ -98,12 +98,19 @@ class RecuPaiementService
 
         $montantTotal = (int) round((float) ($bordereau?->montant_total ?? 0));
         $montantPayeLigne = (int) $paiement->montant;
-        $reste = max(0, (int) round((float) ($bordereau?->reste_a_payer ?? 0)));
+        $estAvance = $paiement->id_bordereau === null;
+        $reste = $estAvance ? 0 : max(0, (int) round((float) ($bordereau?->reste_a_payer ?? 0)));
 
         $idAgent = (int) $paiement->id_agent;
         $montantDuGlobal = (int) round($this->reporting->calculerMontantDuAgent($idAgent, ['id_agent' => $idAgent]));
-        $montantPayeTotal = (int) round((float) BordereauAgent::where('id_agent', $idAgent)->sum('montant_paye'));
+        $montantPayeBordereaux = (int) round((float) BordereauAgent::where('id_agent', $idAgent)->sum('montant_paye'));
+        $montantAvances = (int) round((float) PaiementAgent::where('id_agent', $idAgent)->whereNull('id_bordereau')->sum('montant'));
+        $montantPayeTotal = $montantPayeBordereaux + $montantAvances;
         $soldeCompte = $montantDuGlobal - $montantPayeTotal;
+
+        if ($estAvance) {
+            $montantTotal = $montantDuGlobal;
+        }
 
         $dateHeure = ($paiement->created_at ?? $paiement->date_paiement ?? now())->format('d/m/Y H:i');
         $dateFait = ($paiement->date_paiement ?? now())->format('d/m/Y');
@@ -119,7 +126,7 @@ class RecuPaiementService
 
         return [
             'numeroRecu' => $paiement->numero_recu ?? $this->genererNumero($paiement),
-            'numeroBordereau' => $bordereau?->numero ?? '—',
+            'numeroBordereau' => $estAvance ? 'AVANCE' : ($bordereau?->numero ?? '—'),
             'dateHeure' => $dateHeure,
             'dateFait' => $dateFait,
             'nomAgent' => $nomAgent,

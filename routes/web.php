@@ -380,6 +380,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/gestion-financiere/agent-financier/{id_agent}/bordereaux/{id}/pdf', [MontantAgentController::class, 'exportBordereauPdf'])->name('gestionfinanciere.agent.bordereau.pdf');
     Route::delete('/gestion-financiere/agent-financier/{id_agent}/bordereaux/{id}', [MontantAgentController::class, 'destroyBordereau'])->name('gestionfinanciere.agent.bordereau.destroy');
     Route::post('/gestion-financiere/agent-financier/{id_agent}/bordereaux/{id}/paiement', [MontantAgentController::class, 'storePaiementBordereau'])->name('gestionfinanciere.agent.bordereau.paiement.store');
+    Route::post('/gestion-financiere/agent-financier/{id_agent}/avance', [MontantAgentController::class, 'storeAvance'])->name('gestionfinanciere.agent.avance.store');
     Route::post('/gestion-financiere/agent-financier/{id_agent}/paiement', [MontantAgentController::class, 'storePaiement'])->name('gestionfinanciere.paiement_agent.store');
 
     // Montant Chef Chargeur

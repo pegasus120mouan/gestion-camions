@@ -518,7 +518,7 @@
               <select name="id_pont" id="ticket_id_pont" class="form-select">
                 <option value="" data-gerable="0">-- Aucun pont --</option>
                 @foreach($tousLesPonts ?? [] as $pont)
-                  <option value="{{ $pont['id_pont'] }}" data-gerable="{{ $pont['gerable'] ? '1' : '0' }}" data-starred="{{ $pont['gerable'] ? '1' : '0' }}">
+                  <option value="{{ $pont['id_pont'] }}" data-gerable="{{ $pont['gerable'] ? '1' : '0' }}" data-starred="{{ $pont['gerable'] ? '1' : '0' }}" @selected(old('id_pont') == ($pont['id_pont'] ?? null))>
                     {{ $pont['nom_pont'] ?? '' }} ({{ $pont['code_pont'] ?? '' }}){{ $pont['gerable'] ? ' ★' : '' }}
                   </option>
                 @endforeach
@@ -528,19 +528,20 @@
           {{-- Ligne 4 : Produit + Parc (parc conditionnel si pont gérable) --}}
           <div class="row">
             <div id="col_produit" class="col-md-6 mb-3">
-              <label class="form-label">Produit</label>
+              <label class="form-label">Produit <span class="text-danger d-none" id="ticket_produit_required">*</span></label>
               <select name="produit_id" id="ticket_produit_id" class="form-select">
                 <option value="">-- Sélectionner un produit --</option>
                 @foreach($produitsLocaux ?? [] as $produit)
-                  <option value="{{ $produit->id }}">{{ $produit->nom }}</option>
+                  <option value="{{ $produit->id }}" @selected(old('produit_id') == $produit->id)>{{ $produit->nom }}</option>
                 @endforeach
               </select>
             </div>
             <div id="col_parc" class="col-md-6 mb-3" style="display:none;">
-              <label class="form-label">Parc</label>
+              <label class="form-label" id="ticket_parc_label">Parc <span class="text-danger d-none" id="ticket_parc_required">*</span></label>
               <select name="parc_id" id="ticket_parc_id" class="form-select" disabled>
                 <option value="">-- Sélectionner d'abord un produit --</option>
               </select>
+              <div class="invalid-feedback">Le parc est obligatoire pour un pont gérable.</div>
             </div>
           </div>
           {{-- Ligne 5 : Usine (filtrée par produit) --}}
@@ -576,7 +577,9 @@
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-primary"><i class="bx bx-check me-1"></i>Enregistrer</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitTicket" disabled>
+            <i class="bx bx-check me-1"></i>Enregistrer
+          </button>
         </div>
       </form>
     </div>
@@ -592,6 +595,14 @@ var oldParticulierGroupeId = @json(old('particulier_groupe_id'));
 var oldAgentRef = @json(old('agent_ref'));
 var oldMatriculeVehicule = @json(old('matricule_vehicule'));
 var oldVehiculeId = @json(old('vehicule_id'));
+var oldPontId = @json(old('id_pont'));
+var oldProduitId = @json(old('produit_id'));
+var oldParcId = @json(old('parc_id'));
+var pontGerableParId = @json(
+  collect($tousLesPonts ?? [])->mapWithKeys(function ($p) {
+    return [(string) ($p['id_pont'] ?? 0) => (bool) ($p['gerable'] ?? false)];
+  })->all()
+);
 var vehiculesTicket = @json(
   collect($vehiculesApi ?? [])->map(function ($v) {
     return [
@@ -617,6 +628,7 @@ function selectVehiculeTicket(matricule, vehiculeId) {
   $('#ticket_matricule_vehicule').val(matricule);
   $('#ticket_vehicule_id').val(vehiculeId);
   $('#ticket_vehicule_dropdown').hide();
+  syncTicketSubmitButton();
 }
 
 function renderVehiculesTicketDropdown() {
@@ -683,6 +695,7 @@ function selectAgentTicket(agentRef, label) {
   $('#ticket_agent_ref').val(agentRef);
   $('#ticket_agent_search').val(label);
   $('#ticket_agent_dropdown').hide();
+  syncTicketSubmitButton();
 }
 
 function renderAgentsTicketDropdown() {
@@ -822,6 +835,16 @@ $(document).ready(function() {
       allowClear: true,
       width: '100%'
     });
+
+    syncParcColumnVisibility();
+    if ($('#ticket_produit_id').val()) {
+      onProduitChangeUsine();
+      onProduitChange();
+      if (oldParcId) {
+        $('#ticket_parc_id').val(String(oldParcId));
+      }
+    }
+    syncTicketSubmitButton();
   });
 
   $('#ticket_particulier_groupe_id').on('change', function() {
@@ -855,6 +878,11 @@ $(document).ready(function() {
       return false;
     }
     $('#ticket_agent_search').removeClass('is-invalid');
+
+    if (!validerParcGerable()) {
+      e.preventDefault();
+      return false;
+    }
   });
 
   $('#ticket_vehicule_search').on('input focus', function() {
@@ -885,6 +913,13 @@ $(document).ready(function() {
 
     $('#ticket_matricule_vehicule').val(matricule);
     $('#ticket_vehicule_id').val(vehiculeId);
+
+    var $submitBtn = $(this).find('button[type="submit"]');
+    if ($submitBtn.prop('disabled')) {
+      e.preventDefault();
+      return false;
+    }
+    $submitBtn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Enregistrement…');
   });
 
   $('#modalAddTicket').on('hidden.bs.modal', function() {
@@ -894,6 +929,9 @@ $(document).ready(function() {
       $('#ticket_vehicule_id').val('');
     }
     $('#ticket_vehicule_dropdown').hide();
+    $('#modalAddTicket form button[type="submit"]')
+      .html('<i class="bx bx-check me-1"></i>Enregistrer');
+    syncTicketSubmitButton();
   });
 
   // Usines par produit
@@ -919,52 +957,115 @@ $(document).ready(function() {
     if ($usine.hasClass('select2-hidden-accessible')) {
       $usine.trigger('change.select2');
     }
+    syncTicketSubmitButton();
+  }
+
+  function formulaireTicketComplet() {
+    var dateOk = !!$('input[name="date_ticket"]').val();
+    var numeroOk = !!$('input[name="numero_ticket"]').val().trim();
+    var matricule = $('#ticket_vehicule_search').val().trim();
+    var vehiculeOk = !!(matricule && vehiculesTicketMap[matricule]);
+    var usineOk = !!$('#ticket_id_usine').val();
+    var groupeOk = !!$('#ticket_particulier_groupe_id').val();
+    var agentOk = !!$('#ticket_agent_ref').val();
+    var gerable = pontEstGerable();
+    var produitOk = !gerable || !!$('#ticket_produit_id').val();
+    var parcOk = true;
+
+    if (gerable) {
+      var $parc = $('#ticket_parc_id');
+      parcOk = !$parc.prop('disabled') && !!$parc.val();
+    }
+
+    return dateOk && numeroOk && vehiculeOk && usineOk && groupeOk && agentOk && produitOk && parcOk;
+  }
+
+  function syncTicketSubmitButton() {
+    var $btn = $('#btnSubmitTicket');
+    $btn.prop('disabled', !formulaireTicketComplet());
   }
 
   // Pont → Produit → Parc
   var parcsParPontProduit = @json($parcsParPontProduit ?? []);
 
+  function pontEstGerable() {
+    var idPont = $('#ticket_id_pont').val();
+    return !!(idPont && pontGerableParId[String(idPont)]);
+  }
+
+  function syncParcColumnVisibility() {
+    if (pontEstGerable()) {
+      $('#col_parc').show();
+    } else {
+      $('#col_parc').hide();
+    }
+    syncParcObligatoire();
+  }
+
+  function syncParcObligatoire() {
+    var gerable = pontEstGerable();
+    $('#ticket_parc_required').toggleClass('d-none', !gerable);
+    $('#ticket_produit_required').toggleClass('d-none', !gerable);
+    var $parc = $('#ticket_parc_id');
+    $parc.prop('required', gerable && !$parc.prop('disabled'));
+    syncTicketSubmitButton();
+  }
+
+  function validerParcGerable() {
+    if (!pontEstGerable()) {
+      $('#ticket_parc_id').removeClass('is-invalid');
+      return true;
+    }
+
+    var $parc = $('#ticket_parc_id');
+    if (!$parc.prop('disabled') && $parc.val()) {
+      $parc.removeClass('is-invalid');
+      return true;
+    }
+
+    $parc.addClass('is-invalid').focus();
+    var msg = 'Le parc est obligatoire pour un pont gérable.';
+    if ($parc.prop('disabled')) {
+      msg = 'Aucun parc disponible pour ce pont et ce produit. Enregistrement impossible.';
+    }
+    alert(msg);
+    return false;
+  }
+
   function onPontChange() {
-    var $sel = $('#ticket_id_pont');
-    var idPont = $sel.val();
-    var gerable = $sel.find('option:selected').data('gerable');
-    var $colParc = $('#col_parc');
     var $produit = $('#ticket_produit_id');
     var $parc = $('#ticket_parc_id');
 
-    // Réinitialiser produit et parc
     $produit.val('');
     $parc.empty().append('<option value="">-- Sélectionner d\'abord un produit --</option>').prop('disabled', true);
-
-    if (gerable == 1) {
-      // Pont gérable : afficher colonne Parc
-      $colParc.show();
-    } else {
-      // Pas de pont OU pont non gérable : masquer Parc
-      $colParc.hide();
-    }
+    onProduitChangeUsine();
+    syncParcColumnVisibility();
+    onProduitChange();
   }
 
   function onProduitChange() {
-    var $pont = $('#ticket_id_pont');
-    var idPont = $pont.val();
-    var gerable = $pont.find('option:selected').data('gerable');
+    var idPont = $('#ticket_id_pont').val();
+    var gerable = pontEstGerable();
     var produitId = $('#ticket_produit_id').val();
     var $parc = $('#ticket_parc_id');
 
     $parc.empty();
 
-    if (gerable != 1) {
+    if (!gerable) {
       $parc.append('<option value="">-</option>').prop('disabled', true);
+      syncParcObligatoire();
       return;
     }
+
+    syncParcColumnVisibility();
 
     if (!idPont || !produitId) {
       $parc.append('<option value="">-- Sélectionner d\'abord un produit --</option>').prop('disabled', true);
+      syncParcObligatoire();
       return;
     }
 
-    var parcs = (parcsParPontProduit[idPont] || {})[produitId] || [];
+    var parcs = (parcsParPontProduit[idPont] || {})[produitId] || (parcsParPontProduit[String(idPont)] || {})[produitId] || (parcsParPontProduit[String(idPont)] || {})[String(produitId)] || [];
     if (parcs.length === 0) {
       $parc.append('<option value="">Aucun parc disponible pour ce pont/produit</option>').prop('disabled', true);
     } else {
@@ -974,15 +1075,24 @@ $(document).ready(function() {
       });
       $parc.prop('disabled', false);
     }
+    syncParcObligatoire();
   }
 
-  $('#ticket_id_pont').on('change', onPontChange);
+  $('#ticket_parc_id').on('change', function() {
+    $(this).removeClass('is-invalid');
+    syncTicketSubmitButton();
+  });
+
+  $('#modalAddTicket').on('input change', 'input, select', syncTicketSubmitButton);
+  $('#ticket_id_usine, #ticket_particulier_groupe_id').on('change select2:select select2:clear', syncTicketSubmitButton);
+
+  $('#ticket_id_pont').on('change select2:select', onPontChange);
   $('#ticket_produit_id').on('change', function() {
     onProduitChange();
     onProduitChangeUsine();
   });
 
-  @if($errors->any())
+  @if($errors->any() && !$errors->has('numero_ticket'))
     var modalAddTicket = new bootstrap.Modal(document.getElementById('modalAddTicket'));
     modalAddTicket.show();
   @endif

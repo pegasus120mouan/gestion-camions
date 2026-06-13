@@ -194,7 +194,6 @@ class MontantAgentController extends Controller
         $montantDu = (int) round($this->reporting->calculerMontantDuAgent($id_agent, $filtres));
         $montantDuGlobal = (int) round($this->reporting->calculerMontantDuAgent($id_agent, ['id_agent' => $id_agent]));
         $paiements = PaiementAgent::where('id_agent', $id_agent)
-            ->whereNotNull('id_bordereau')
             ->with('bordereau')
             ->orderBy('date_paiement', 'desc')
             ->orderBy('id', 'desc')
@@ -288,7 +287,43 @@ class MontantAgentController extends Controller
 
     private function montantPayeAgent(int $idAgent): int
     {
-        return (int) round((float) BordereauAgent::where('id_agent', $idAgent)->sum('montant_paye'));
+        $viaBordereaux = (int) round((float) BordereauAgent::where('id_agent', $idAgent)->sum('montant_paye'));
+        $avances = (int) round((float) PaiementAgent::where('id_agent', $idAgent)->whereNull('id_bordereau')->sum('montant'));
+
+        return $viaBordereaux + $avances;
+    }
+
+    public function storeAvance(Request $request, int $id_agent)
+    {
+        if (!$this->findAgentById($id_agent)) {
+            return redirect()->route('gestionfinanciere.montant_agent')
+                ->withErrors(['error' => 'Agent non trouvé.']);
+        }
+
+        $validated = $request->validate([
+            'montant' => ['required', 'integer', 'min:1'],
+            'date_paiement' => ['required', 'date'],
+            'mode_paiement' => ['nullable', 'string', 'max:50'],
+            'reference' => ['nullable', 'string', 'max:100'],
+            'commentaire' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $paiement = PaiementAgent::create([
+            'id_agent' => $id_agent,
+            'id_bordereau' => null,
+            'montant' => $validated['montant'],
+            'date_paiement' => $validated['date_paiement'],
+            'mode_paiement' => $validated['mode_paiement'] ?? 'Espèces',
+            'reference' => $validated['reference'] ?? null,
+            'commentaire' => $validated['commentaire'] ?? 'Avance',
+        ]);
+
+        app(\App\Services\RecuPaiementService::class)->assignerNumero($paiement);
+
+        return redirect()
+            ->route('gestionfinanciere.agent.show', ['id_agent' => $id_agent])
+            ->with('success', 'Avance de ' . number_format($validated['montant'], 0, ',', ' ') . ' FCFA enregistrée.')
+            ->with('recu_paiement_id', $paiement->id);
     }
 
     public function storePaiement(Request $request, int $id_agent)

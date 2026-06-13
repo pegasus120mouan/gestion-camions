@@ -23,6 +23,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\Rule;
 
 class TicketController extends Controller
 {
@@ -348,7 +349,14 @@ class TicketController extends Controller
             $idPont = (int) $stock->id_pont;
             $produitId = (int) $stock->produit_id;
             $parc = $stock->parc ?? Parc::find($stock->parc_id);
-            if (!$parc) continue;
+            if (!$parc) {
+                continue;
+            }
+            $dejaPresent = collect($parcsParPontProduit[$idPont][$produitId] ?? [])
+                ->contains(fn ($p) => (int) ($p['id'] ?? 0) === (int) $parc->id);
+            if ($dejaPresent) {
+                continue;
+            }
             $parcsParPontProduit[$idPont][$produitId][] = [
                 'id' => $parc->id,
                 'nom' => $parc->nom,
@@ -378,8 +386,16 @@ class TicketController extends Controller
 
     public function store(Request $request)
     {
+        $request->merge([
+            'numero_ticket' => trim((string) $request->input('numero_ticket', '')),
+        ]);
+
+        $idPontSaisi = $request->filled('id_pont') ? (int) $request->input('id_pont') : null;
+        $pontGerable = $idPontSaisi
+            && PontEtat::where('id_pont', $idPontSaisi)->where('gerable', true)->exists();
+
         $validated = $request->validate([
-            'numero_ticket'        => ['required', 'string', 'max:255'],
+            'numero_ticket'        => ['required', 'string', 'max:255', Rule::unique('tickets', 'numero_ticket')],
             'date_ticket'          => ['required', 'date'],
             'matricule_vehicule'   => ['required', 'string', 'max:255'],
             'vehicule_id'          => ['nullable', 'integer', 'min:1'],
@@ -390,9 +406,30 @@ class TicketController extends Controller
             'prix_unitaire'        => ['nullable', 'numeric', 'min:0'],
             'statut_ticket'        => ['nullable', 'in:soldé,non soldé'],
             'id_pont'              => ['nullable', 'integer', 'min:1'],
-            'parc_id'              => ['nullable', 'integer', 'min:1'],
-            'produit_id'           => ['nullable', 'integer', 'min:1'],
+            'parc_id'              => [$pontGerable ? 'required' : 'nullable', 'integer', 'min:1'],
+            'produit_id'           => [$pontGerable ? 'required' : 'nullable', 'integer', 'min:1'],
+        ], [
+            'numero_ticket.unique' => 'Ce N° ticket existe déjà.',
+            'parc_id.required' => 'Le parc est obligatoire pour un pont gérable.',
+            'produit_id.required' => 'Le produit est obligatoire pour un pont gérable.',
         ]);
+
+        if ($pontGerable) {
+            $parcId = (int) $validated['parc_id'];
+            $produitId = (int) $validated['produit_id'];
+            $parcValide = Stock::where('id_pont', $idPontSaisi)
+                ->where('produit_id', $produitId)
+                ->where('parc_id', $parcId)
+                ->where('type', 'entree')
+                ->where('statut', 'ouvert')
+                ->exists();
+
+            if (!$parcValide) {
+                return back()->withInput()->withErrors([
+                    'parc_id' => 'Parc invalide ou indisponible pour ce pont et ce produit.',
+                ]);
+            }
+        }
 
         $agentsApi = $this->particulierAgentsApiService->fetchAll($request);
         $agent = $this->particulierAgentsApiService->resolveAgentForTicket(
@@ -701,13 +738,35 @@ class TicketController extends Controller
     {
         $ticket = Ticket::findOrFail($id);
 
+        $request->merge([
+            'numero_ticket' => trim((string) $request->input('numero_ticket', '')),
+        ]);
+
+        $validated = $request->validate([
+            'numero_ticket' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('tickets', 'numero_ticket')->ignore($ticket->id_ticket, 'id_ticket'),
+            ],
+            'date_ticket' => ['required', 'date'],
+            'matricule_vehicule' => ['nullable', 'string', 'max:255'],
+            'poids' => ['nullable', 'numeric', 'min:0'],
+            'poids_parc' => ['nullable', 'numeric', 'min:0'],
+            'prix_unitaire_transport' => ['nullable', 'numeric', 'min:0'],
+        ], [
+            'numero_ticket.unique' => 'Ce N° ticket existe déjà.',
+        ]);
+
         $ticket->update([
-            'numero_ticket' => $request->input('numero_ticket'),
-            'date_ticket' => $request->input('date_ticket'),
-            'matricule_vehicule' => $request->input('matricule_vehicule'),
-            'poids' => $request->input('poids'),
-            'poids_parc' => $request->input('poids_parc'),
-            'prix_unitaire_transport' => $request->input('prix_unitaire_transport'),
+            'numero_ticket' => $validated['numero_ticket'],
+            'date_ticket' => $validated['date_ticket'],
+            'matricule_vehicule' => $validated['matricule_vehicule'] ?? $ticket->matricule_vehicule,
+            'poids' => $validated['poids'] ?? $ticket->poids,
+        ]);
+
+        FicheSortie::where('id_ticket', $ticket->id_ticket)->update([
+            'numero_ticket' => $validated['numero_ticket'],
         ]);
 
         return redirect()->route('tickets.index')

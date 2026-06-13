@@ -42,13 +42,18 @@
         <label class="form-label">Date fin</label>
         <input type="date" name="date_fin" class="form-control" value="{{ $filtres['date_fin'] ?? '' }}" />
       </div>
-      <div class="col-md-12 d-flex gap-2 flex-wrap">
+      <div class="col-md-12 d-flex gap-2 flex-wrap align-items-center">
         <button type="submit" class="btn btn-primary"><i class="bx bx-search me-1"></i>Filtrer</button>
         <a href="{{ $actionRoute }}" class="btn btn-outline-secondary">Réinitialiser</a>
         @if($showSyntheseLink ?? true)
         <a href="{{ route('gestionfinanciere.synthese_produit', request()->only(['produit_id', 'usine', 'date_debut', 'date_fin'])) }}" class="btn btn-outline-info">
           <i class="bx bx-pie-chart-alt me-1"></i>Synthèse par produit
         </a>
+        @endif
+        @if($showAvanceButton ?? false)
+          <button type="button" class="btn btn-success ms-auto" data-bs-toggle="modal" data-bs-target="#modalAvanceAgent">
+            <i class="bx bx-wallet me-1"></i>Avance
+          </button>
         @endif
       </div>
     </form>
