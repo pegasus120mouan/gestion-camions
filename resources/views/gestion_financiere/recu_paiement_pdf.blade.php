@@ -196,22 +196,26 @@
             <tr class="box-hdr">
                 <td colspan="2">Détail du paiement</td>
             </tr>
+            @if(empty($estAvance))
             <tr>
                 <td class="lbl">Montant total</td>
                 <td class="val montant">{{ number_format($montantTotal, 0, ',', ' ') }} FCFA</td>
             </tr>
+            @endif
             <tr>
-                <td class="lbl">Montant payé</td>
+                <td class="lbl">{{ !empty($estAvance) ? 'Montant avancé' : 'Montant payé' }}</td>
                 <td class="val montant">{{ number_format($montantPaye, 0, ',', ' ') }} FCFA</td>
             </tr>
             <tr>
                 <td class="lbl">Source de paiement</td>
                 <td class="val">{{ $sourcePaiement }}</td>
             </tr>
+            @if(empty($estAvance))
             <tr>
                 <td class="lbl">Reste à payer sur ce Bordereau</td>
                 <td class="val {{ $resteAPayer > 0 ? 'montant' : 'montant-zero' }}">{{ number_format($resteAPayer, 0, ',', ' ') }} FCFA</td>
             </tr>
+            @endif
             <tr>
                 <td class="lbl">Solde compte</td>
                 <td class="val {{ $soldeCompte > 0 ? 'montant' : ($soldeCompte < 0 ? 'montant-credit' : 'montant-zero') }}">{{ number_format($soldeCompte, 0, ',', ' ') }} FCFA</td>

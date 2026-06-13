@@ -139,6 +139,7 @@ class RecuPaiementService
             'nomCaissier' => $nomCaissier ?: 'Caissier',
             'nomRecepteur' => $nomAgent,
             'logoPath' => $logoPath,
+            'estAvance' => $estAvance,
         ];
     }
 }
