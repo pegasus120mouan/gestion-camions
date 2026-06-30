@@ -106,11 +106,11 @@ return [
 
         'pegasus' => [
             'driver' => 'mysql',
-            'host' => env('EXTERNAL_CAMIONS_DB_HOST', '127.0.0.1'),
-            'port' => env('EXTERNAL_CAMIONS_DB_PORT', '3306'),
-            'database' => env('EXTERNAL_CAMIONS_DB_DATABASE', ''),
-            'username' => env('EXTERNAL_CAMIONS_DB_USERNAME', 'root'),
-            'password' => env('EXTERNAL_CAMIONS_DB_PASSWORD', ''),
+            'host' => env('EXTERNAL_CAMIONS_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => env('EXTERNAL_CAMIONS_DB_PORT', env('DB_PORT', '3306')),
+            'database' => env('EXTERNAL_CAMIONS_DB_DATABASE', env('DB_DATABASE', '')),
+            'username' => env('EXTERNAL_CAMIONS_DB_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('EXTERNAL_CAMIONS_DB_PASSWORD', env('DB_PASSWORD', '')),
             'charset' => env('EXTERNAL_CAMIONS_DB_CHARSET', 'utf8mb4'),
             'collation' => env('EXTERNAL_CAMIONS_DB_COLLATION', 'utf8mb4_unicode_ci'),
             'prefix' => '',

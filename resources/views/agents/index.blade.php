@@ -4,6 +4,11 @@
   <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h4 class="mb-0">Liste des agents</h4>
+      @if(!empty($chefToken))
+        <span class="badge bg-label-primary">
+          Chef : {{ $chefActif['nom_complet'] ?? $chefToken }}
+        </span>
+      @endif
     </div>
 
     <!-- Formulaire de recherche -->

@@ -39,6 +39,7 @@ use App\Http\Controllers\ApprovisionnementController;
 use App\Http\Controllers\SoldeChefEquipeController;
 use App\Http\Controllers\ParticulierController;
 use App\Http\Controllers\ParticulierPrixController;
+use App\Services\ChefEquipeContext;
 use App\Services\SoldeChefEquipeService;
 use Illuminate\Support\Facades\Route;
 
@@ -153,11 +154,8 @@ Route::middleware('auth')->group(function () {
 
         $soldeChef = null;
         $soldeChefError = null;
-        $chefToken = trim((string) (
-            session('chef_equipe_token')
-            ?? $authUser?->chef_equipe_token
-            ?? config('services.external_auth.default_chef_equipe_token', '')
-        ));
+        $chefContext = app(ChefEquipeContext::class);
+        $chefToken = $chefContext->resolveToken(request());
         if ($chefToken !== '') {
             $soldeChef = app(SoldeChefEquipeService::class)->getSoldeByToken($chefToken);
             if (!$soldeChef) {
@@ -186,6 +184,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/solde-chef-equipe', [SoldeChefEquipeController::class, 'index'])->name('solde_chef_equipe.index');
     Route::post('/solde-chef-equipe/token', [SoldeChefEquipeController::class, 'updateToken'])->name('solde_chef_equipe.token');
     Route::get('/api/solde-chef-equipe', [SoldeChefEquipeController::class, 'show'])->name('api.solde_chef_equipe');
+    Route::get('/api/mes-agents', [AgentController::class, 'apiIndex'])->name('api.mes_agents');
 
     Route::get('/utilisateurs/admins', [UtilisateurController::class, 'admins'])->name('utilisateurs.admins');
     Route::get('/utilisateurs/agents', [UtilisateurController::class, 'agents'])->name('utilisateurs.agents');

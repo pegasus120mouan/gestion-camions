@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\Pesee;
+use App\Services\ChefEquipeContext;
 use App\Services\SoldeChefEquipeService;
 use Carbon\Carbon;
 use Illuminate\Pagination\Paginator;
@@ -37,11 +38,8 @@ class AppServiceProvider extends ServiceProvider
             $soldeChefToken = '';
 
             if ($showSoldeChefBanner) {
-                $soldeChefToken = trim((string) (
-                    session('chef_equipe_token')
-                    ?? auth()->user()?->chef_equipe_token
-                    ?? config('services.external_auth.default_chef_equipe_token', '')
-                ));
+                $chefContext = app(ChefEquipeContext::class);
+                $soldeChefToken = $chefContext->resolveToken(request());
 
                 if ($soldeChefToken !== '') {
                     $soldeChef = app(SoldeChefEquipeService::class)->getSoldeByToken($soldeChefToken);

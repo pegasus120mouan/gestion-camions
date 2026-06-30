@@ -53,6 +53,22 @@
 
           <div class="row">
             <div class="col-md-6 mb-3">
+              <label class="form-label">Chef d'équipe</label>
+              <select name="id_chef" class="form-select">
+                <option value="">— Aucun (tous les agents) —</option>
+                @foreach($chefsEquipe ?? [] as $chef)
+                  <option value="{{ $chef['id_chef'] }}" @selected((int) old('id_chef') === (int) $chef['id_chef'])>
+                    {{ $chef['nom_complet'] }}
+                    @if(!empty($chef['token']))
+                      ({{ $chef['token'] }})
+                    @endif
+                  </option>
+                @endforeach
+              </select>
+              <small class="text-muted">Le token est chargé automatiquement depuis ce chef à la connexion.</small>
+              @error('id_chef')<div class="text-danger mt-1">{{ $message }}</div>@enderror
+            </div>
+            <div class="col-md-6 mb-3">
               <label class="form-label">Rôle</label>
               <select name="role" class="form-select" required>
                 <option value="admin" {{ old('role') === 'admin' ? 'selected' : '' }}>admin</option>

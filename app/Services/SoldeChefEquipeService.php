@@ -7,6 +7,10 @@ use Illuminate\Support\Facades\Http;
 
 class SoldeChefEquipeService
 {
+    public function __construct(
+        private CamionsDatabaseResolver $databaseResolver,
+    ) {}
+
     public function getSoldeByToken(string $token): ?array
     {
         $token = trim($token);
@@ -14,12 +18,32 @@ class SoldeChefEquipeService
             return null;
         }
 
-        $viaApi = $this->fetchFromExternalApi($token);
-        if ($viaApi !== null) {
-            return $viaApi;
+        if ($this->databaseResolver->usesApi()) {
+            return $this->fetchFromExternalApi($token);
         }
 
-        return $this->fetchFromDatabase($token);
+        if ($this->databaseResolver->connection() !== null) {
+            $fromDb = $this->fetchFromDatabase($token);
+            if ($fromDb !== null) {
+                return $fromDb;
+            }
+        }
+
+        if ($this->databaseResolver->usesDatabaseOnly()) {
+            return null;
+        }
+
+        return $this->fetchFromExternalApi($token);
+    }
+
+    public function getSoldeForContext(ChefEquipeContext $context, ?\Illuminate\Http\Request $request = null): ?array
+    {
+        $token = $context->resolveToken($request);
+        if ($token === '') {
+            return null;
+        }
+
+        return $this->getSoldeByToken($token);
     }
 
     private function fetchFromExternalApi(string $token): ?array
@@ -52,8 +76,8 @@ class SoldeChefEquipeService
 
     private function fetchFromDatabase(string $token): ?array
     {
-        $connection = (string) config('database.default_external_camions', '');
-        if ($connection === '' || !config("database.connections.{$connection}")) {
+        $connection = $this->databaseResolver->connection();
+        if ($connection === null) {
             return null;
         }
 

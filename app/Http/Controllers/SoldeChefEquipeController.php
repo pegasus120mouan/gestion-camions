@@ -2,14 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\ChefEquipeContext;
 use App\Services\SoldeChefEquipeService;
 use Illuminate\Http\Request;
 
 class SoldeChefEquipeController extends Controller
 {
-    public function index(Request $request, SoldeChefEquipeService $service)
+    public function index(Request $request, SoldeChefEquipeService $service, ChefEquipeContext $chefContext)
     {
-        $token = $this->resolveToken($request);
+        $token = $chefContext->resolveToken($request);
+        $chef = $chefContext->resolveChef($request);
         $solde = null;
         $apiError = null;
 
@@ -22,12 +24,13 @@ class SoldeChefEquipeController extends Controller
 
         return view('solde_chef_equipe.index', [
             'token' => $token,
+            'chef' => $chef,
             'solde' => $solde,
             'apiError' => $apiError,
         ]);
     }
 
-    public function updateToken(Request $request, SoldeChefEquipeService $service)
+    public function updateToken(Request $request, SoldeChefEquipeService $service, ChefEquipeContext $chefContext)
     {
         $validated = $request->validate([
             'token' => ['required', 'string', 'max:50'],
@@ -36,9 +39,17 @@ class SoldeChefEquipeController extends Controller
         $token = trim($validated['token']);
         $request->session()->put('chef_equipe_token', $token);
 
+        $chef = $chefContext->findChefByToken($token);
+        if ($chef) {
+            $request->session()->put('chef_equipe_id', $chef['id_chef']);
+        }
+
         $user = $request->user();
         if ($user) {
             $user->chef_equipe_token = $token;
+            if ($chef) {
+                $user->id_chef = $chef['id_chef'];
+            }
             $user->save();
         }
 
@@ -55,9 +66,9 @@ class SoldeChefEquipeController extends Controller
             ->with('success', 'Token enregistré. Solde chargé avec succès.');
     }
 
-    public function show(Request $request, SoldeChefEquipeService $service)
+    public function show(Request $request, SoldeChefEquipeService $service, ChefEquipeContext $chefContext)
     {
-        $token = $this->resolveToken($request);
+        $token = $chefContext->resolveToken($request);
 
         if ($token === '') {
             return response()->json([
@@ -79,15 +90,5 @@ class SoldeChefEquipeController extends Controller
             'success' => true,
             'solde' => $solde,
         ]);
-    }
-
-    private function resolveToken(Request $request): string
-    {
-        return trim((string) (
-            $request->query('token')
-            ?? $request->session()->get('chef_equipe_token')
-            ?? $request->user()?->chef_equipe_token
-            ?? config('services.external_auth.default_chef_equipe_token', '')
-        ));
     }
 }

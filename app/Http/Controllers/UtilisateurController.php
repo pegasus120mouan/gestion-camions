@@ -3,13 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\ChefEquipeContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
 class UtilisateurController extends Controller
 {
-    public function __construct()
-    {
+    public function __construct(
+        private ChefEquipeContext $chefContext,
+    ) {
         $this->middleware(function ($request, $next) {
             abort_unless(auth()->check(), 401);
             abort_unless(auth()->user()->role === 'admin', 403);
@@ -64,7 +66,9 @@ class UtilisateurController extends Controller
 
     public function create()
     {
-        return view('utilisateurs.create');
+        return view('utilisateurs.create', [
+            'chefsEquipe' => $this->chefContext->listChefsEquipe(),
+        ]);
     }
 
     public function store(Request $request)
@@ -75,6 +79,7 @@ class UtilisateurController extends Controller
             'login' => ['required', 'string', 'max:255', 'unique:users,login'],
             'contact' => ['nullable', 'string', 'max:255', 'unique:users,contact'],
             'matricule' => ['nullable', 'string', 'max:255', 'unique:users,matricule'],
+            'id_chef' => ['nullable', 'integer', 'min:1'],
             'role' => ['required', 'in:admin,agent,driver'],
             'password' => ['required', 'string', 'min:6', 'confirmed'],
             'avatar' => ['nullable', 'image', 'max:2048'],
@@ -88,6 +93,7 @@ class UtilisateurController extends Controller
         $user->login = $validated['login'];
         $user->contact = $validated['contact'] ?? null;
         $user->matricule = $validated['matricule'] ?? null;
+        $user->id_chef = $this->validateIdChef($validated['id_chef'] ?? null);
         $user->role = $validated['role'];
         $user->password = Hash::make($validated['password']);
         $user->code_pin = Hash::make($pin);
@@ -107,6 +113,7 @@ class UtilisateurController extends Controller
     {
         return view('utilisateurs.edit', [
             'utilisateur' => $utilisateur,
+            'chefsEquipe' => $this->chefContext->listChefsEquipe(),
         ]);
     }
 
@@ -118,6 +125,7 @@ class UtilisateurController extends Controller
             'login' => ['required', 'string', 'max:255', 'unique:users,login,' . $utilisateur->id],
             'contact' => ['nullable', 'string', 'max:255', 'unique:users,contact,' . $utilisateur->id],
             'matricule' => ['nullable', 'string', 'max:255', 'unique:users,matricule,' . $utilisateur->id],
+            'id_chef' => ['nullable', 'integer', 'min:1'],
             'role' => ['required', 'in:admin,agent,driver'],
             'password' => ['nullable', 'string', 'min:6', 'confirmed'],
             'avatar' => ['nullable', 'image', 'max:2048'],
@@ -128,6 +136,7 @@ class UtilisateurController extends Controller
         $utilisateur->login = $validated['login'];
         $utilisateur->contact = $validated['contact'] ?? null;
         $utilisateur->matricule = $validated['matricule'] ?? null;
+        $utilisateur->id_chef = $this->validateIdChef($validated['id_chef'] ?? null);
         $utilisateur->role = $validated['role'];
 
         if ($request->hasFile('avatar')) {
@@ -139,6 +148,10 @@ class UtilisateurController extends Controller
         }
 
         $utilisateur->save();
+
+        if ($utilisateur->id === auth()->id()) {
+            $this->chefContext->syncSessionForUser($utilisateur->fresh(), $request);
+        }
 
         return redirect()->back();
     }
@@ -158,5 +171,15 @@ class UtilisateurController extends Controller
         $utilisateur->delete();
 
         return redirect()->route('utilisateurs.index')->with('success', 'Utilisateur supprimé avec succès.');
+    }
+
+    private function validateIdChef(mixed $idChef): ?int
+    {
+        $idChef = (int) $idChef;
+        if ($idChef <= 0) {
+            return null;
+        }
+
+        return $this->chefContext->findChefById($idChef) ? $idChef : null;
     }
 }

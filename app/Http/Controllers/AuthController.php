@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
+use App\Services\ChefEquipeContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use App\Models\User;
 
 class AuthController extends Controller
 {
@@ -14,7 +15,7 @@ class AuthController extends Controller
         return view('login');
     }
 
-    public function login(Request $request)
+    public function login(Request $request, ChefEquipeContext $chefContext)
     {
         $credentials = $request->validate([
             'login' => ['required', 'string'],
@@ -44,6 +45,7 @@ class AuthController extends Controller
 
         Auth::login($user, $remember);
         $request->session()->regenerate();
+        $chefContext->syncSessionForUser($user, $request);
 
         return redirect()->intended('/dashboard');
     }
