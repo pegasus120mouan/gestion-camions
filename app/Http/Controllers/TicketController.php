@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 class TicketController extends Controller
 {
@@ -127,9 +128,28 @@ class TicketController extends Controller
         }
 
         $ticketIds = array_column($ticketsApi, 'id_ticket');
-        $localTickets = $ticketIds !== []
-            ? Ticket::with('particulierAgent.groupe')->whereIn('id_ticket', $ticketIds)->get()->keyBy('id_ticket')
+        $numerosTickets = array_values(array_filter(array_map(
+            static fn (array $t) => trim((string) ($t['numero_ticket'] ?? '')),
+            $ticketsApi
+        )));
+        $localTickets = ($ticketIds !== [] || $numerosTickets !== [])
+            ? Ticket::with('particulierAgent.groupe')
+                ->where(function ($query) use ($ticketIds, $numerosTickets) {
+                    if ($ticketIds !== []) {
+                        $query->whereIn('id_ticket', $ticketIds);
+                    }
+                    if ($numerosTickets !== []) {
+                        if ($ticketIds !== []) {
+                            $query->orWhereIn('numero_ticket', $numerosTickets);
+                        } else {
+                            $query->whereIn('numero_ticket', $numerosTickets);
+                        }
+                    }
+                })
+                ->get()
             : collect();
+        $localTicketsById = $localTickets->keyBy('id_ticket');
+        $localTicketsByNumero = $localTickets->keyBy('numero_ticket');
 
         $particulierAgentIds = $localTickets->pluck('particulier_agent_id')->filter()->unique()->values();
         $prixParticuliers = $particulierAgentIds->isNotEmpty()
@@ -139,7 +159,11 @@ class TicketController extends Controller
         $ticketsArray = [];
         foreach ($ticketsApi as $ticket) {
             $idTicket = (int) ($ticket['id_ticket'] ?? 0);
-            $local = $localTickets->get($idTicket);
+            $numeroTicket = trim((string) ($ticket['numero_ticket'] ?? ''));
+            $local = $localTicketsById->get($idTicket);
+            if (!$local && $numeroTicket !== '') {
+                $local = $localTicketsByNumero->get($numeroTicket);
+            }
 
             $ticketsArray[] = [
                 'id_ticket' => $idTicket,
@@ -198,7 +222,7 @@ class TicketController extends Controller
             }
         }
 
-        $ticketsById = $localTickets;
+        $ticketsById = $localTicketsById;
 
         // Ajouter les infos de fiche de sortie et calculer le prix unitaire
         foreach ($ticketsArray as &$ticket) {
@@ -426,6 +450,26 @@ class TicketController extends Controller
             ->orderByDesc('date_chargement')
             ->orderByDesc('id')
             ->get();
+    }
+
+    private function findTicketLocal(int $idTicket, string $numeroTicket = ''): ?Ticket
+    {
+        $ticket = Ticket::find($idTicket);
+        if ($ticket) {
+            return $ticket;
+        }
+
+        if ($numeroTicket !== '') {
+            return Ticket::where('numero_ticket', $numeroTicket)->first();
+        }
+
+        return null;
+    }
+
+    private function ticketEstDejaValide(?Ticket $ticket): bool
+    {
+        return $ticket !== null
+            && in_array($ticket->conformite, ['valide', 'conforme'], true);
     }
 
     /**
@@ -710,10 +754,23 @@ class TicketController extends Controller
             'fiche_id.required' => 'Sélectionnez une fiche de sortie pour ce camion PGF.',
         ]);
 
-        $existing = Ticket::find($id);
-        if ($existing && in_array($existing->conformite, ['valide', 'conforme'], true)) {
+        $numeroTicket = trim((string) ($apiTicket['numero_ticket'] ?? ''));
+
+        $existing = $this->findTicketLocal($id, $numeroTicket);
+        if ($this->ticketEstDejaValide($existing)) {
             return redirect()->route('tickets.index')
                 ->with('error', 'Ce ticket est déjà validé.');
+        }
+
+        if (!$existing && $numeroTicket !== '') {
+            $dejaValideParNumero = Ticket::query()
+                ->where('numero_ticket', $numeroTicket)
+                ->whereIn('conformite', ['valide', 'conforme'])
+                ->exists();
+            if ($dejaValideParNumero) {
+                return redirect()->route('tickets.index')
+                    ->with('error', 'Ce ticket est déjà validé.');
+            }
         }
 
         $fiche = null;
@@ -730,6 +787,9 @@ class TicketController extends Controller
         }
 
         $ticket = $existing ?? new Ticket(['id_ticket' => $id]);
+        if ($existing && (int) $existing->id_ticket !== $id && !Ticket::where('id_ticket', $id)->exists()) {
+            $ticket->id_ticket = $id;
+        }
 
         $dateTicket = $apiTicket['date_ticket'] ?? now()->format('Y-m-d');
         $poidsTicket = (float) ($apiTicket['poids'] ?? 0);
@@ -782,6 +842,9 @@ class TicketController extends Controller
                     );
                 }
             });
+        } catch (UniqueConstraintViolationException) {
+            return redirect()->route('tickets.index')
+                ->with('error', 'Ce ticket est déjà validé ou existe déjà dans le système.');
         } catch (\InvalidArgumentException $e) {
             return redirect()->route('tickets.index')
                 ->with('error', $e->getMessage());

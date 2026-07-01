@@ -398,6 +398,7 @@
 <!-- Modals validation ticket + fiche de sortie -->
 @foreach($tickets as $index => $t)
   @php
+    $ticketValideModal = in_array($t['conformite'] ?? '', ['valide', 'conforme'], true);
     $estCamionPgf = (bool) ($t['est_camion_pgf'] ?? false);
     $matriculeTicket = trim((string) ($t['matricule_vehicule'] ?? ''));
     $idAgentTicket = (int) ($t['id_agent'] ?? 0);
@@ -415,6 +416,7 @@
         }
     }
   @endphp
+  @if(!$ticketValideModal)
   <div class="modal fade" id="modalValiderTicket{{ $index }}" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog {{ $estCamionPgf ? 'modal-xl modal-dialog-scrollable' : '' }}">
       <div class="modal-content">
@@ -504,6 +506,7 @@
       </div>
     </div>
   </div>
+  @endif
 @endforeach
 
 <!-- Modal Ajouter Ticket -->
