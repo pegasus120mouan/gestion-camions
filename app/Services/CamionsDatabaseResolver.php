@@ -28,19 +28,32 @@ class CamionsDatabaseResolver
             return $this->resolvedConnection = null;
         }
 
+        return $this->resolvedConnection = $this->resolveCamionsConnection();
+    }
+
+    /**
+     * Connexion pour l'authentification chef_equipe (indépendante de CAMIONS_DATA_SOURCE).
+     */
+    public function connectionForAuth(): ?string
+    {
+        return $this->resolveCamionsConnection();
+    }
+
+    private function resolveCamionsConnection(): ?string
+    {
         $explicit = trim((string) config('database.default_external_camions', ''));
         if ($explicit !== '' && config("database.connections.{$explicit}")) {
             if ($this->hasCamionsTables($explicit)) {
-                return $this->resolvedConnection = $explicit;
+                return $explicit;
             }
         }
 
         $default = (string) config('database.default', '');
         if ($default !== '' && $this->hasCamionsTables($default)) {
-            return $this->resolvedConnection = $default;
+            return $default;
         }
 
-        return $this->resolvedConnection = null;
+        return null;
     }
 
     public function isAvailable(): bool

@@ -4,12 +4,12 @@ namespace App\Services;
 
 use App\Models\BordereauAgent;
 use App\Models\PaiementAgent;
-use Illuminate\Support\Facades\Http;
 
 class RecuPaiementService
 {
     public function __construct(
-        private MontantAgentReportingService $reporting
+        private MontantAgentReportingService $reporting,
+        private MesAgentsService $mesAgentsService,
     ) {}
     public function genererNumero(PaiementAgent $paiement): string
     {
@@ -34,37 +34,7 @@ class RecuPaiementService
      */
     public function agentApiParId(int $idAgent): ?array
     {
-        $mesAgentsUrl = (string) config('services.external_auth.mes_agents_url');
-        $timeout = (int) config('services.external_auth.timeout', 10);
-        $page = 1;
-
-        try {
-            while ($page <= 50) {
-                $response = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->get($mesAgentsUrl, ['page' => $page]);
-
-                if (!$response->successful()) {
-                    break;
-                }
-
-                foreach ($response->json('agents') ?? [] as $agent) {
-                    if ((int) ($agent['id_agent'] ?? 0) === $idAgent) {
-                        return $agent;
-                    }
-                }
-
-                $pagination = $response->json('pagination') ?? [];
-                if ($page >= (int) ($pagination['last_page'] ?? 1)) {
-                    break;
-                }
-                $page++;
-            }
-        } catch (\Throwable $e) {
-        }
-
-        return null;
+        return $this->mesAgentsService->findAgentById($idAgent);
     }
 
     /**

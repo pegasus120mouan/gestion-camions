@@ -4,11 +4,17 @@ namespace App\Http\Controllers;
 
 use App\Models\Groupe;
 use App\Models\GroupeAgent;
+use App\Services\ChefEquipeContext;
+use App\Services\MesAgentsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
 class GroupeController extends Controller
 {
+    public function __construct(
+        private MesAgentsService $mesAgentsService,
+    ) {}
+
     public function index()
     {
         $groupes = Groupe::withCount(['agents', 'agentsOrdinaires', 'agentsPisteurs'])
@@ -36,42 +42,8 @@ class GroupeController extends Controller
     {
         $groupe = Groupe::with('agents')->findOrFail($id);
 
-        // Récupérer TOUS les agents depuis l'API (toutes les pages)
-        $mesAgentsUrl = (string) config('services.external_auth.mes_agents_url');
-        $timeout = (int) config('services.external_auth.timeout', 10);
-        $phpsessid = (string) $request->session()->get('external_auth.phpsessid', '');
-        $agentsApi = [];
-
-        try {
-            $page = 1;
-            $hasMore = true;
-            while ($hasMore) {
-                $response = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                    ->get($mesAgentsUrl, ['page' => $page]);
-                
-                if ($response->successful()) {
-                    $pageAgents = $response->json('agents') ?? [];
-                    if (empty($pageAgents)) {
-                        $hasMore = false;
-                    } else {
-                        $agentsApi = array_merge($agentsApi, $pageAgents);
-                        $pagination = $response->json('pagination');
-                        $currentPage = $pagination['current_page'] ?? $page;
-                        $lastPage = $pagination['last_page'] ?? 1;
-                        if ($currentPage >= $lastPage) {
-                            $hasMore = false;
-                        } else {
-                            $page++;
-                        }
-                    }
-                } else {
-                    $hasMore = false;
-                }
-            }
-        } catch (\Throwable $e) {}
+        // Récupérer les agents du chef connecté depuis l'API
+        $agentsApi = $this->mesAgentsService->fetchAllAgents([], $request);
 
         // Indexer les agents par id
         $agentsById = [];
@@ -172,7 +144,7 @@ class GroupeController extends Controller
             ->with('success', 'Groupe supprimé avec succès.');
     }
 
-    public function tickets(Request $request, int $id)
+    public function tickets(Request $request, int $id, ChefEquipeContext $chefContext)
     {
         $groupe = Groupe::with('agents')->findOrFail($id);
 
@@ -194,7 +166,7 @@ class GroupeController extends Controller
             $response = Http::acceptJson()
                 ->timeout($timeout)
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                ->get($mesTicketsUrl);
+                ->get($mesTicketsUrl, $chefContext->apiQueryParams($request));
             if ($response->successful()) {
                 $ticketsApi = $response->json('tickets') ?? [];
             }

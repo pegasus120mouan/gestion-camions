@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\StockPgf;
 use App\Models\EntreeStockPgf;
 use App\Models\BordereauStock;
+use App\Services\ChefEquipeContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -191,7 +192,7 @@ class StockPgfController extends Controller
         ]);
     }
 
-    public function bordereaux(Request $request)
+    public function bordereaux(Request $request, ChefEquipeContext $chefContext)
     {
         $bordereaux = BordereauStock::orderBy('created_at', 'desc')->get();
 
@@ -217,7 +218,7 @@ class StockPgfController extends Controller
                 ->withoutVerifying()
                 ->timeout($timeout)
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                ->get($mesTicketsUrl);
+                ->get($mesTicketsUrl, $chefContext->apiQueryParams($request));
             if ($ticketsResponse->successful()) {
                 $ticketsApi = $ticketsResponse->json('tickets') ?? [];
             }
@@ -359,7 +360,7 @@ class StockPgfController extends Controller
             ->with('success', 'Bordereau supprimé avec succès.');
     }
 
-    public function associerTickets(Request $request, int $id)
+    public function associerTickets(Request $request, int $id, ChefEquipeContext $chefContext)
     {
         $bordereau = BordereauStock::findOrFail($id);
 
@@ -383,7 +384,7 @@ class StockPgfController extends Controller
                 ->withoutVerifying()
                 ->timeout($timeout)
                 ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                ->get($mesTicketsUrl);
+                ->get($mesTicketsUrl, $chefContext->apiQueryParams($request));
             if ($response->successful()) {
                 $ticketsApi = $response->json('tickets') ?? [];
             }

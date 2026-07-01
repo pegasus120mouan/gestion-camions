@@ -34,6 +34,14 @@ class ChefEquipeContext
             }
         }
 
+        $chefSession = app(ChefEquipeSession::class);
+        if ($chefSession->check($request)) {
+            $chef = $chefSession->chef($request);
+            if ($chef && ($chef['token'] ?? '') !== '') {
+                return (string) $chef['token'];
+            }
+        }
+
         $user = $request?->user() ?? Auth::user();
         if ($user instanceof User) {
             $idChef = (int) ($user->id_chef ?? 0);
@@ -55,6 +63,14 @@ class ChefEquipeContext
 
     public function resolveIdChef(?Request $request = null): ?int
     {
+        $chefSession = app(ChefEquipeSession::class);
+        if ($chefSession->check($request)) {
+            $chef = $chefSession->chef($request);
+            if ($chef) {
+                return (int) $chef['id_chef'];
+            }
+        }
+
         $token = $this->resolveToken($request);
         if ($token !== '') {
             $chef = $this->databaseResolver->findChefByToken($token);
@@ -73,6 +89,11 @@ class ChefEquipeContext
 
     public function resolveChef(?Request $request = null): ?array
     {
+        $chefSession = app(ChefEquipeSession::class);
+        if ($chefSession->check($request)) {
+            return $chefSession->chef($request);
+        }
+
         $token = $this->resolveToken($request);
         if ($token !== '') {
             return $this->databaseResolver->findChefByToken($token);
@@ -87,28 +108,21 @@ class ChefEquipeContext
     }
 
     /**
-     * Charge le token en session après connexion (dynamique depuis id_chef).
+     * @return array{token?: string, id_chef?: int}
      */
-    public function syncSessionForUser(User $user, Request $request): void
+    public function apiQueryParams(?Request $request = null): array
     {
-        $token = trim((string) ($user->chef_equipe_token ?? ''));
-
-        if ($token === '' && (int) ($user->id_chef ?? 0) > 0) {
-            $chef = $this->databaseResolver->findChefById((int) $user->id_chef);
-            $token = (string) ($chef['token'] ?? '');
-        }
-
+        $token = $this->resolveToken($request);
         if ($token !== '') {
-            $request->session()->put('chef_equipe_token', $token);
-        } else {
-            $request->session()->forget('chef_equipe_token');
+            return ['token' => $token];
         }
 
-        if ((int) ($user->id_chef ?? 0) > 0) {
-            $request->session()->put('chef_equipe_id', (int) $user->id_chef);
-        } else {
-            $request->session()->forget('chef_equipe_id');
+        $idChef = $this->resolveIdChef($request);
+        if ($idChef) {
+            return ['id_chef' => $idChef];
         }
+
+        return [];
     }
 
     public function findChefById(int $idChef): ?array

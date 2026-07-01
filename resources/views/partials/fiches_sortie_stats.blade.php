@@ -1,7 +1,16 @@
 @php
-    $totalFiches = \App\Models\FicheSortie::count();
-    $fichesEnAttente = \App\Models\FicheSortie::whereNull('date_dechargement')->count();
-    $fichesDechargees = \App\Models\FicheSortie::whereNotNull('date_dechargement')->count();
+    $chefAgentIds = app(\App\Services\MesAgentsService::class)->chefAgentIds();
+    $ficheQuery = \App\Models\FicheSortie::query();
+
+    if ($chefAgentIds !== []) {
+        $ficheQuery->whereIn('id_agent', $chefAgentIds);
+    } else {
+        $ficheQuery->whereRaw('1 = 0');
+    }
+
+    $totalFiches = (clone $ficheQuery)->count();
+    $fichesEnAttente = (clone $ficheQuery)->whereNull('date_dechargement')->count();
+    $fichesDechargees = (clone $ficheQuery)->whereNotNull('date_dechargement')->count();
 @endphp
 
 <div class="row mb-4">

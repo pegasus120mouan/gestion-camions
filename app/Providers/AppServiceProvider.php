@@ -33,6 +33,9 @@ class AppServiceProvider extends ServiceProvider
                 ->whereDate('pese_le', Carbon::today())
                 ->count();
 
+            $chefSession = app(\App\Services\ChefEquipeSession::class);
+            $authChef = $chefSession->chef();
+
             $showSoldeChefBanner = request()->routeIs('gestionfinanciere.*', 'solde_chef_equipe.*');
             $soldeChef = null;
             $soldeChefToken = '';
@@ -51,6 +54,7 @@ class AppServiceProvider extends ServiceProvider
                 'showSoldeChefBanner' => $showSoldeChefBanner,
                 'soldeChef' => $soldeChef,
                 'soldeChefToken' => $soldeChefToken,
+                'authChef' => $authChef,
             ]);
         });
     }

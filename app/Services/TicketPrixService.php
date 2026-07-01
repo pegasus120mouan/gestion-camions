@@ -48,10 +48,13 @@ class TicketPrixService
         ?int $produitId = null,
         ?string $dateReference = null,
         ?Collection $particulierPrixRecords = null,
-        ?int $idAgentApiContext = null
+        ?int $idAgentApiContext = null,
+        ?string $nomUsine = null,
     ): ?float {
         $idUsine = (int) $ticket->id_usine;
-        if ($idUsine <= 0) {
+        $nomUsine = $nomUsine !== null && trim($nomUsine) !== '' ? trim($nomUsine) : null;
+
+        if ($idUsine <= 0 && $nomUsine === null) {
             return null;
         }
 
@@ -67,10 +70,11 @@ class TicketPrixService
             if ($particulier && $particulier->id_agent) {
                 return $this->prixUnitairePrixAgent(
                     (int) $particulier->id_agent,
-                    $idUsine,
+                    $idUsine > 0 ? $idUsine : null,
                     $produitId,
                     $date,
-                    $typeVehicule
+                    $typeVehicule,
+                    $nomUsine
                 );
             }
 
@@ -91,10 +95,11 @@ class TicketPrixService
         if ($idAgentApi > 0) {
             return $this->prixUnitairePrixAgent(
                 $idAgentApi,
-                $idUsine,
+                $idUsine > 0 ? $idUsine : null,
                 $produitId,
                 $date,
-                $typeVehicule
+                $typeVehicule,
+                $nomUsine
             );
         }
 
@@ -106,14 +111,16 @@ class TicketPrixService
         ?int $produitId = null,
         ?string $dateReference = null,
         ?Collection $particulierPrixRecords = null,
-        ?int $idAgentApiContext = null
+        ?int $idAgentApiContext = null,
+        ?string $nomUsine = null,
     ): ?float {
         $pu = $this->prixUnitairePourTicket(
             $ticket,
             $produitId,
             $dateReference,
             $particulierPrixRecords,
-            $idAgentApiContext
+            $idAgentApiContext,
+            $nomUsine
         );
         $poids = (float) ($ticket->poids ?? 0);
 
@@ -184,23 +191,63 @@ class TicketPrixService
 
     public function prixUnitairePrixAgent(
         int $idAgentApi,
-        int $idUsine,
+        ?int $idUsine,
         ?int $produitId,
         ?string $dateTicket,
-        string $type = 'transporteur'
+        string $type = 'transporteur',
+        ?string $nomUsine = null,
     ): ?float {
-        if ($idAgentApi <= 0 || $idUsine <= 0) {
+        if ($idAgentApi <= 0) {
             return null;
         }
 
+        $nomUsine = $nomUsine !== null && trim($nomUsine) !== '' ? trim($nomUsine) : null;
+        if (($idUsine === null || $idUsine <= 0) && $nomUsine === null) {
+            return null;
+        }
+
+        $types = array_values(array_unique([$type, 'pgf', 'transporteur', 'autre_camion']));
+
+        foreach ($types as $typeEssai) {
+            if ($nomUsine !== null) {
+                $prix = $this->chercherPrixAgent($idAgentApi, null, $nomUsine, $produitId, $dateTicket, $typeEssai);
+                if ($prix !== null) {
+                    return $prix;
+                }
+            }
+
+            if ($idUsine !== null && $idUsine > 0) {
+                $prix = $this->chercherPrixAgent($idAgentApi, $idUsine, null, $produitId, $dateTicket, $typeEssai);
+                if ($prix !== null) {
+                    return $prix;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function chercherPrixAgent(
+        int $idAgentApi,
+        ?int $idUsine,
+        ?string $nomUsine,
+        ?int $produitId,
+        ?string $dateTicket,
+        string $type,
+    ): ?float {
         $date = $dateTicket ? Carbon::parse($dateTicket)->startOfDay() : now()->startOfDay();
 
         $baseQuery = PrixAgent::query()
             ->where('id_agent', $idAgentApi)
-            ->where('id_usine', $idUsine)
             ->where('type', $type)
             ->where(fn ($q) => $q->whereNull('date_debut')->orWhereDate('date_debut', '<=', $date))
             ->where(fn ($q) => $q->whereNull('date_fin')->orWhereDate('date_fin', '>=', $date));
+
+        if ($nomUsine !== null) {
+            $baseQuery->where('nom_usine', $nomUsine);
+        } elseif ($idUsine !== null && $idUsine > 0) {
+            $baseQuery->where('id_usine', $idUsine);
+        }
 
         if ($produitId) {
             $match = (clone $baseQuery)->where('produit_id', $produitId)->orderByDesc('date_debut')->first();

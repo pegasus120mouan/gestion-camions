@@ -233,6 +233,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
     Route::put('/tickets/{id}', [TicketController::class, 'update'])->name('tickets.update');
     Route::delete('/tickets/{id}', [TicketController::class, 'destroy'])->name('tickets.destroy');
+    Route::post('/tickets/{id}/valider', [TicketController::class, 'valider'])->name('tickets.valider');
     Route::post('/tickets/{id}/confirm-unipalm', [TicketController::class, 'confirmUnipalm'])->name('tickets.confirm_unipalm');
 
     Route::get('/vehicules/{vehicule_id}/depenses', [DepenseController::class, 'index'])->name('vehicules.depenses');

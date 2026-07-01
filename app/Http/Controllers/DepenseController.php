@@ -8,7 +8,9 @@ use App\Models\FicheSortie;
 use App\Models\PontEtat;
 use App\Models\Stock;
 use App\Models\Usine;
+use App\Services\ChefEquipeContext;
 use App\Services\FicheSortieNumeroService;
+use App\Services\MesAgentsService;
 use App\Services\MontantAgentFicheService;
 use App\Services\UsinesParProduitService;
 use Illuminate\Http\Request;
@@ -387,34 +389,7 @@ class DepenseController extends Controller
         } catch (\Throwable $e) {}
 
         try {
-            // Récupérer tous les agents avec pagination
-            $allAgents = [];
-            $page = 1;
-            $hasMore = true;
-            
-            while ($hasMore) {
-                $agentsResponse = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                    ->get($mesAgentsUrl, ['page' => $page]);
-                
-                if ($agentsResponse->successful()) {
-                    $pageAgents = $agentsResponse->json('agents') ?? [];
-                    $pagination = $agentsResponse->json('pagination') ?? [];
-                    
-                    $allAgents = array_merge($allAgents, $pageAgents);
-                    
-                    $currentPage = $pagination['current_page'] ?? $page;
-                    $lastPage = $pagination['last_page'] ?? 1;
-                    $hasMore = $currentPage < $lastPage;
-                    $page++;
-                } else {
-                    $hasMore = false;
-                }
-            }
-            
-            $agents = $allAgents;
+            $agents = app(MesAgentsService::class)->fetchAllAgents([], $request);
         } catch (\Throwable $e) {}
 
         $donneesUsinesProduits = $this->chargerDonneesUsinesProduitsFiches();
@@ -668,34 +643,7 @@ class DepenseController extends Controller
         }
 
         try {
-            // Récupérer tous les agents avec pagination
-            $allAgents = [];
-            $page = 1;
-            $hasMore = true;
-            
-            while ($hasMore) {
-                $agentsResponse = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php', ['page' => $page]);
-                
-                if ($agentsResponse->successful()) {
-                    $pageAgents = $agentsResponse->json('agents') ?? [];
-                    $pagination = $agentsResponse->json('pagination') ?? [];
-                    
-                    $allAgents = array_merge($allAgents, $pageAgents);
-                    
-                    // Vérifier s'il y a d'autres pages
-                    $currentPage = $pagination['current_page'] ?? $page;
-                    $lastPage = $pagination['last_page'] ?? 1;
-                    $hasMore = $currentPage < $lastPage;
-                    $page++;
-                } else {
-                    $hasMore = false;
-                }
-            }
-            
-            $agents = $allAgents;
+            $agents = app(MesAgentsService::class)->fetchAllAgents([], $request);
         } catch (\Throwable $e) {
             // Ignorer l'erreur
         }
@@ -847,23 +795,7 @@ class DepenseController extends Controller
         }
 
         if ($idAgent > 0) {
-            try {
-                $agentsResponse = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->get(config('services.external_auth.mes_agents_url'));
-                if ($agentsResponse->successful()) {
-                    $agents = $agentsResponse->json('agents') ?? [];
-                    foreach ($agents as $a) {
-                        if ((int)$a['id_agent'] === $idAgent) {
-                            $agent = $a;
-                            break;
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {
-                // Ignorer
-            }
+            $agent = app(MesAgentsService::class)->findAgentById($idAgent);
         }
 
         // Récupérer les tickets du véhicule pour le modal d'association
@@ -878,11 +810,12 @@ class DepenseController extends Controller
         if ($ficheSortie && !$ficheSortie->id_ticket) {
             try {
                 $phpsessid = session('external_auth.phpsessid', '');
+                $chefParams = app(ChefEquipeContext::class)->apiQueryParams($request);
                 $ticketsResponse = Http::acceptJson()
                     ->withoutVerifying()
                     ->timeout($timeout)
                     ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                    ->get(config('services.external_auth.mes_tickets_url'));
+                    ->get(config('services.external_auth.mes_tickets_url'), $chefParams);
                 if ($ticketsResponse->successful()) {
                     $allTickets = $ticketsResponse->json('tickets') ?? [];
                     // Filtrer les tickets du véhicule par matricule ET par nom d'agent de la fiche
@@ -1227,26 +1160,11 @@ class DepenseController extends Controller
 
         // Si agent_display est vide, récupérer depuis l'API
         if (empty($nomAgent)) {
-            $mesAgentsUrl = (string) config('services.external_auth.mes_agents_url');
-            $timeout = (int) config('services.external_auth.timeout', 10);
-            $phpsessid = session('external_auth.phpsessid', '');
-            try {
-                $agentsResponse = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                    ->get($mesAgentsUrl);
-                if ($agentsResponse->successful()) {
-                    $agents = $agentsResponse->json('agents') ?? [];
-                    foreach ($agents as $a) {
-                        if (($a['id_agent'] ?? 0) == $validated['id_agent']) {
-                            $nomAgent = $a['nom_complet'] ?? (($a['nom_agent'] ?? '') . ' ' . ($a['prenom_agent'] ?? ''));
-                            $numeroAgent = $a['numero_agent'] ?? '';
-                            break;
-                        }
-                    }
-                }
-            } catch (\Throwable $e) {}
+            $apiAgent = app(MesAgentsService::class)->findAgentById((int) $validated['id_agent']);
+            if ($apiAgent) {
+                $nomAgent = $apiAgent['nom_complet'] ?? '';
+                $numeroAgent = $apiAgent['numero_agent'] ?? '';
+            }
         }
 
         $numeroFiche = app(FicheSortieNumeroService::class)->generer($nomPont, (int) $validated['id_pont']);
@@ -1354,17 +1272,18 @@ class DepenseController extends Controller
         ]);
     }
 
-    public function getTicketsConformesApi()
+    public function getTicketsConformesApi(Request $request, ChefEquipeContext $chefContext)
     {
         // Récupérer les tickets depuis l'API Unipalm
         $timeout = (int) config('services.external_auth.timeout', 10);
         $tickets = [];
+        $mesTicketsUrl = (string) config('services.external_auth.mes_tickets_url');
         
         try {
             $response = Http::acceptJson()
                 ->withoutVerifying()
                 ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_tickets.php');
+                ->get($mesTicketsUrl, $chefContext->apiQueryParams($request));
             
             if ($response->successful()) {
                 $ticketsApi = $response->json('tickets') ?? [];
@@ -1434,23 +1353,10 @@ class DepenseController extends Controller
             // Ignorer l'erreur
         }
 
-        try {
-            $agentsResponse = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php');
-            if ($agentsResponse->successful()) {
-                $agents = $agentsResponse->json('agents') ?? [];
-                foreach ($agents as $a) {
-                    if (($a['id_agent'] ?? null) == $validated['id_agent']) {
-                        $nomAgent = $a['nom_complet'] ?? (($a['nom_agent'] ?? '') . ' ' . ($a['prenom_agent'] ?? ''));
-                        $numeroAgent = $a['numero_agent'] ?? '';
-                        break;
-                    }
-                }
-            }
-        } catch (\Throwable $e) {
-            // Ignorer l'erreur
+        $apiAgent = app(MesAgentsService::class)->findAgentById((int) $validated['id_agent']);
+        if ($apiAgent) {
+            $nomAgent = $apiAgent['nom_complet'] ?? '';
+            $numeroAgent = $apiAgent['numero_agent'] ?? '';
         }
 
         $ficheSortie->update([

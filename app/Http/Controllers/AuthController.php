@@ -2,20 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
-use App\Services\ChefEquipeContext;
+use App\Services\ChefEquipeAuthService;
+use App\Services\ChefEquipeSession;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    public function showLogin()
+    public function showLogin(ChefEquipeSession $chefSession)
     {
+        if ($chefSession->check()) {
+            return redirect()->route('dashboard');
+        }
+
         return view('login');
     }
 
-    public function login(Request $request, ChefEquipeContext $chefContext)
+    public function login(Request $request, ChefEquipeAuthService $authService, ChefEquipeSession $chefSession)
     {
         $credentials = $request->validate([
             'login' => ['required', 'string'],
@@ -23,36 +25,23 @@ class AuthController extends Controller
             'remember' => ['nullable', 'boolean'],
         ]);
 
-        $remember = (bool) ($credentials['remember'] ?? false);
+        $chef = $authService->attempt($credentials['login'], $credentials['password']);
 
-        // Rechercher l'utilisateur par login ou contact
-        $user = User::where('login', $credentials['login'])
-            ->orWhere('contact', $credentials['login'])
-            ->first();
-
-        if (!$user) {
+        if (!$chef) {
             return back()
                 ->withErrors(['login' => 'Identifiants invalides.'])
                 ->onlyInput('login');
         }
 
-        // Vérifier le mot de passe (SHA-1)
-        if (sha1($credentials['password']) !== $user->password) {
-            return back()
-                ->withErrors(['login' => 'Identifiants invalides.'])
-                ->onlyInput('login');
-        }
-
-        Auth::login($user, $remember);
+        $chefSession->login($request, $chef);
         $request->session()->regenerate();
-        $chefContext->syncSessionForUser($user, $request);
 
         return redirect()->intended('/dashboard');
     }
 
-    public function logout(Request $request)
+    public function logout(Request $request, ChefEquipeSession $chefSession)
     {
-        Auth::logout();
+        $chefSession->logout($request);
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

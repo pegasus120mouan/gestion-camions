@@ -71,6 +71,7 @@
               </div>
               <!-- /Logo -->
               <h4 class="mb-1">Bienvenue sur votre espace</h4>
+              <p class="mb-4 text-muted">Connexion chef d'équipe</p>
 
               <form id="formAuthentication" class="mb-6" method="POST" action="{{ route('login.attempt') }}">
                 @csrf

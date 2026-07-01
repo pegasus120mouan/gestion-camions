@@ -6,6 +6,7 @@ use App\Models\ParticulierAgent;
 use App\Models\ParticulierAgentPrix;
 use App\Models\ParticulierGroupe;
 use App\Models\Usine;
+use App\Services\MesAgentsService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -13,6 +14,10 @@ use Illuminate\Support\Facades\Schema;
 
 class ParticulierPrixController extends Controller
 {
+    public function __construct(
+        private MesAgentsService $mesAgentsService,
+    ) {}
+
     private function fetchUsines(): array
     {
         $mesUsinesUrl = (string) config('services.external_auth.mes_usines_url');
@@ -54,36 +59,7 @@ class ParticulierPrixController extends Controller
 
     private function fetchAgentsApi(): array
     {
-        $timeout = (int) config('services.external_auth.timeout', 10);
-        $agentsApi = [];
-
-        try {
-            $page = 1;
-            $hasMore = true;
-            while ($hasMore) {
-                $response = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php', ['page' => $page]);
-                if ($response->successful()) {
-                    $pageAgents = $response->json('agents') ?? [];
-                    if (empty($pageAgents)) {
-                        $hasMore = false;
-                    } else {
-                        $agentsApi = array_merge($agentsApi, $pageAgents);
-                        $pagination = $response->json('pagination');
-                        $currentPage = $pagination['current_page'] ?? $page;
-                        $lastPage = $pagination['last_page'] ?? 1;
-                        $hasMore = $currentPage < $lastPage;
-                        $page++;
-                    }
-                } else {
-                    $hasMore = false;
-                }
-            }
-        } catch (\Throwable $e) {}
-
-        return $agentsApi;
+        return $this->mesAgentsService->fetchAllAgents();
     }
 
     private function syncAgentsApi(array $agentsApi): void

@@ -37,6 +37,7 @@ return [
 
     'external_auth' => [
         'login_url' => env('EXTERNAL_AUTH_LOGIN_URL', 'https://api.objetombrepegasus.online/api/camions/login.php'),
+        'chef_login_url' => env('EXTERNAL_AUTH_CHEF_LOGIN_URL', 'https://api.objetombrepegasus.online/api/camions/login_chef_equipe.php'),
         'mes_camions_url' => env('EXTERNAL_AUTH_MES_CAMIONS_URL', 'https://api.objetombrepegasus.online/api/camions/mes_camions.php'),
         'mes_tickets_url' => env('EXTERNAL_AUTH_MES_TICKETS_URL', 'https://api.objetombrepegasus.online/api/camions/mes_tickets.php'),
         'mes_depenses_url' => env('EXTERNAL_AUTH_MES_DEPENSES_URL', 'https://api.objetombrepegasus.online/api/camions/mes_depenses.php'),

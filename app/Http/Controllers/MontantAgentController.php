@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\BordereauAgent;
 use App\Models\PaiementAgent;
 use App\Services\BordereauAgentService;
+use App\Services\MesAgentsService;
 use App\Services\MontantAgentReportingService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -14,7 +15,8 @@ class MontantAgentController extends Controller
 {
     public function __construct(
         private MontantAgentReportingService $reporting,
-        private BordereauAgentService $bordereauAgent
+        private BordereauAgentService $bordereauAgent,
+        private MesAgentsService $mesAgentsService,
     ) {}
 
     public function index(Request $request)
@@ -138,46 +140,12 @@ class MontantAgentController extends Controller
      */
     private function fetchAgentsFromApi(): ?array
     {
-        $mesAgentsUrl = (string) config('services.external_auth.mes_agents_url');
-        $timeout = (int) config('services.external_auth.timeout', 10);
-        $all = [];
-        $page = 1;
-        $maxPages = 50;
-
-        try {
-            while ($page <= $maxPages) {
-                $response = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->get($mesAgentsUrl, ['page' => $page]);
-
-                if (!$response->successful()) {
-                    return $page === 1 ? null : $all;
-                }
-
-                $batch = $response->json('agents') ?? [];
-                if (!is_array($batch) || $batch === []) {
-                    break;
-                }
-
-                foreach ($batch as $a) {
-                    if (is_array($a)) {
-                        $all[] = $a;
-                    }
-                }
-
-                $pagination = $response->json('pagination') ?? [];
-                $lastPage = (int) ($pagination['last_page'] ?? 1);
-                if ($page >= $lastPage) {
-                    break;
-                }
-                $page++;
-            }
-        } catch (\Throwable $e) {
+        $result = $this->mesAgentsService->listAgents();
+        if ($result['error']) {
             return null;
         }
 
-        return $all;
+        return $result['agents'];
     }
 
     public function show(Request $request, int $id_agent)
@@ -248,41 +216,7 @@ class MontantAgentController extends Controller
      */
     private function findAgentById(int $id_agent): ?array
     {
-        $mesAgentsUrl = (string) config('services.external_auth.mes_agents_url');
-        $timeout = (int) config('services.external_auth.timeout', 10);
-        $page = 1;
-        $maxPages = 50;
-
-        try {
-            while ($page <= $maxPages) {
-                $response = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->get($mesAgentsUrl, ['page' => $page]);
-
-                if (!$response->successful()) {
-                    break;
-                }
-
-                $agents = $response->json('agents') ?? [];
-                foreach ($agents as $a) {
-                    if (($a['id_agent'] ?? 0) == $id_agent) {
-                        return $a;
-                    }
-                }
-
-                $pagination = $response->json('pagination') ?? [];
-                $lastPage = (int) ($pagination['last_page'] ?? 1);
-                if ($page >= $lastPage) {
-                    break;
-                }
-                $page++;
-            }
-        } catch (\Throwable $e) {
-            return null;
-        }
-
-        return null;
+        return $this->mesAgentsService->findAgentById($id_agent);
     }
 
     private function montantPayeAgent(int $idAgent): int

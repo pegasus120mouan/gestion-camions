@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 /**
  * API: mes_agents.php
- * Liste des agents rattachés à un chef d'équipe.
- * GET ?token=BAEB3101
- * GET ?id_chef=1
- * GET ?search=nom&page=1&per_page=15
+ * Agents rattachés au chef d'équipe connecté.
+ * GET ?token=BAEB3101&search=nom&page=1
+ * GET ?id_chef=12&search=nom&page=1
  */
 
 header('Content-Type: application/json; charset=utf-8');
@@ -77,20 +76,30 @@ try {
     $page = max(1, (int) ($_GET['page'] ?? 1));
     $perPage = max(1, min(100, (int) ($_GET['per_page'] ?? 15)));
 
+    if ($token === '' && $idChef <= 0) {
+        jsonOut(422, [
+            'success' => false,
+            'error' => 'Le paramètre token ou id_chef est requis.',
+        ]);
+    }
+
     $where = ['a.date_suppression IS NULL'];
     $bindings = [];
 
     if ($token !== '') {
         $where[] = 'ce.token = :token';
         $bindings['token'] = $token;
-    } elseif ($idChef > 0) {
+    } else {
         $where[] = 'a.id_chef = :id_chef';
         $bindings['id_chef'] = $idChef;
     }
 
     if ($search !== '') {
-        $where[] = '(a.nom LIKE :search OR a.prenom LIKE :search OR a.numero_agent LIKE :search OR CONCAT(a.nom, \' \', a.prenom) LIKE :search)';
+        $where[] = '(a.nom LIKE :search OR a.prenom LIKE :search2 OR a.numero_agent LIKE :search3 OR CONCAT(a.nom, \' \', a.prenom) LIKE :search4)';
         $bindings['search'] = '%' . $search . '%';
+        $bindings['search2'] = '%' . $search . '%';
+        $bindings['search3'] = '%' . $search . '%';
+        $bindings['search4'] = '%' . $search . '%';
     }
 
     $whereSql = implode(' AND ', $where);
@@ -122,37 +131,40 @@ try {
         FROM agents a
         INNER JOIN chef_equipe ce ON ce.id_chef = a.id_chef
         WHERE {$whereSql}
-        ORDER BY a.date_ajout DESC, a.id_agent DESC
+        ORDER BY a.nom ASC, a.prenom ASC, a.id_agent DESC
         LIMIT {$perPage} OFFSET {$offset}";
 
     $stmt = $conn->prepare($sql);
     $stmt->execute($bindings);
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $agents = array_map('normalizeAgent', $stmt->fetchAll(PDO::FETCH_ASSOC));
 
-    $agents = array_map('normalizeAgent', $rows);
-
-    $chefs = [];
+    $chef = null;
     if ($token !== '') {
         $chefStmt = $conn->prepare('SELECT id_chef, nom, prenoms, token FROM chef_equipe WHERE token = :token LIMIT 1');
         $chefStmt->execute(['token' => $token]);
         $chefRow = $chefStmt->fetch(PDO::FETCH_ASSOC);
         if ($chefRow) {
-            $chefs[] = normalizeChef($chefRow);
+            $chef = normalizeChef($chefRow);
         }
-    } else {
-        $chefStmt = $conn->query('SELECT id_chef, nom, prenoms, token FROM chef_equipe ORDER BY nom, prenoms');
-        $chefs = array_map('normalizeChef', $chefStmt->fetchAll(PDO::FETCH_ASSOC) ?: []);
+    } elseif ($idChef > 0) {
+        $chefStmt = $conn->prepare('SELECT id_chef, nom, prenoms, token FROM chef_equipe WHERE id_chef = :id_chef LIMIT 1');
+        $chefStmt->execute(['id_chef' => $idChef]);
+        $chefRow = $chefStmt->fetch(PDO::FETCH_ASSOC);
+        if ($chefRow) {
+            $chef = normalizeChef($chefRow);
+        }
     }
 
     jsonOut(200, [
         'success' => true,
+        'chef' => $chef,
         'agents' => $agents,
-        'chefs' => $chefs,
+        'chefs' => $chef ? [$chef] : [],
         'pagination' => [
             'current_page' => $page,
-            'last_page' => $lastPage,
             'per_page' => $perPage,
             'total' => $total,
+            'last_page' => $lastPage,
         ],
     ]);
 } catch (Throwable $e) {

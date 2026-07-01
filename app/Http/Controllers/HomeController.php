@@ -2,14 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use App\Services\ChefEquipeSession;
 
 class HomeController extends Controller
 {
-    public function index()
+    public function index(ChefEquipeSession $chefSession)
     {
-        if (Auth::check()) {
+        if ($chefSession->check()) {
             return redirect()->route('dashboard');
         }
 

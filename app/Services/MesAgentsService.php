@@ -22,13 +22,25 @@ class MesAgentsService
      * @param  array{token?: string, id_chef?: int, search?: string, page?: int, per_page?: int}  $params
      * @return array{agents: list<array<string, mixed>>, pagination: array<string, int>|null, chefs: list<array<string, mixed>>, error: string|null}
      */
-    public function listAgents(array $params = []): array
+    public function listAgents(array $params = [], ?Request $request = null): array
     {
+        $request ??= request();
+
         $token = trim((string) ($params['token'] ?? ''));
         $idChef = (int) ($params['id_chef'] ?? 0);
         $search = trim((string) ($params['search'] ?? ''));
         $page = max(1, (int) ($params['page'] ?? 1));
         $perPage = max(1, min(100, (int) ($params['per_page'] ?? 15)));
+
+        if ($token === '' && $idChef <= 0) {
+            $chefParams = $this->chefContext->apiQueryParams($request);
+            $token = trim((string) ($chefParams['token'] ?? ''));
+            $idChef = (int) ($chefParams['id_chef'] ?? 0);
+        }
+
+        if ($token === '' && $idChef <= 0) {
+            return $this->emptyResult('Le paramètre token ou id_chef est requis.');
+        }
 
         if ($this->databaseResolver->usesApi()) {
             return $this->fetchFromExternalApi($token, $idChef, $search, $page, $perPage);
@@ -44,6 +56,30 @@ class MesAgentsService
 
         return $this->fetchFromExternalApi($token, $idChef, $search, $page, $perPage);
     }
+
+    /**
+     * @return list<int>
+     */
+    public function chefAgentIds(?Request $request = null): array
+    {
+        $request ??= request();
+
+        if ($this->cachedChefAgentIds !== null) {
+            return $this->cachedChefAgentIds;
+        }
+
+        $ids = [];
+        foreach ($this->fetchAllAgents([], $request) as $agent) {
+            $id = (int) ($agent['id_agent'] ?? 0);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        return $this->cachedChefAgentIds = array_values(array_unique($ids));
+    }
+
+    private ?array $cachedChefAgentIds = null;
 
     public function findAgentById(int $idAgent): ?array
     {
@@ -80,19 +116,19 @@ class MesAgentsService
             }
         }
 
-        return $this->findAgentByIdFromApi($idAgent);
+        return $this->findAgentByIdFromApi($idAgent, request());
     }
 
     /**
      * @return list<array<string, mixed>>
      */
-    public function fetchAllAgents(array $params = []): array
+    public function fetchAllAgents(array $params = [], ?Request $request = null): array
     {
         $all = [];
         $page = 1;
 
         do {
-            $result = $this->listAgents(array_merge($params, ['page' => $page]));
+            $result = $this->listAgents(array_merge($params, ['page' => $page]), $request);
             if ($result['error']) {
                 break;
             }
@@ -144,6 +180,10 @@ class MesAgentsService
         try {
             $bindings = [];
             $where = ['a.date_suppression IS NULL'];
+
+            if ($token === '' && $idChef <= 0) {
+                return $this->emptyResult('Le paramètre token ou id_chef est requis.');
+            }
 
             if ($token !== '') {
                 $where[] = 'ce.token = ?';
@@ -241,6 +281,10 @@ class MesAgentsService
             return $this->emptyResult('URL API mes_agents non configurée.');
         }
 
+        if ($token === '' && $idChef <= 0) {
+            return $this->emptyResult('Le paramètre token ou id_chef est requis.');
+        }
+
         $queryParams = [
             'page' => $page,
             'per_page' => $perPage,
@@ -293,13 +337,15 @@ class MesAgentsService
         ];
     }
 
-    private function findAgentByIdFromApi(int $idAgent): ?array
+    private function findAgentByIdFromApi(int $idAgent, ?Request $request = null): ?array
     {
+        $request ??= request();
         $url = (string) config('services.external_auth.mes_agents_url', '');
         if ($url === '') {
             return null;
         }
 
+        $chefParams = $this->chefContext->apiQueryParams($request);
         $timeout = (int) config('services.external_auth.timeout', 10);
         $page = 1;
 
@@ -308,7 +354,7 @@ class MesAgentsService
                 $response = Http::acceptJson()
                     ->withoutVerifying()
                     ->timeout($timeout)
-                    ->get($url, ['page' => $page]);
+                    ->get($url, array_merge($chefParams, ['page' => $page]));
 
                 if (!$response->successful()) {
                     break;

@@ -1064,7 +1064,7 @@
                     href="javascript:void(0);"
                     data-bs-toggle="dropdown">
                     <div class="avatar avatar-online">
-                      <img src="{{ auth()->user()->avatar_url }}" alt class="w-px-40 h-auto rounded-circle" />
+                      <img src="{{ asset('img/avatars/default.png') }}" alt class="w-px-40 h-auto rounded-circle" />
                     </div>
                   </a>
                   <ul class="dropdown-menu dropdown-menu-end">
@@ -1073,12 +1073,12 @@
                         <div class="d-flex">
                           <div class="flex-shrink-0 me-3">
                             <div class="avatar avatar-online">
-                              <img src="{{ auth()->user()->avatar_url }}" alt class="w-px-40 h-auto rounded-circle" />
+                              <img src="{{ asset('img/avatars/default.png') }}" alt class="w-px-40 h-auto rounded-circle" />
                             </div>
                           </div>
                           <div class="flex-grow-1">
-                            <h6 class="mb-0">{{ auth()->user()->name }} {{ auth()->user()->prenom }}</h6>
-                            <small class="text-body-secondary">{{ auth()->user()->role }}</small>
+                            <h6 class="mb-0">{{ $authChef['nom_complet'] ?? 'Chef d\'équipe' }}</h6>
+                            <small class="text-body-secondary">Chef d'équipe</small>
                           </div>
                         </div>
                       </a>

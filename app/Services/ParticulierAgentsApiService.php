@@ -12,47 +12,13 @@ use Illuminate\Validation\ValidationException;
 
 class ParticulierAgentsApiService
 {
+    public function __construct(
+        private MesAgentsService $mesAgentsService,
+    ) {}
+
     public function fetchAll(Request $request): array
     {
-        $mesAgentsUrl = (string) config('services.external_auth.mes_agents_url');
-        $timeout = (int) config('services.external_auth.timeout', 10);
-        $phpsessid = (string) $request->session()->get('external_auth.phpsessid', '');
-        $all = [];
-        $page = 1;
-
-        try {
-            while (true) {
-                $response = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                    ->get($mesAgentsUrl, ['page' => $page]);
-
-                if (!$response->successful()) {
-                    break;
-                }
-
-                $batch = $response->json('agents') ?? [];
-                if (empty($batch)) {
-                    break;
-                }
-
-                foreach ($batch as $a) {
-                    if (is_array($a)) {
-                        $all[] = $a;
-                    }
-                }
-
-                $pagination = $response->json('pagination') ?? [];
-                if ($page >= (int) ($pagination['last_page'] ?? 1)) {
-                    break;
-                }
-                $page++;
-            }
-        } catch (\Throwable $e) {
-        }
-
-        return $all;
+        return $this->mesAgentsService->fetchAllAgents([], $request);
     }
 
     public function extraireMotCleGroupe(string $nomGroupe): string

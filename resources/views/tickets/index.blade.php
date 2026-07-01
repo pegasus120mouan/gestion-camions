@@ -28,6 +28,13 @@
       </div>
     @endif
 
+    @if(session('error'))
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
     @if($errors->any())
       <div class="alert alert-danger alert-dismissible fade show" role="alert">
         <ul class="mb-0">
@@ -136,11 +143,18 @@
                   <a href="{{ route('tickets.pdf', ['id' => $t['id_ticket']]) }}" class="btn btn-sm btn-outline-secondary me-1" target="_blank" rel="noopener" title="Imprimer en PDF">
                     <i class="bx bx-printer"></i>
                   </a>
-                  <button type="button" class="btn btn-sm btn-outline-warning me-1" data-bs-toggle="modal" data-bs-target="#modalEditTicket{{ $loop->index }}" title="Modifier">
-                    <i class="bx bx-edit"></i>
-                  </button>
-                  <button type="button" class="btn btn-sm btn-outline-danger me-1" data-bs-toggle="modal" data-bs-target="#modalDeleteTicket{{ $loop->index }}" title="Supprimer">
-                    <i class="bx bx-trash"></i>
+                  @php
+                    $ticketValide = in_array($t['conformite'] ?? '', ['valide', 'conforme'], true);
+                  @endphp
+                  <button
+                    type="button"
+                    class="btn btn-sm {{ $ticketValide ? 'btn-success' : 'btn-outline-success' }}"
+                    title="{{ $ticketValide ? 'Ticket déjà validé' : 'Valider' }}"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalValiderTicket{{ $loop->index }}"
+                    @if($ticketValide) disabled @endif
+                  >
+                    <i class="bx bx-check"></i> Valider
                   </button>
                 </td>
               </tr>
@@ -170,13 +184,13 @@
           @endphp
 
           <li class="page-item {{ $currentPage <= 1 ? 'disabled' : '' }}">
-            <a class="page-link" href="{{ route('tickets.index', ['page' => $currentPage - 1]) }}">Precedent</a>
+            <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent']), ['page' => $currentPage - 1])) }}">Precedent</a>
           </li>
 
           @for($i = 1; $i <= $lastPage; $i++)
             @if($i == 1 || $i == $lastPage || abs($i - $currentPage) <= 2)
               <li class="page-item {{ $i == $currentPage ? 'active' : '' }}">
-                <a class="page-link" href="{{ route('tickets.index', ['page' => $i]) }}">{{ $i }}</a>
+                <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent']), ['page' => $i])) }}">{{ $i }}</a>
               </li>
             @elseif($i == 2 && $currentPage > 4)
               <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -186,7 +200,7 @@
           @endfor
 
           <li class="page-item {{ $currentPage >= $lastPage ? 'disabled' : '' }}">
-            <a class="page-link" href="{{ route('tickets.index', ['page' => $currentPage + 1]) }}">Suivant</a>
+            <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent']), ['page' => $currentPage + 1])) }}">Suivant</a>
           </li>
         </ul>
         <p class="text-center text-muted">Page {{ $currentPage }} sur {{ $lastPage }} ({{ $total }} tickets)</p>
@@ -396,80 +410,101 @@
 </div>
 @endforeach
 
-<!-- Modals pour modifier les tickets -->
+<!-- Modals validation ticket + fiche de sortie -->
 @foreach($tickets as $index => $t)
-<div class="modal fade" id="modalEditTicket{{ $index }}" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header bg-warning">
-        <h5 class="modal-title"><i class="bx bx-edit me-2"></i>Modifier le ticket #{{ $t['numero_ticket'] ?? '' }}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <form action="{{ route('tickets.update', $t['id_ticket'] ?? 0) }}" method="POST">
-        @csrf
-        @method('PUT')
-        <div class="modal-body">
-          <div class="row">
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Numéro Ticket</label>
-              <input type="text" class="form-control" name="numero_ticket" value="{{ $t['numero_ticket'] ?? '' }}" required>
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Date Ticket</label>
-              <input type="date" class="form-control" name="date_ticket" value="{{ $t['date_ticket'] ?? '' }}" required>
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Matricule Véhicule</label>
-              <input type="text" class="form-control" name="matricule_vehicule" value="{{ $t['matricule_vehicule'] ?? '' }}">
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Poids (kg)</label>
-              <input type="number" step="0.01" class="form-control" name="poids" value="{{ $t['poids'] ?? '' }}">
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Poids Parc (kg)</label>
-              <input type="number" step="0.01" class="form-control" name="poids_parc" value="{{ $t['poids_parc'] ?? '' }}">
-            </div>
-            <div class="col-md-6 mb-3">
-              <label class="form-label">Prix Unitaire Transport</label>
-              <input type="number" step="0.01" class="form-control" name="prix_unitaire_transport" value="{{ $t['prix_unitaire_transport'] ?? '' }}">
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-warning"><i class="bx bx-save me-1"></i>Enregistrer</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-@endforeach
+  @php
+    $matriculeTicket = trim((string) ($t['matricule_vehicule'] ?? ''));
+    $idAgentTicket = (int) ($t['id_agent'] ?? 0);
+    $fichesPourTicket = ($fichesNonDechargees ?? collect())->filter(function ($fiche) use ($matriculeTicket, $idAgentTicket) {
+        $matchVehicule = $matriculeTicket !== ''
+            && strcasecmp(trim((string) $fiche->matricule_vehicule), $matriculeTicket) === 0;
+        $matchAgent = $idAgentTicket > 0 && (int) $fiche->id_agent === $idAgentTicket;
 
-<!-- Modals pour supprimer les tickets -->
-@foreach($tickets as $index => $t)
-<div class="modal fade" id="modalDeleteTicket{{ $index }}" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-danger text-white">
-        <h5 class="modal-title text-white"><i class="bx bx-trash me-2"></i>Supprimer le ticket</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p>Êtes-vous sûr de vouloir supprimer le ticket <strong>#{{ $t['numero_ticket'] ?? '' }}</strong> ?</p>
-        <p class="text-muted mb-0">Cette action est irréversible.</p>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-        <form action="{{ route('tickets.destroy', $t['id_ticket'] ?? 0) }}" method="POST" class="d-inline">
+        return $matchVehicule || $matchAgent;
+    });
+    if ($fichesPourTicket->isEmpty()) {
+        $fichesPourTicket = $fichesNonDechargees ?? collect();
+    }
+  @endphp
+  <div class="modal fade" id="modalValiderTicket{{ $index }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title text-white">
+            <i class="bx bx-check-circle me-2"></i>Valider le ticket — {{ $t['numero_ticket'] ?? '' }}
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <form method="POST" action="{{ route('tickets.valider', $t['id_ticket']) }}">
           @csrf
-          @method('DELETE')
-          <button type="submit" class="btn btn-danger"><i class="bx bx-trash me-1"></i>Supprimer</button>
+          <div class="modal-body">
+            <div class="alert alert-light border mb-3">
+              <div class="row g-2">
+                <div class="col-md-3"><strong>Ticket :</strong> {{ $t['numero_ticket'] ?? '-' }}</div>
+                <div class="col-md-3"><strong>Véhicule :</strong> {{ $t['matricule_vehicule'] ?? '-' }}</div>
+                <div class="col-md-3"><strong>Agent :</strong> {{ $t['nom_agent'] ?? '-' }}</div>
+                <div class="col-md-3"><strong>Usine :</strong> {{ $t['nom_usine'] ?? '-' }}</div>
+              </div>
+            </div>
+
+            <h6 class="mb-3">Fiches de sortie non déchargées</h6>
+
+            @if($fichesPourTicket->isEmpty())
+              <div class="alert alert-warning mb-0">
+                Aucune fiche de sortie en attente de déchargement pour votre équipe.
+              </div>
+            @else
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                  <thead>
+                    <tr>
+                      <th style="width: 40px;"></th>
+                      <th>N° Fiche</th>
+                      <th>Date chargement</th>
+                      <th>Véhicule</th>
+                      <th>Agent</th>
+                      <th>Pont</th>
+                      <th>Usine</th>
+                      <th>Poids parc</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @foreach($fichesPourTicket as $fiche)
+                      <tr>
+                        <td>
+                          <input
+                            type="radio"
+                            name="fiche_id"
+                            value="{{ $fiche->id }}"
+                            class="form-check-input"
+                            required
+                            {{ $loop->first ? 'checked' : '' }}
+                          />
+                        </td>
+                        <td>{{ $fiche->numero_fiche ?? ('#' . $fiche->id) }}</td>
+                        <td>{{ $fiche->date_chargement ? $fiche->date_chargement->format('d-m-Y') : '-' }}</td>
+                        <td>{{ $fiche->matricule_vehicule ?? '-' }}</td>
+                        <td>{{ $fiche->nom_agent ?? '-' }}</td>
+                        <td>{{ $fiche->nom_pont ?? '-' }}</td>
+                        <td>{{ $fiche->usine ?? '-' }}</td>
+                        <td>{{ $fiche->poids_pont ? number_format((float) $fiche->poids_pont, 0, ',', ' ') . ' kg' : '-' }}</td>
+                      </tr>
+                    @endforeach
+                  </tbody>
+                </table>
+              </div>
+            @endif
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+            <button type="submit" class="btn btn-success" @if($fichesPourTicket->isEmpty()) disabled @endif>
+              <i class="bx bx-check me-1"></i>Valider
+            </button>
+          </div>
         </form>
       </div>
     </div>
   </div>
-</div>
 @endforeach
 
 <!-- Modal Ajouter Ticket -->

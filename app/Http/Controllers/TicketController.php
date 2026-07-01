@@ -14,7 +14,11 @@ use App\Models\PontEtat;
 use App\Models\Produit;
 use App\Models\Stock;
 use App\Models\Ticket;
+use App\Services\ChefEquipeContext;
+use App\Services\FicheSortieDechargementService;
 use App\Services\FicheSortieNumeroService;
+use App\Services\MesAgentsService;
+use App\Services\MesTicketsService;
 use App\Services\ParticulierAgentsApiService;
 use App\Services\TicketPrixService;
 use App\Services\UsinesParProduitService;
@@ -22,6 +26,7 @@ use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
 
@@ -30,6 +35,8 @@ class TicketController extends Controller
     public function __construct(
         private TicketPrixService $ticketPrixService,
         private ParticulierAgentsApiService $particulierAgentsApiService,
+        private MesAgentsService $mesAgentsService,
+        private MesTicketsService $mesTicketsService,
     ) {}
 
     public function index(Request $request)
@@ -37,25 +44,42 @@ class TicketController extends Controller
         $vehicule = trim((string) $request->query('vehicule', ''));
         $usine = trim((string) $request->query('usine', ''));
         $agent = trim((string) $request->query('agent', ''));
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = 20;
+        $hasFilters = $vehicule !== '' || $usine !== '' || $agent !== '';
 
-        $query = Ticket::query()->orderBy('date_ticket', 'desc');
+        $agentsApi = $this->mesAgentsService->fetchAllAgents([], $request);
+        $externalError = null;
+        $filteredTickets = null;
 
-        if ($vehicule !== '') {
-            $query->where('matricule_vehicule', 'like', '%' . $vehicule . '%');
+        if ($hasFilters) {
+            $allTickets = $this->mesTicketsService->fetchAllTickets([], $request);
+            $filteredTickets = $this->mesTicketsService->filterTickets($allTickets, $vehicule, $usine, $agent);
+            $total = count($filteredTickets);
+            $lastPage = max(1, (int) ceil($total / $perPage));
+            $page = min($page, $lastPage);
+            $ticketsApi = array_slice($filteredTickets, ($page - 1) * $perPage, $perPage);
+            $pagination = [
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'last_page' => $lastPage,
+            ];
+        } else {
+            $result = $this->mesTicketsService->listTickets(['page' => $page, 'per_page' => $perPage], $request);
+            $ticketsApi = $result['tickets'];
+            $pagination = $result['pagination'] ?? [
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'total' => count($ticketsApi),
+                'last_page' => 1,
+            ];
+            $externalError = $result['error'];
         }
-        if ($usine !== '') {
-            $query->where('id_usine', $usine);
-        }
-        if ($agent !== '') {
-            $query->where('id_agent', $agent);
-        }
 
-        $ticketsPaginated = $query->with('particulierAgent.groupe')->paginate(20)->withQueryString();
-
-        // Récupérer les usines et agents depuis l'API pour les noms
+        // Récupérer les usines depuis l'API pour les noms
         $timeout = 10;
         $usinesApi = [];
-        $agentsApi = [];
 
         try {
             $usinesUrl = (string) config('services.external_auth.mes_usines_url', 'https://api.objetombrepegasus.online/api/camions/mes_usines.php');
@@ -87,35 +111,6 @@ class TicketController extends Controller
             }
         } catch (\Throwable $e) {}
 
-        try {
-            $page = 1;
-            $hasMore = true;
-            while ($hasMore) {
-                $agentsResponse = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php', ['page' => $page]);
-                if ($agentsResponse->successful()) {
-                    $pageAgents = $agentsResponse->json('agents') ?? [];
-                    if (empty($pageAgents)) {
-                        $hasMore = false;
-                    } else {
-                        $agentsApi = array_merge($agentsApi, $pageAgents);
-                        $pagination = $agentsResponse->json('pagination');
-                        $currentPage = $pagination['current_page'] ?? $page;
-                        $lastPage = $pagination['last_page'] ?? 1;
-                        if ($currentPage >= $lastPage) {
-                            $hasMore = false;
-                        } else {
-                            $page++;
-                        }
-                    }
-                } else {
-                    $hasMore = false;
-                }
-            }
-        } catch (\Throwable $e) {}
-
         // Indexer par ID (API d'abord, puis usines locales en complément)
         $usinesById = [];
         foreach ($usinesApi as $u) {
@@ -131,55 +126,58 @@ class TicketController extends Controller
             $agentsById[$a['id_agent'] ?? 0] = $a['nom_complet'] ?? '';
         }
 
-        // Convertir en tableau pour compatibilité avec la vue existante
-        $tickets = $ticketsPaginated->items();
-        $particulierAgentIds = collect($tickets)
-            ->pluck('particulier_agent_id')
-            ->filter()
-            ->unique()
-            ->values();
+        $ticketIds = array_column($ticketsApi, 'id_ticket');
+        $localTickets = $ticketIds !== []
+            ? Ticket::with('particulierAgent.groupe')->whereIn('id_ticket', $ticketIds)->get()->keyBy('id_ticket')
+            : collect();
+
+        $particulierAgentIds = $localTickets->pluck('particulier_agent_id')->filter()->unique()->values();
         $prixParticuliers = $particulierAgentIds->isNotEmpty()
             ? ParticulierAgentPrix::whereIn('particulier_agent_id', $particulierAgentIds)->get()
             : collect();
 
         $ticketsArray = [];
-        foreach ($tickets as $ticket) {
+        foreach ($ticketsApi as $ticket) {
+            $idTicket = (int) ($ticket['id_ticket'] ?? 0);
+            $local = $localTickets->get($idTicket);
+
             $ticketsArray[] = [
-                'id_ticket' => $ticket->id_ticket,
-                'numero_ticket' => $ticket->numero_ticket,
-                'date_ticket' => $ticket->date_ticket ? $ticket->date_ticket->format('Y-m-d') : null,
-                'matricule_vehicule' => $ticket->matricule_vehicule,
-                'vehicule_id' => $ticket->vehicule_id,
-                'poids' => $ticket->poids,
-                'id_usine' => $ticket->id_usine,
-                'nom_usine' => $usinesById[$ticket->id_usine] ?? '-',
-                'id_agent' => $ticket->id_agent,
-                'nom_agent' => $ticket->particulierAgent
-                    ? $ticket->particulierAgent->nom_complet
-                    : ($agentsById[$ticket->id_agent] ?? '-'),
-                'nom_groupe' => $ticket->particulierAgent?->groupe?->nom_groupe ?? '-',
-                'particulier_agent_id' => $ticket->particulier_agent_id,
-                'prix_unitaire' => $ticket->prix_unitaire,
+                'id_ticket' => $idTicket,
+                'numero_ticket' => $ticket['numero_ticket'] ?? '',
+                'date_ticket' => $ticket['date_ticket'] ?? null,
+                'matricule_vehicule' => $ticket['matricule_vehicule'] ?? '',
+                'vehicule_id' => (int) ($ticket['vehicule_id'] ?? 0),
+                'poids' => $ticket['poids'] ?? 0,
+                'id_usine' => (int) ($ticket['id_usine'] ?? 0),
+                'nom_usine' => $ticket['nom_usine'] ?: ($usinesById[$ticket['id_usine'] ?? 0] ?? '-'),
+                'id_agent' => (int) ($ticket['id_agent'] ?? 0),
+                'nom_agent' => $local?->particulierAgent
+                    ? $local->particulierAgent->nom_complet
+                    : (($ticket['nom_agent'] ?? '-') !== '-' ? $ticket['nom_agent'] : ($agentsById[$ticket['id_agent'] ?? 0] ?? '-')),
+                'nom_groupe' => $local?->particulierAgent?->groupe?->nom_groupe ?? '-',
+                'particulier_agent_id' => $local?->particulier_agent_id,
+                'prix_unitaire' => $ticket['prix_unitaire'] ?? $local?->prix_unitaire,
                 'prix_unitaire_agent' => null,
                 'montant_calcule' => null,
-                'montant_paie' => $ticket->montant_paie,
-                'statut_ticket' => $ticket->statut_ticket,
-                'created_at' => $ticket->created_at ? $ticket->created_at->format('Y-m-d H:i:s') : null,
-                'conformite' => $ticket->conformite,
+                'montant_paie' => $ticket['montant_paie'] ?? $local?->montant_paie,
+                'statut_ticket' => $ticket['statut_ticket'] ?? $local?->statut_ticket,
+                'created_at' => $ticket['created_at'] ?? ($local?->created_at?->format('Y-m-d H:i:s')),
+                'conformite' => $local?->conformite,
             ];
         }
 
-        $pagination = [
-            'current_page' => $ticketsPaginated->currentPage(),
-            'per_page' => $ticketsPaginated->perPage(),
-            'total' => $ticketsPaginated->total(),
-            'last_page' => $ticketsPaginated->lastPage(),
-        ];
-
-        // Récupérer la liste des véhicules pour l'autocomplétion
-        $vehicules = Ticket::distinct()->pluck('matricule_vehicule')->filter()->toArray();
+        $vehiculesSource = $hasFilters
+            ? $filteredTickets
+            : $ticketsApi;
+        $vehicules = collect($vehiculesSource)
+            ->pluck('matricule_vehicule')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
 
         // Récupérer les fiches de sortie associées aux tickets
+        $fichesNonDechargees = $this->fichesNonDechargeesPourChef($request);
         $ticketIds = array_column($ticketsArray, 'id_ticket');
         $fichesSortie = [];
         if (!empty($ticketIds)) {
@@ -200,7 +198,7 @@ class TicketController extends Controller
             }
         }
 
-        $ticketsById = collect($tickets)->keyBy('id_ticket');
+        $ticketsById = $localTickets;
 
         // Ajouter les infos de fiche de sortie et calculer le prix unitaire
         foreach ($ticketsArray as &$ticket) {
@@ -233,19 +231,36 @@ class TicketController extends Controller
                 $ticket['nom_produit'] = null;
             }
 
-            $modeleTicket = $ticketsById->get($idTicket);
-            if ($modeleTicket) {
+            $modeleTicket = $ticketsById->get($idTicket) ?? $this->ticketModeleDepuisApi($ticket);
+            $local = $ticketsById->get($idTicket);
+            $produitId = $this->resoudreProduitIdPourTicket($ticket, $produitId, $fichesNonDechargees);
+
+            $nomUsine = trim((string) ($ticket['nom_usine'] ?? ''));
+            if ($nomUsine === '' || $nomUsine === '-') {
+                $nomUsine = $usinesById[$ticket['id_usine'] ?? 0] ?? '';
+            }
+
+            $prixStocke = (float) ($local?->prix_unitaire ?? $ticket['prix_unitaire'] ?? 0);
+            $montantStocke = (float) ($local?->montant_paie ?? $ticket['montant_paie'] ?? 0);
+
+            if ($prixStocke > 0) {
+                $prixUnitaireAgent = $prixStocke;
+            } else {
                 $prixUnitaireAgent = $this->ticketPrixService->prixUnitairePourTicket(
                     $modeleTicket,
-                    $produitId ? (int) $produitId : null,
+                    $produitId,
                     $ticket['date_ticket'] ?? null,
                     $prixParticuliers,
-                    $idAgentFiche
+                    $idAgentFiche,
+                    $nomUsine !== '' ? $nomUsine : null,
                 );
-                $ticket['prix_unitaire_agent'] = $prixUnitaireAgent;
-                if ($prixUnitaireAgent !== null && (float) ($ticket['poids'] ?? 0) > 0) {
-                    $ticket['montant_calcule'] = $prixUnitaireAgent * (float) $ticket['poids'];
-                }
+            }
+            $ticket['prix_unitaire_agent'] = $prixUnitaireAgent;
+
+            if ($montantStocke > 0) {
+                $ticket['montant_calcule'] = $montantStocke;
+            } elseif ($prixUnitaireAgent !== null && (float) ($ticket['poids'] ?? 0) > 0) {
+                $ticket['montant_calcule'] = $prixUnitaireAgent * (float) $ticket['poids'];
             }
         }
         unset($ticket);
@@ -380,8 +395,91 @@ class TicketController extends Controller
             'produitsLocaux' => $produitsLocaux,
             'usinesParProduit' => $usinesParProduit,
             'parcsParPontProduit' => $parcsParPontProduit,
-            'external_error' => null,
+            'external_error' => $externalError,
+            'fichesNonDechargees' => $fichesNonDechargees,
         ]);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, FicheSortie>
+     */
+    private function fichesNonDechargeesPourChef(Request $request)
+    {
+        $chefAgentIds = $this->mesAgentsService->chefAgentIds($request);
+        if ($chefAgentIds === []) {
+            return collect();
+        }
+
+        return FicheSortie::query()
+            ->whereNull('date_dechargement')
+            ->whereIn('id_agent', $chefAgentIds)
+            ->orderByDesc('date_chargement')
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    /**
+     * @param  array<string, mixed>  $ticket
+     */
+    private function resoudreProduitIdPourTicket(
+        array $ticket,
+        ?int $produitFromFicheLiee,
+        \Illuminate\Support\Collection $fichesNonDechargees
+    ): ?int {
+        if ($produitFromFicheLiee) {
+            return (int) $produitFromFicheLiee;
+        }
+
+        $idAgent = (int) ($ticket['id_agent'] ?? 0);
+        $vehicule = strtoupper(trim((string) ($ticket['matricule_vehicule'] ?? '')));
+        $usine = trim((string) ($ticket['nom_usine'] ?? ''));
+        if ($usine === '' || $usine === '-') {
+            $usine = '';
+        }
+
+        if ($idAgent <= 0) {
+            return null;
+        }
+
+        $candidat = $fichesNonDechargees->first(function (FicheSortie $f) use ($idAgent, $vehicule, $usine) {
+            if ((int) $f->id_agent !== $idAgent || !$f->produit_id) {
+                return false;
+            }
+            if ($vehicule !== '' && strcasecmp(trim((string) $f->matricule_vehicule), $vehicule) !== 0) {
+                return false;
+            }
+            if ($usine !== '' && $f->usine && strcasecmp(trim((string) $f->usine), $usine) !== 0) {
+                return false;
+            }
+
+            return true;
+        });
+
+        return $candidat?->produit_id ? (int) $candidat->produit_id : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $ticket
+     */
+    private function ticketModeleDepuisApi(array $ticket): Ticket
+    {
+        $modele = new Ticket([
+            'id_ticket' => (int) ($ticket['id_ticket'] ?? 0),
+            'id_usine' => (int) ($ticket['id_usine'] ?? 0),
+            'id_agent' => (int) ($ticket['id_agent'] ?? 0),
+            'matricule_vehicule' => (string) ($ticket['matricule_vehicule'] ?? ''),
+            'particulier_agent_id' => $ticket['particulier_agent_id'] ?? null,
+            'poids' => $ticket['poids'] ?? null,
+        ]);
+
+        if (!empty($ticket['date_ticket'])) {
+            try {
+                $modele->date_ticket = Carbon::parse((string) $ticket['date_ticket']);
+            } catch (\Throwable $e) {
+            }
+        }
+
+        return $modele;
     }
 
     public function store(Request $request)
@@ -531,19 +629,112 @@ class TicketController extends Controller
             ->with('success', 'Ticket créé avec succès.');
     }
 
-    public function confirmUnipalm(Request $request, int $id)
+    public function valider(Request $request, int $id, FicheSortieDechargementService $dechargementService)
+    {
+        $validated = $request->validate([
+            'fiche_id' => ['required', 'integer', 'exists:fiches_sortie,id'],
+            'parc_id' => ['nullable', 'integer', 'exists:parcs,id'],
+        ]);
+
+        $chefAgentIds = $this->mesAgentsService->chefAgentIds($request);
+        $apiTicket = $this->mesTicketsService->findTicketById($id, $request);
+
+        if (!$apiTicket) {
+            return redirect()->route('tickets.index')
+                ->with('error', 'Ticket introuvable pour votre équipe.');
+        }
+
+        $fiche = FicheSortie::query()
+            ->whereNull('date_dechargement')
+            ->whereIn('id_agent', $chefAgentIds ?: [-1])
+            ->find($validated['fiche_id']);
+
+        if (!$fiche) {
+            return redirect()->route('tickets.index')
+                ->with('error', 'Fiche de sortie introuvable ou déjà déchargée.');
+        }
+
+        $ticket = Ticket::find($id);
+        if (!$ticket) {
+            $ticket = new Ticket(['id_ticket' => $id]);
+        }
+
+        $dateTicket = $apiTicket['date_ticket'] ?? now()->format('Y-m-d');
+        $poidsTicket = (float) ($apiTicket['poids'] ?? 0);
+        $nomUsine = trim((string) ($apiTicket['nom_usine'] ?? $fiche->usine ?? ''));
+
+        $ticket->fill([
+            'numero_ticket' => (string) ($apiTicket['numero_ticket'] ?? ''),
+            'date_ticket' => $dateTicket,
+            'matricule_vehicule' => (string) ($apiTicket['matricule_vehicule'] ?? ''),
+            'vehicule_id' => (int) ($apiTicket['vehicule_id'] ?? 0) ?: null,
+            'poids' => $apiTicket['poids'] ?? null,
+            'id_usine' => (int) ($apiTicket['id_usine'] ?? 0) ?: null,
+            'id_agent' => (int) ($apiTicket['id_agent'] ?? 0) ?: null,
+            'statut_ticket' => $apiTicket['statut_ticket'] ?? 'non soldé',
+            'id_utilisateur' => $ticket->id_utilisateur ?? 1,
+            'conformite' => 'valide',
+            'poids_unipalm' => $apiTicket['poids'] ?? null,
+            'date_confirmation_unipalm' => now(),
+        ]);
+
+        $prixUnitaire = $this->ticketPrixService->prixUnitairePourTicket(
+            $ticket,
+            $fiche->produit_id ? (int) $fiche->produit_id : null,
+            $dateTicket,
+            null,
+            (int) ($apiTicket['id_agent'] ?? 0) ?: (int) $fiche->id_agent,
+            $nomUsine !== '' ? $nomUsine : null,
+        );
+        $montantPaie = ($prixUnitaire !== null && $poidsTicket > 0)
+            ? round($prixUnitaire * $poidsTicket, 2)
+            : null;
+
+        $ticket->prix_unitaire = $prixUnitaire ?? (float) ($apiTicket['prix_unitaire'] ?? 0);
+        $ticket->montant_paie = $montantPaie ?? $apiTicket['montant_paie'] ?? null;
+        try {
+            DB::transaction(function () use ($ticket, $dechargementService, $fiche, $apiTicket, $dateTicket, $poidsTicket, $id, $validated) {
+                $ticket->save();
+
+                $dechargementService->decharger(
+                    $fiche,
+                    (string) ($apiTicket['numero_ticket'] ?? ''),
+                    $dateTicket,
+                    $poidsTicket,
+                    $id,
+                    isset($apiTicket['nom_usine']) ? (string) $apiTicket['nom_usine'] : null,
+                    isset($validated['parc_id']) ? (int) $validated['parc_id'] : null,
+                );
+            });
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->route('tickets.index')
+                ->with('error', $e->getMessage());
+        }
+
+        $fiche->refresh();
+        $stockMsg = $dechargementService->pontEstGerable((int) $fiche->id_pont)
+            ? ' Le stock du parc a été déduit.'
+            : '';
+
+        return redirect()->route('tickets.index')
+            ->with('success', 'Ticket « ' . ($apiTicket['numero_ticket'] ?? $id) . ' » validé et associé à la fiche '
+                . ($fiche->numero_fiche ?? $fiche->id) . '.' . $stockMsg);
+    }
+
+    public function confirmUnipalm(Request $request, int $id, ChefEquipeContext $chefContext)
     {
         $ticket = Ticket::findOrFail($id);
 
         // Récupérer les tickets depuis l'API Unipalm
         $timeout = 10;
         $ticketsApi = [];
+        $mesTicketsUrl = (string) config('services.external_auth.mes_tickets_url');
 
         try {
             $response = Http::acceptJson()
                 ->withoutVerifying()
                 ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_tickets.php');
+                ->get($mesTicketsUrl, $chefContext->apiQueryParams($request));
             if ($response->successful()) {
                 $ticketsApi = $response->json('tickets') ?? [];
             }
@@ -564,11 +755,7 @@ class TicketController extends Controller
         } catch (\Throwable $e) {}
 
         try {
-            $agentsResponse = Http::acceptJson()->withoutVerifying()->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php');
-            if ($agentsResponse->successful()) {
-                $agentsApi = $agentsResponse->json('agents') ?? [];
-            }
+            $agentsApi = $this->mesAgentsService->fetchAllAgents([], $request);
         } catch (\Throwable $e) {}
 
         // Indexer par ID
@@ -652,19 +839,22 @@ class TicketController extends Controller
 
         $produitId = $ficheSortie?->produit_id ? (int) $ficheSortie->produit_id : null;
         $idAgentFiche = $ficheSortie?->id_agent ? (int) $ficheSortie->id_agent : null;
+        $nomUsinePdf = $ficheSortie?->usine ?: null;
         $prixUnitaire = $this->ticketPrixService->prixUnitairePourTicket(
             $ticket,
             $produitId,
             $ticket->date_ticket?->format('Y-m-d'),
             null,
-            $idAgentFiche
+            $idAgentFiche,
+            $nomUsinePdf
         );
         $montantCalcule = $this->ticketPrixService->montantPourTicket(
             $ticket,
             $produitId,
             $ticket->date_ticket?->format('Y-m-d'),
             null,
-            $idAgentFiche
+            $idAgentFiche,
+            $nomUsinePdf
         );
         if ($montantCalcule === null && (float) ($ticket->prix_unitaire ?? 0) > 0 && $poids > 0) {
             $prixUnitaire = (float) $ticket->prix_unitaire;
@@ -792,10 +982,11 @@ class TicketController extends Controller
     /**
      * Afficher les tickets Unipalm (API) filtrés par les camions du groupe PGF
      */
-    public function unipalm(Request $request)
+    public function unipalm(Request $request, ChefEquipeContext $chefContext)
     {
         $timeout = 10;
         $page = max(1, (int) $request->query('page', 1));
+        $mesTicketsUrl = (string) config('services.external_auth.mes_tickets_url');
 
         // Récupérer le groupe PGF
         $groupePgf = Groupe::where('nom_groupe', 'PGF')->first();
@@ -821,9 +1012,10 @@ class TicketController extends Controller
             $response = Http::acceptJson()
                 ->withoutVerifying()
                 ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_tickets.php', [
-                    'page' => $page,
-                ]);
+                ->get($mesTicketsUrl, array_merge(
+                    $chefContext->apiQueryParams($request),
+                    ['page' => $page],
+                ));
 
             if ($response->successful()) {
                 $allTickets = $response->json('tickets') ?? [];
@@ -903,5 +1095,29 @@ class TicketController extends Controller
 
         return redirect()->route('tickets.unipalm')
             ->with('success', 'Fiche de sortie associée au ticket avec succès.');
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<Ticket>  $query
+     * @param  list<int>  $chefAgentIds
+     */
+    private function appliquerFiltreAgentsChef($query, array $chefAgentIds): void
+    {
+        if ($chefAgentIds === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $particulierAgentIds = ParticulierAgent::query()
+            ->whereIn('id_agent', $chefAgentIds)
+            ->pluck('id');
+
+        $query->where(function ($q) use ($chefAgentIds, $particulierAgentIds) {
+            $q->whereIn('id_agent', $chefAgentIds);
+            if ($particulierAgentIds->isNotEmpty()) {
+                $q->orWhereIn('particulier_agent_id', $particulierAgentIds);
+            }
+        });
     }
 }

@@ -4,11 +4,15 @@ namespace App\Http\Controllers;
 
 use App\Models\Pisteur;
 use App\Models\PisteurPrix;
+use App\Services\MesAgentsService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
 
 class PisteurController extends Controller
 {
+    public function __construct(
+        private MesAgentsService $mesAgentsService,
+    ) {}
+
     public function index()
     {
         $pisteurs = Pisteur::orderBy('nom')->paginate(20);
@@ -21,32 +25,7 @@ class PisteurController extends Controller
 
     private function getAgentsFromApi(): array
     {
-        $timeout = (int) config('services.external_auth.timeout', 10);
-        $agents = [];
-        $page = 1;
-        $maxPages = 10;
-
-        try {
-            while ($page <= $maxPages) {
-                $response = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->get('https://api.objetombrepegasus.online/api/camions/mes_agents.php', ['page' => $page]);
-                
-                if ($response->successful()) {
-                    $pageAgents = $response->json('agents') ?? [];
-                    if (empty($pageAgents)) {
-                        break;
-                    }
-                    $agents = array_merge($agents, $pageAgents);
-                    $page++;
-                } else {
-                    break;
-                }
-            }
-        } catch (\Throwable $e) {}
-
-        return $agents;
+        return $this->mesAgentsService->fetchAllAgents();
     }
 
     public function store(Request $request)
