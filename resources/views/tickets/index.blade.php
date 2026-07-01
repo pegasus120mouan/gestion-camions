@@ -228,12 +228,20 @@
                   <div class="mb-2"><strong>Véhicule:</strong> {{ $t['matricule_vehicule'] ?? '-' }}</div>
                   @php
                     $matriculeVehicule = $t['matricule_vehicule'] ?? '';
-                    $codeTransporteurVehicule = \App\Models\CodeTransporteurVehicule::with('codeTransporteur')
+                    $transporteurVehicule = \App\Models\TransporteurVehicule::with('transporteur')
                         ->where('matricule_vehicule', $matriculeVehicule)
                         ->first();
                     $transporteurNom = 'Non renseigné';
-                    if ($codeTransporteurVehicule && $codeTransporteurVehicule->codeTransporteur) {
-                        $transporteurNom = $codeTransporteurVehicule->codeTransporteur->nom;
+                    if ($transporteurVehicule?->transporteur) {
+                        $transporteurNom = $transporteurVehicule->transporteur->code . ' — '
+                            . $transporteurVehicule->transporteur->nom . ' ' . $transporteurVehicule->transporteur->prenoms;
+                    } else {
+                        $codeTransporteurVehicule = \App\Models\CodeTransporteurVehicule::with('codeTransporteur')
+                            ->where('matricule_vehicule', $matriculeVehicule)
+                            ->first();
+                        if ($codeTransporteurVehicule && $codeTransporteurVehicule->codeTransporteur) {
+                            $transporteurNom = $codeTransporteurVehicule->codeTransporteur->nom;
+                        }
                     }
                   @endphp
                   <div class="mb-2"><strong>Transporteur:</strong> <span class="badge bg-info">{{ $transporteurNom }}</span></div>

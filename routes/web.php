@@ -420,11 +420,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/gestion-financiere/fournisseur/{nom}/pdf', [MontantFournisseurController::class, 'exportPdf'])->name('gestionfinanciere.fournisseur.pdf');
     Route::post('/gestion-financiere/montant-fournisseur/paiement', [MontantFournisseurController::class, 'storePaiement'])->name('gestionfinanciere.montant_fournisseur.paiement');
 
-    // Montant Autres Transporteurs
+    // Montant Transporteurs
     Route::get('/gestion-financiere/montant-transporteur', [MontantTransporteurController::class, 'index'])->name('gestionfinanciere.montant_transporteur');
-    Route::get('/gestion-financiere/transporteur/historique-paiements', [MontantTransporteurController::class, 'historiquePaiements'])->name('gestionfinanciere.transporteur.historique');
+    Route::get('/gestion-financiere/transporteur/{transporteur}', [MontantTransporteurController::class, 'show'])->name('gestionfinanciere.transporteur.show');
+    Route::post('/gestion-financiere/montant-transporteur/{transporteur}/paiement', [MontantTransporteurController::class, 'storePaiementGestion'])->name('gestionfinanciere.paiement_transporteur.store');
+    Route::get('/gestion-financiere/transporteur/{transporteur}/historique-paiements', [MontantTransporteurController::class, 'historiquePaiements'])->name('gestionfinanciere.transporteur.historique');
     Route::get('/gestion-financiere/transporteur/vehicule/{matricule}', [MontantTransporteurController::class, 'showVehicule'])->name('gestionfinanciere.transporteur.vehicule');
-    Route::get('/gestion-financiere/transporteur/{nom}', [MontantTransporteurController::class, 'show'])->name('gestionfinanciere.transporteur.show');
     Route::put('/gestion-financiere/transporteur/fiche/{ficheId}/pu', [MontantTransporteurController::class, 'updatePU'])->name('gestionfinanciere.transporteur.updatePU');
     Route::post('/gestion-financiere/transporteur/fiche/{ficheId}/paiement', [MontantTransporteurController::class, 'storePaiement'])->name('gestionfinanciere.transporteur.paiement');
 

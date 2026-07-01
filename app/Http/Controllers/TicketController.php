@@ -21,6 +21,7 @@ use App\Services\MesAgentsService;
 use App\Services\MesTicketsService;
 use App\Services\ParticulierAgentsApiService;
 use App\Services\TicketPrixService;
+use App\Services\TicketTransporteurFicheService;
 use App\Services\UsinesParProduitService;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -649,10 +650,14 @@ class TicketController extends Controller
             'statut_ticket'       => $validated['statut_ticket'] ?? 'non soldé',
         ]);
 
-        // Si pont + parc + produit fournis → créer une FicheSortie liée au stock
         $idPont   = $validated['id_pont'] ?? null;
         $parcId   = $validated['parc_id'] ?? null;
         $produitId = $validated['produit_id'] ?? null;
+        $ficheCreee = null;
+        $produit = $produitId ? Produit::find($produitId) : null;
+        $nomAgent = trim($agent->nom . ' ' . $agent->prenoms);
+        $numeroAgent = $agent->numero_agent ?? '';
+        $nomUsine = $this->nomUsinePourTicket((int) $ticket->id_usine);
 
         if ($idPont && $produitId) {
             // Trouver le stock ouvert actif pour ce pont + produit (+ parc si fourni)
@@ -670,36 +675,15 @@ class TicketController extends Controller
 
             if ($stock) {
                 $parc    = $parcId ? Parc::find($parcId) : null;
-                $produit = Produit::find($produitId);
 
                 // Récupérer infos pont depuis pont_etats
                 $pontEtat = PontEtat::where('id_pont', $idPont)->first();
                 $nomPont  = $pontEtat?->nom_pont ?? '';
                 $codePont = $pontEtat?->code_pont ?? '';
 
-                // Récupérer le nom de l'usine depuis l'API
-                $nomUsine = (string) $ticket->id_usine;
-                try {
-                    $timeout = (int) config('services.external_auth.timeout', 10);
-                    $usinesUrl = (string) config('services.external_auth.mes_usines_url');
-                    $usinesResp = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($usinesUrl);
-                    if ($usinesResp->successful()) {
-                        foreach ($usinesResp->json('usines') ?? [] as $u) {
-                            if ((int)($u['id_usine'] ?? 0) === (int)$ticket->id_usine) {
-                                $nomUsine = $u['nom_usine'] ?? $nomUsine;
-                                break;
-                            }
-                        }
-                    }
-                } catch (\Throwable $e) {}
-
-                // Nom de l'agent depuis le modèle ParticulierAgent
-                $nomAgent = trim($agent->nom . ' ' . $agent->prenoms);
-                $numeroAgent = $agent->numero_agent ?? '';
-
                 $numeroFiche = app(FicheSortieNumeroService::class)->generer($nomPont, $idPont);
 
-                FicheSortie::create([
+                $ficheCreee = FicheSortie::create([
                     'numero_fiche'       => $numeroFiche,
                     'stock_id'           => $stock->id,
                     'parc_id'            => $parc?->id,
@@ -724,8 +708,27 @@ class TicketController extends Controller
             }
         }
 
+        $transporteurLie = app(TicketTransporteurFicheService::class)->synchroniserTicketTransporteur(
+            $ticket,
+            $ficheCreee,
+            [
+                'nom_usine' => $nomUsine ?? null,
+                'produit_id' => $produitId ? (int) $produitId : null,
+                'nom_produit' => $produit?->nom ?? '',
+                'id_agent' => $agent->id_agent ?? null,
+                'nom_agent' => $nomAgent ?? '',
+                'numero_agent' => $numeroAgent ?? '',
+            ]
+        );
+
+        $message = 'Ticket créé avec succès.';
+        if ($transporteurLie) {
+            $message .= ' Les informations ont été transmises au transporteur '
+                . $transporteurLie->code . ' (' . $transporteurLie->nom . ' ' . $transporteurLie->prenoms . ').';
+        }
+
         return redirect()->route('tickets.index')
-            ->with('success', 'Ticket créé avec succès.');
+            ->with('success', $message);
     }
 
     public function valider(Request $request, int $id, FicheSortieDechargementService $dechargementService)
@@ -850,6 +853,51 @@ class TicketController extends Controller
                 ->with('error', $e->getMessage());
         }
 
+        $ficheTransporteur = $fiche;
+        $matriculeApi = (string) ($apiTicket['matricule_vehicule'] ?? '');
+        if (!$ficheTransporteur) {
+            $ficheTransporteur = FicheSortie::query()
+                ->where('id_ticket', $id)
+                ->orderByDesc('id')
+                ->first();
+        }
+        if (!$ficheTransporteur && $numeroTicket !== '') {
+            $ficheTransporteur = FicheSortie::query()
+                ->where('numero_ticket', $numeroTicket)
+                ->orderByDesc('id')
+                ->first();
+        }
+        if (!$ficheTransporteur && $matriculeApi !== '') {
+            $ficheTransporteur = FicheSortie::query()
+                ->where('matricule_vehicule', $matriculeApi)
+                ->whereNull('id_ticket')
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        if ($ficheTransporteur) {
+            $ficheTransporteur->update(array_filter([
+                'id_ticket' => $id,
+                'numero_ticket' => $numeroTicket !== '' ? $numeroTicket : $ficheTransporteur->numero_ticket,
+                'poids_pont' => $poidsTicket > 0 ? $poidsTicket : $ficheTransporteur->poids_pont,
+                'date_dechargement' => $dateTicket,
+            ], fn ($value) => $value !== null && $value !== ''));
+            $ficheTransporteur->refresh();
+        }
+
+        $transporteurLie = app(TicketTransporteurFicheService::class)->synchroniserTicketTransporteur(
+            $ticket->fresh(),
+            $ficheTransporteur,
+            [
+                'nom_usine' => $nomUsine !== '' ? $nomUsine : null,
+                'produit_id' => $ficheTransporteur?->produit_id,
+                'nom_produit' => $ficheTransporteur?->nom_produit ?? '',
+                'id_agent' => (int) ($apiTicket['id_agent'] ?? 0) ?: $ficheTransporteur?->id_agent,
+                'nom_agent' => $ficheTransporteur?->nom_agent ?? '',
+                'numero_agent' => $ficheTransporteur?->numero_agent ?? '',
+            ]
+        );
+
         if ($fiche) {
             $fiche->refresh();
             $stockMsg = $dechargementService->pontEstGerable((int) $fiche->id_pont)
@@ -858,11 +906,17 @@ class TicketController extends Controller
 
             return redirect()->route('tickets.index')
                 ->with('success', 'Ticket « ' . ($apiTicket['numero_ticket'] ?? $id) . ' » validé et associé à la fiche '
-                    . ($fiche->numero_fiche ?? $fiche->id) . '.' . $stockMsg);
+                    . ($fiche->numero_fiche ?? $fiche->id) . '.' . $stockMsg
+                    . ($transporteurLie ? ' Transmis au transporteur ' . $transporteurLie->code . '.' : ''));
+        }
+
+        $message = 'Ticket « ' . ($apiTicket['numero_ticket'] ?? $id) . ' » validé avec succès.';
+        if ($transporteurLie) {
+            $message .= ' Les informations ont été transmises au transporteur ' . $transporteurLie->code . '.';
         }
 
         return redirect()->route('tickets.index')
-            ->with('success', 'Ticket « ' . ($apiTicket['numero_ticket'] ?? $id) . ' » validé avec succès.');
+            ->with('success', $message);
     }
 
     public function confirmUnipalm(Request $request, int $id, ChefEquipeContext $chefContext)

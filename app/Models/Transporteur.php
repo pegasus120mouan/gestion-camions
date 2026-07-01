@@ -17,4 +17,9 @@ class Transporteur extends Model
     {
         return $this->hasMany(TransporteurVehicule::class);
     }
+
+    public function paiementsGestion(): HasMany
+    {
+        return $this->hasMany(PaiementTransporteurGestion::class)->orderBy('date_paiement', 'desc');
+    }
 }

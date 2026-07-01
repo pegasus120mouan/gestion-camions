@@ -23,12 +23,25 @@
               </div>
               <div>
                 <h4 class="mb-0 fw-bold">{{ $matricule }}</h4>
-                <span class="text-muted">Transporteur : Autre</span>
+                <span class="text-muted">
+                  Transporteur :
+                  @if(!empty($transporteur))
+                    {{ $transporteur->nom }} {{ $transporteur->prenoms }} ({{ $transporteur->code }})
+                  @else
+                    Non assigné
+                  @endif
+                </span>
               </div>
             </div>
-            <a href="{{ route('gestionfinanciere.montant_transporteur') }}" class="btn btn-outline-secondary">
-              <i class="bx bx-arrow-back me-1"></i> Retour à la liste
-            </a>
+            @if(!empty($transporteur))
+              <a href="{{ route('gestionfinanciere.transporteur.show', $transporteur) }}" class="btn btn-outline-secondary">
+                <i class="bx bx-arrow-back me-1"></i> Retour au transporteur
+              </a>
+            @else
+              <a href="{{ route('gestionfinanciere.montant_transporteur') }}" class="btn btn-outline-secondary">
+                <i class="bx bx-arrow-back me-1"></i> Retour à la liste
+              </a>
+            @endif
           </div>
         </div>
       </div>
@@ -132,6 +145,7 @@
                 <th>Avance</th>
                 <th>Payé</th>
                 <th>Reste</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -155,21 +169,63 @@
                   <td>{{ $fiche->nom_pont ?? '-' }}</td>
                   <td>{{ $fiche->usine ?? '-' }}</td>
                   <td>{{ $poids ? number_format($poids, 0, ',', ' ') : '-' }}</td>
-                  <td>{{ $pu ? number_format($pu, 0, ',', ' ') : '-' }}</td>
-                  <td class="text-danger fw-bold">{{ number_format($montantGlobalFiche, 0, ',', ' ') }} FCFA</td>
+                  <td>
+                    @if($pu > 0)
+                      <span class="fw-semibold text-primary">{{ number_format($pu, 0, ',', ' ') }} FCFA</span>
+                    @else
+                      <span class="badge bg-label-warning">Non saisi</span>
+                    @endif
+                  </td>
+                  <td class="text-danger fw-bold">{{ $montantGlobalFiche > 0 ? number_format($montantGlobalFiche, 0, ',', ' ') . ' FCFA' : '-' }}</td>
                   <td class="text-info">{{ number_format($avanceFiche, 0, ',', ' ') }} FCFA</td>
                   <td class="text-success">{{ number_format($payeFiche, 0, ',', ' ') }} FCFA</td>
                   <td class="{{ $resteFiche < 0 ? 'text-danger' : 'text-success' }} fw-bold">{{ number_format($resteFiche, 0, ',', ' ') }} FCFA</td>
+                  <td>
+                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalPU{{ $fiche->id }}">
+                      <i class="bx bx-money me-1"></i>PU
+                    </button>
+                  </td>
                 </tr>
               @empty
                 <tr>
-                  <td colspan="9" class="text-center text-muted">Aucune fiche de sortie</td>
+                  <td colspan="10" class="text-center text-muted">Aucune fiche de sortie</td>
                 </tr>
               @endforelse
             </tbody>
           </table>
         </div>
       </div>
+
+      @foreach($fichesSortie as $fiche)
+        @php
+          $poidsModal = $fiche->poids_pont ?? 0;
+          $puModal = $fiche->prix_unitaire_transport;
+        @endphp
+        <div class="modal fade" id="modalPU{{ $fiche->id }}" tabindex="-1" aria-hidden="true">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <form action="{{ route('gestionfinanciere.transporteur.updatePU', $fiche->id) }}" method="POST">
+                @csrf
+                @method('PUT')
+                <div class="modal-header bg-primary text-white">
+                  <h5 class="modal-title text-white"><i class="bx bx-money me-2"></i>Prix unitaire</h5>
+                  <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                  <div class="mb-3">
+                    <label class="form-label">Prix unitaire (FCFA / kg) <span class="text-danger">*</span></label>
+                    <input type="number" name="prix_unitaire" class="form-control" value="{{ $puModal ?? '' }}" min="0" step="1" required>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+                  <button type="submit" class="btn btn-primary">Enregistrer</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      @endforeach
 
       <!-- Historique des paiements -->
       <div class="card">

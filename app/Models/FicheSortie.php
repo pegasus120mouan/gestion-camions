@@ -15,6 +15,7 @@ class FicheSortie extends Model
         'nom_parc',
         'vehicule_id',
         'matricule_vehicule',
+        'transporteur_id',
         'id_pont',
         'nom_pont',
         'code_pont',
@@ -49,5 +50,11 @@ class FicheSortie extends Model
         'prix_unitaire_camion' => 'decimal:2',
         'montant_camion' => 'decimal:2',
         'montant_agent' => 'decimal:2',
+        'transporteur_id' => 'integer',
     ];
+
+    public function transporteur()
+    {
+        return $this->belongsTo(Transporteur::class);
+    }
 }
