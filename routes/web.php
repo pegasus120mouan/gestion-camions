@@ -22,6 +22,7 @@ use App\Http\Controllers\MinioProxyController;
 use App\Http\Controllers\ChefChargeurController;
 use App\Http\Controllers\ChargeurController;
 use App\Http\Controllers\ChauffeurController;
+use App\Http\Controllers\TransporteurController;
 use App\Http\Controllers\MontantChefChargeurController;
 use App\Http\Controllers\MontantFournisseurController;
 use App\Http\Controllers\MontantTransporteurController;
@@ -365,6 +366,15 @@ Route::middleware('auth')->group(function () {
     Route::post('/chauffeurs', [ChauffeurController::class, 'store'])->name('chauffeurs.store');
     Route::put('/chauffeurs/{chauffeur}', [ChauffeurController::class, 'update'])->name('chauffeurs.update');
     Route::delete('/chauffeurs/{chauffeur}', [ChauffeurController::class, 'destroy'])->name('chauffeurs.destroy');
+
+    Route::get('/transporteurs', [TransporteurController::class, 'index'])->name('transporteurs.index');
+    Route::post('/transporteurs', [TransporteurController::class, 'store'])->name('transporteurs.store');
+    Route::get('/transporteurs/{transporteur}', [TransporteurController::class, 'show'])->name('transporteurs.show');
+    Route::get('/transporteurs/{transporteur}/ajouter-camions', [TransporteurController::class, 'ajouterCamions'])->name('transporteurs.camions.ajouter');
+    Route::post('/transporteurs/{transporteur}/camions', [TransporteurController::class, 'assignerCamions'])->name('transporteurs.camions.assigner');
+    Route::delete('/transporteurs/{transporteur}/camions/{vehicule_id}', [TransporteurController::class, 'retirerCamion'])->name('transporteurs.camions.retirer');
+    Route::put('/transporteurs/{transporteur}', [TransporteurController::class, 'update'])->name('transporteurs.update');
+    Route::delete('/transporteurs/{transporteur}', [TransporteurController::class, 'destroy'])->name('transporteurs.destroy');
 
     // Bilan par véhicule
     Route::get('/bilan-vehicule', [BilanVehiculeController::class, 'index'])->name('bilan-vehicule.index');

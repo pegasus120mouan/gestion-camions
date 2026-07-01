@@ -462,6 +462,15 @@
                 <div class="text-truncate" data-i18n="Chauffeurs">Gestion Chauffeurs</div>
               </a>
             </li>
+
+            <li class="menu-item {{ request()->routeIs('transporteurs.*') ? 'active' : '' }}">
+              <a href="{{ route('transporteurs.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-bus" style="color: #7367f0;"></i>
+                <div class="text-truncate" data-i18n="Transporteurs">Gestion Transporteurs</div>
+              </a>
+            </li>
+
+
             <li class="menu-item {{ request()->routeIs('bilan-vehicule.*') ? 'active' : '' }}">
               <a href="{{ route('bilan-vehicule.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-bar-chart-alt-2" style="color: #28c76f;"></i>

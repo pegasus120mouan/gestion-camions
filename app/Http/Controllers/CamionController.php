@@ -7,6 +7,7 @@ use App\Models\Camion;
 use App\Models\FicheSortie;
 use App\Models\Groupe;
 use App\Models\GroupeVehicule;
+use App\Models\TransporteurVehicule;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -471,6 +472,8 @@ class CamionController extends Controller
                     'matricule_vehicule' => $matricule,
                 ]
             );
+
+            TransporteurVehicule::query()->where('vehicule_id', $vehiculeId)->delete();
             $count++;
         }
 

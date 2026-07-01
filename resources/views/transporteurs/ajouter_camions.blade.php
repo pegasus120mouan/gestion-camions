@@ -1,14 +1,16 @@
 @extends('layout.main')
+
 @section('content')
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
       <div>
-        <h4 class="mb-1">Ajouter des camions au groupe PGF</h4>
-        <p class="text-muted mb-0">Sélectionnez un ou plusieurs camions puis validez.</p>
+        <h4 class="mb-1">Ajouter des camions — {{ $transporteur->code }}</h4>
+        <p class="text-muted mb-0">{{ $transporteur->nom }} {{ $transporteur->prenoms }}</p>
+        <p class="text-muted small mb-0">Les camions du groupe PGF ne peuvent pas être attribués à un transporteur.</p>
       </div>
-      <a href="{{ route('camions.camions_pgf') }}" class="btn btn-outline-secondary">
-        <i class="bx bx-arrow-back me-1"></i>Retour à la liste PGF
+      <a href="{{ route('transporteurs.show', $transporteur) }}" class="btn btn-outline-secondary">
+        <i class="bx bx-arrow-back me-1"></i>Retour à la liste
       </a>
     </div>
 
@@ -30,19 +32,17 @@
       </div>
     @endif
 
-    <form method="POST" action="{{ route('camions.assigner_groupe_bulk') }}" id="formAjouterCamionsPgf">
+    <form method="POST" action="{{ route('transporteurs.camions.assigner', $transporteur) }}" id="formAjouterCamionsTransporteur">
       @csrf
-      <input type="hidden" name="groupe_id" value="{{ $groupe_pgf->id }}">
-
       <div class="card mb-3">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
           <h5 class="mb-0">Camions disponibles <span class="badge bg-label-primary">{{ $total_disponibles }}</span></h5>
           <div class="d-flex gap-2 flex-wrap">
             <input type="text" id="searchVehicule" class="form-control" placeholder="Rechercher par immatriculation..." style="width: 240px;" autocomplete="off">
-            <button type="button" class="btn btn-outline-primary" id="btnSelectAll">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="btnSelectAll">
               <i class="bx bx-check-square me-1"></i>Tout sélectionner
             </button>
-            <button type="button" class="btn btn-outline-secondary" id="btnDeselectAll">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDeselectAll">
               <i class="bx bx-square me-1"></i>Tout désélectionner
             </button>
           </div>
@@ -58,30 +58,37 @@
                 <th>#</th>
                 <th>Matricule</th>
                 <th>Type</th>
+                <th>Statut</th>
               </tr>
             </thead>
             <tbody>
-              @forelse($vehicules_disponibles as $index => $v)
+              @forelse($lignes as $index => $ligne)
                 @php
-                  $vehiculeId = (int) ($v['vehicules_id'] ?? 0);
-                  $matricule = $v['matricule_vehicule'] ?? '';
-                  $typeVehicule = strtolower($v['type_vehicule'] ?? '');
+                  $typeVehicule = strtolower($ligne['type_vehicule'] ?? '');
+                  $selectable = $ligne['selectable'];
                 @endphp
-                <tr class="vehicule-row" data-matricule="{{ strtolower($matricule) }}" data-type="{{ $typeVehicule }}">
+                <tr
+                  class="vehicule-row {{ !$selectable ? 'table-light' : '' }}"
+                  data-matricule="{{ strtolower($ligne['matricule_vehicule']) }}"
+                >
                   <td>
-                    <input
-                      type="checkbox"
-                      class="form-check-input vehicule-checkbox"
-                      name="vehicule_ids[]"
-                      value="{{ $vehiculeId }}"
-                      id="vehicule_{{ $vehiculeId }}"
-                    >
-                    <input type="hidden" name="matricules[{{ $vehiculeId }}]" value="{{ $matricule }}">
+                    @if($selectable)
+                      <input
+                        type="checkbox"
+                        class="form-check-input vehicule-checkbox"
+                        name="vehicule_ids[]"
+                        value="{{ $ligne['vehicule_id'] }}"
+                        id="vehicule_{{ $ligne['vehicule_id'] }}"
+                      >
+                      <input type="hidden" name="matricules[{{ $ligne['vehicule_id'] }}]" value="{{ $ligne['matricule_vehicule'] }}">
+                    @else
+                      <input type="checkbox" class="form-check-input" disabled>
+                    @endif
                   </td>
                   <td>{{ $index + 1 }}</td>
                   <td>
-                    <label for="vehicule_{{ $vehiculeId }}" class="mb-0 cursor-pointer">
-                      <strong>{{ $matricule ?: '-' }}</strong>
+                    <label for="vehicule_{{ $ligne['vehicule_id'] }}" class="mb-0 {{ $selectable ? 'cursor-pointer' : '' }}">
+                      <strong>{{ $ligne['matricule_vehicule'] ?: '—' }}</strong>
                     </label>
                   </td>
                   <td>
@@ -90,15 +97,24 @@
                     @elseif($typeVehicule === 'moto')
                       <i class="bx bx-cycling text-success"></i> Moto
                     @else
-                      {{ $v['type_vehicule'] ?? '-' }}
+                      {{ $ligne['type_vehicule'] ?: '—' }}
+                    @endif
+                  </td>
+                  <td>
+                    @if($ligne['est_pgf'])
+                      <span class="badge bg-label-danger">PGF</span>
+                    @elseif($ligne['autre_transporteur'])
+                      <span class="badge bg-label-warning">{{ $ligne['autre_transporteur']->code }}</span>
+                    @elseif($ligne['deja_associe'])
+                      <span class="badge bg-label-success">Déjà associé</span>
+                    @else
+                      <span class="text-muted">Disponible</span>
                     @endif
                   </td>
                 </tr>
               @empty
-                <tr id="rowAucunVehicule">
-                  <td colspan="4" class="text-center py-4">
-                    Tous les camions sont déjà dans le groupe PGF.
-                  </td>
+                <tr>
+                  <td colspan="5" class="text-center py-4 text-muted">Aucun camion disponible à ajouter.</td>
                 </tr>
               @endforelse
             </tbody>
@@ -109,7 +125,7 @@
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <span class="text-muted" id="selectionCount">0 camion sélectionné</span>
         <div class="d-flex gap-2">
-          <a href="{{ route('camions.camions_pgf') }}" class="btn btn-secondary">Annuler</a>
+          <a href="{{ route('transporteurs.show', $transporteur) }}" class="btn btn-secondary">Annuler</a>
           <button type="button" class="btn btn-primary" id="btnValider" disabled>
             <i class="bx bx-check me-1"></i>Valider la sélection
           </button>
@@ -126,7 +142,9 @@
         <h5 class="modal-title"><i class="bx bx-error-circle me-2"></i>Sélection requise</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body">Veuillez sélectionner au moins un camion avant de valider.</div>
+      <div class="modal-body">
+        Veuillez sélectionner au moins un camion avant de valider.
+      </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Compris</button>
       </div>
@@ -139,21 +157,26 @@
     <div class="modal-content">
       <div class="modal-header bg-primary text-white">
         <h5 class="modal-title text-white">
-          <i class="bx bx-check-circle me-2"></i>Confirmer l'ajout au groupe PGF
+          <i class="bx bx-check-circle me-2"></i>Confirmer l'ajout des camions
         </h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <p class="mb-3">
-          Vous allez ajouter
+          Vous allez associer
           <strong id="modalConfirmerCount">0</strong>
           <span id="modalConfirmerLabelCamion">camion</span>
-          au groupe <strong>PGF</strong>.
+          au transporteur suivant :
         </p>
         <div class="alert alert-light border mb-0">
-          <i class="bx bx-info-circle me-1 text-primary"></i>
-          Ces camions seront retirés de tout transporteur auquel ils étaient associés.
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="badge bg-label-primary">{{ $transporteur->code }}</span>
+            <strong>{{ $transporteur->nom }} {{ $transporteur->prenoms }}</strong>
+          </div>
         </div>
+        <p class="text-muted small mb-0 mt-3">
+          <i class="bx bx-info-circle me-1"></i>Les camions du groupe PGF ne peuvent pas être attribués.
+        </p>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
@@ -172,34 +195,34 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  const searchInput = document.getElementById('searchVehicule');
-  const checkAll = document.getElementById('checkAll');
-  const btnSelectAll = document.getElementById('btnSelectAll');
-  const btnDeselectAll = document.getElementById('btnDeselectAll');
-  const btnValider = document.getElementById('btnValider');
-  const selectionCount = document.getElementById('selectionCount');
-  const form = document.getElementById('formAjouterCamionsPgf');
-  const modalAucuneSelection = document.getElementById('modalAucuneSelection');
-  const modalConfirmerAjout = document.getElementById('modalConfirmerAjout');
-  const modalConfirmerCount = document.getElementById('modalConfirmerCount');
-  const modalConfirmerLabelCamion = document.getElementById('modalConfirmerLabelCamion');
-  const btnConfirmerAjout = document.getElementById('btnConfirmerAjout');
+  var searchInput = document.getElementById('searchVehicule');
+  var checkAll = document.getElementById('checkAll');
+  var btnSelectAll = document.getElementById('btnSelectAll');
+  var btnDeselectAll = document.getElementById('btnDeselectAll');
+  var btnValider = document.getElementById('btnValider');
+  var selectionCount = document.getElementById('selectionCount');
+  var form = document.getElementById('formAjouterCamionsTransporteur');
+  var modalAucuneSelection = document.getElementById('modalAucuneSelection');
+  var modalConfirmerAjout = document.getElementById('modalConfirmerAjout');
+  var modalConfirmerCount = document.getElementById('modalConfirmerCount');
+  var modalConfirmerLabelCamion = document.getElementById('modalConfirmerLabelCamion');
+  var btnConfirmerAjout = document.getElementById('btnConfirmerAjout');
 
-  function visibleCheckboxes() {
-    return Array.from(document.querySelectorAll('.vehicule-row:not(.d-none) .vehicule-checkbox'));
-  }
-
-  function allCheckboxes() {
+  function selectableCheckboxes() {
     return Array.from(document.querySelectorAll('.vehicule-checkbox'));
   }
 
+  function visibleSelectableCheckboxes() {
+    return Array.from(document.querySelectorAll('.vehicule-row:not(.d-none) .vehicule-checkbox'));
+  }
+
   function updateSelectionState() {
-    const checked = allCheckboxes().filter(function(cb) { return cb.checked; });
-    const count = checked.length;
+    var checked = selectableCheckboxes().filter(function(cb) { return cb.checked; });
+    var count = checked.length;
     selectionCount.textContent = count + (count > 1 ? ' camions sélectionnés' : ' camion sélectionné');
     btnValider.disabled = count === 0;
 
-    const visible = visibleCheckboxes();
+    var visible = visibleSelectableCheckboxes();
     if (checkAll) {
       checkAll.checked = visible.length > 0 && visible.every(function(cb) { return cb.checked; });
       checkAll.indeterminate = visible.some(function(cb) { return cb.checked; }) && !checkAll.checked;
@@ -207,23 +230,21 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function filterRows() {
-    const term = (searchInput?.value || '').toLowerCase().trim();
+    var term = (searchInput?.value || '').toLowerCase().trim();
     document.querySelectorAll('.vehicule-row').forEach(function(row) {
-      const matricule = row.dataset.matricule || '';
-      const type = row.dataset.type || '';
-      const match = term === '' || matricule.includes(term) || type.includes(term);
-      row.classList.toggle('d-none', !match);
+      var matricule = row.dataset.matricule || '';
+      row.classList.toggle('d-none', term !== '' && !matricule.includes(term));
     });
     updateSelectionState();
   }
 
-  allCheckboxes().forEach(function(cb) {
+  selectableCheckboxes().forEach(function(cb) {
     cb.addEventListener('change', updateSelectionState);
   });
 
   if (checkAll) {
     checkAll.addEventListener('change', function() {
-      visibleCheckboxes().forEach(function(cb) {
+      visibleSelectableCheckboxes().forEach(function(cb) {
         cb.checked = checkAll.checked;
       });
       updateSelectionState();
@@ -232,14 +253,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (btnSelectAll) {
     btnSelectAll.addEventListener('click', function() {
-      visibleCheckboxes().forEach(function(cb) { cb.checked = true; });
+      visibleSelectableCheckboxes().forEach(function(cb) { cb.checked = true; });
       updateSelectionState();
     });
   }
 
   if (btnDeselectAll) {
     btnDeselectAll.addEventListener('click', function() {
-      allCheckboxes().forEach(function(cb) { cb.checked = false; });
+      selectableCheckboxes().forEach(function(cb) { cb.checked = false; });
       updateSelectionState();
     });
   }
@@ -250,7 +271,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (btnValider) {
     btnValider.addEventListener('click', function() {
-      const count = allCheckboxes().filter(function(cb) { return cb.checked; }).length;
+      var count = selectableCheckboxes().filter(function(cb) { return cb.checked; }).length;
       if (count === 0) {
         if (modalAucuneSelection) {
           bootstrap.Modal.getOrCreateInstance(modalAucuneSelection).show();
@@ -277,7 +298,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (form) {
     form.addEventListener('submit', function(e) {
-      const count = allCheckboxes().filter(function(cb) { return cb.checked; }).length;
+      var count = selectableCheckboxes().filter(function(cb) { return cb.checked; }).length;
       if (count === 0) {
         e.preventDefault();
         if (modalAucuneSelection) {
