@@ -193,7 +193,9 @@ Route::middleware('auth')->group(function () {
     Route::resource('camions', CamionController::class)->except(['create']);
     Route::post('/vehicules/{vehicule_id}/etat', [CamionController::class, 'updateVehiculeEtat'])->name('vehicules.etat.update');
     Route::get('/camions-pgf', [CamionController::class, 'camionsPgf'])->name('camions.camions_pgf');
+    Route::get('/camions-pgf/ajouter', [CamionController::class, 'ajouterCamionsPgf'])->name('camions.camions_pgf.ajouter');
     Route::post('/camions/assigner-groupe', [CamionController::class, 'assignerGroupe'])->name('camions.assigner_groupe');
+    Route::post('/camions/assigner-groupe-bulk', [CamionController::class, 'assignerGroupeBulk'])->name('camions.assigner_groupe_bulk');
     Route::delete('/camions/{vehicule_id}/retirer-groupe', [CamionController::class, 'retirerGroupe'])->name('camions.retirer_groupe');
     Route::resource('ponts_pesage', PontPesageController::class)->except(['create']);
     Route::post('/ponts_pesage/{pontPesage}/toggle-gerable', [PontPesageController::class, 'toggleGerable'])->name('ponts_pesage.toggle_gerable');

@@ -349,19 +349,7 @@ class CamionController extends Controller
 
     public function camionsPgf(Request $request)
     {
-        $timeout = 10;
-
-        // Récupérer tous les véhicules depuis l'API
-        $vehicules = [];
-        try {
-            $response = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
-            if ($response->successful()) {
-                $vehicules = $response->json('vehicules') ?? [];
-            }
-        } catch (\Throwable $e) {}
+        $vehicules = $this->fetchVehiculesApi();
 
         // Récupérer le groupe PGF (ou le créer s'il n'existe pas)
         $groupePgf = Groupe::firstOrCreate(['nom_groupe' => 'PGF']);
@@ -416,17 +404,104 @@ class CamionController extends Controller
             }
         }
 
-        // Récupérer tous les groupes pour le modal d'assignation
-        $groupes = Groupe::all();
-
         return view('camions.camions_pgf', [
             'camions_pgf' => $camionsPgf,
-            'all_vehicules' => $vehicules,
-            'groupes' => $groupes,
             'groupe_pgf' => $groupePgf,
             'etats_par_vehicule' => $etatsParVehicule,
             'vehicules_en_cours' => $vehiculesEnCours,
         ]);
+    }
+
+    public function ajouterCamionsPgf(Request $request)
+    {
+        $vehicules = $this->fetchVehiculesApi();
+        $groupePgf = Groupe::firstOrCreate(['nom_groupe' => 'PGF']);
+        $vehiculesGroupePgf = GroupeVehicule::where('groupe_id', $groupePgf->id)
+            ->pluck('vehicule_id')
+            ->map(static fn ($id) => (int) $id)
+            ->toArray();
+
+        $vehiculesDisponibles = array_values(array_filter($vehicules, function ($v) use ($vehiculesGroupePgf) {
+            return !in_array((int) ($v['vehicules_id'] ?? 0), $vehiculesGroupePgf, true);
+        }));
+
+        if ($request->filled('q')) {
+            $q = strtolower($request->string('q')->toString());
+            $vehiculesDisponibles = array_values(array_filter($vehiculesDisponibles, function ($v) use ($q) {
+                $matricule = strtolower($v['matricule_vehicule'] ?? '');
+                $type = strtolower($v['type_vehicule'] ?? '');
+
+                return str_contains($matricule, $q) || str_contains($type, $q);
+            }));
+        }
+
+        return view('camions.camions_pgf_ajouter', [
+            'vehicules_disponibles' => $vehiculesDisponibles,
+            'groupe_pgf' => $groupePgf,
+            'total_disponibles' => count($vehiculesDisponibles),
+        ]);
+    }
+
+    public function assignerGroupeBulk(Request $request)
+    {
+        $validated = $request->validate([
+            'vehicule_ids' => ['required', 'array', 'min:1'],
+            'vehicule_ids.*' => ['integer'],
+            'matricules' => ['required', 'array'],
+            'groupe_id' => ['required', 'integer', 'exists:groupes,id'],
+        ], [
+            'vehicule_ids.required' => 'Sélectionnez au moins un camion.',
+            'vehicule_ids.min' => 'Sélectionnez au moins un camion.',
+        ]);
+
+        $count = 0;
+        foreach ($validated['vehicule_ids'] as $vehiculeId) {
+            $vehiculeId = (int) $vehiculeId;
+            $matricule = trim((string) ($validated['matricules'][$vehiculeId] ?? ''));
+            if ($vehiculeId <= 0 || $matricule === '') {
+                continue;
+            }
+
+            GroupeVehicule::updateOrCreate(
+                [
+                    'vehicule_id' => $vehiculeId,
+                    'groupe_id' => (int) $validated['groupe_id'],
+                ],
+                [
+                    'matricule_vehicule' => $matricule,
+                ]
+            );
+            $count++;
+        }
+
+        if ($count === 0) {
+            return back()->with('error', 'Aucun camion valide n\'a pu être ajouté.');
+        }
+
+        $message = $count === 1
+            ? '1 camion ajouté au groupe PGF avec succès.'
+            : "{$count} camions ajoutés au groupe PGF avec succès.";
+
+        return redirect()->route('camions.camions_pgf')->with('success', $message);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function fetchVehiculesApi(): array
+    {
+        try {
+            $response = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout(10)
+                ->get('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
+            if ($response->successful()) {
+                return $response->json('vehicules') ?? [];
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return [];
     }
 
     public function assignerGroupe(Request $request)

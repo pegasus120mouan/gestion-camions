@@ -4,10 +4,17 @@
   <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <h4 class="mb-0">Camions PGF</h4>
-      <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAssignerCamion">
-        <i class="bx bx-plus me-1"></i>Ajouter un camion
-      </button>
+      <a href="{{ route('camions.camions_pgf.ajouter') }}" class="btn btn-primary">
+        <i class="bx bx-plus me-1"></i>Ajouter des camions
+      </a>
     </div>
+
+    @if(session('error'))
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
 
     @if(session('success'))
       <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -120,76 +127,4 @@
     </div>
   </div>
 </div>
-
-<!-- Modal Assigner Camion -->
-<div class="modal fade" id="modalAssignerCamion" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title text-white"><i class="bx bx-plus me-2"></i>Ajouter un camion au groupe PGF</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <form action="{{ route('camions.assigner_groupe') }}" method="POST">
-        @csrf
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">Sélectionner un véhicule</label>
-            <input type="text" id="searchVehicule" class="form-control mb-2" placeholder="Rechercher par immatriculation..." autocomplete="off">
-            <select name="vehicule_id" class="form-select" required id="selectVehicule" size="8" style="height: auto;">
-              @foreach($all_vehicules as $v)
-                <option value="{{ $v['vehicules_id'] }}" data-matricule="{{ $v['matricule_vehicule'] }}">
-                  {{ $v['matricule_vehicule'] }} ({{ $v['type_vehicule'] ?? '-' }})
-                </option>
-              @endforeach
-            </select>
-            <input type="hidden" name="matricule_vehicule" id="matriculeVehicule">
-          </div>
-          <input type="hidden" name="groupe_id" value="{{ $groupe_pgf->id }}">
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-primary"><i class="bx bx-save me-1"></i>Ajouter</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const selectVehicule = document.getElementById('selectVehicule');
-  const matriculeInput = document.getElementById('matriculeVehicule');
-  const searchInput = document.getElementById('searchVehicule');
-  
-  // Stocker toutes les options originales
-  const allOptions = Array.from(selectVehicule.options);
-  
-  // Filtrer les options lors de la saisie
-  if (searchInput) {
-    searchInput.addEventListener('input', function() {
-      const searchTerm = this.value.toLowerCase().trim();
-      
-      // Vider le select
-      selectVehicule.innerHTML = '';
-      
-      // Filtrer et réajouter les options correspondantes
-      allOptions.forEach(function(option) {
-        const text = option.textContent.toLowerCase();
-        if (text.includes(searchTerm) || searchTerm === '') {
-          selectVehicule.appendChild(option.cloneNode(true));
-        }
-      });
-    });
-  }
-  
-  if (selectVehicule && matriculeInput) {
-    selectVehicule.addEventListener('change', function() {
-      const selected = this.options[this.selectedIndex];
-      if (selected) {
-        matriculeInput.value = selected.dataset.matricule || '';
-      }
-    });
-  }
-});
-</script>
 @endsection

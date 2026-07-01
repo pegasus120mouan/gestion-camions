@@ -89,8 +89,6 @@
               <th>Agent</th>
               <th>Vehicule</th>
               <th>Poids Usine</th>
-              <th>Prix U</th>
-              <th>Montant</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -126,30 +124,17 @@
                 </td>
                 <td>{{ number_format((float)($t['poids'] ?? 0), 0, ',', ' ') }}</td>
                 <td>
-                  @if(($t['prix_unitaire_agent'] ?? null) !== null)
-                    {{ number_format((float) $t['prix_unitaire_agent'], 0, ',', ' ') }}
-                  @else
-                    <span class="text-muted">-</span>
-                  @endif
-                </td>
-                <td>
-                  @if(($t['montant_calcule'] ?? null) !== null)
-                    <span class="fw-semibold">{{ number_format((float) $t['montant_calcule'], 0, ',', ' ') }}</span>
-                  @else
-                    <span class="text-muted">-</span>
-                  @endif
-                </td>
-                <td>
                   <a href="{{ route('tickets.pdf', ['id' => $t['id_ticket']]) }}" class="btn btn-sm btn-outline-secondary me-1" target="_blank" rel="noopener" title="Imprimer en PDF">
                     <i class="bx bx-printer"></i>
                   </a>
                   @php
                     $ticketValide = in_array($t['conformite'] ?? '', ['valide', 'conforme'], true);
+                    $estCamionPgf = (bool) ($t['est_camion_pgf'] ?? false);
                   @endphp
                   <button
                     type="button"
-                    class="btn btn-sm {{ $ticketValide ? 'btn-success' : 'btn-outline-success' }}"
-                    title="{{ $ticketValide ? 'Ticket déjà validé' : 'Valider' }}"
+                    class="btn btn-sm {{ $ticketValide ? 'btn-secondary' : 'btn-outline-success' }}"
+                    title="{{ $ticketValide ? 'Ticket déjà validé' : ($estCamionPgf ? 'Valider avec fiche de sortie' : 'Valider le ticket') }}"
                     data-bs-toggle="modal"
                     data-bs-target="#modalValiderTicket{{ $loop->index }}"
                     @if($ticketValide) disabled @endif
@@ -160,7 +145,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="9" class="text-center">Aucun ticket</td>
+                <td colspan="7" class="text-center">Aucun ticket</td>
               </tr>
             @endforelse
           </tbody>
@@ -413,21 +398,25 @@
 <!-- Modals validation ticket + fiche de sortie -->
 @foreach($tickets as $index => $t)
   @php
+    $estCamionPgf = (bool) ($t['est_camion_pgf'] ?? false);
     $matriculeTicket = trim((string) ($t['matricule_vehicule'] ?? ''));
     $idAgentTicket = (int) ($t['id_agent'] ?? 0);
-    $fichesPourTicket = ($fichesNonDechargees ?? collect())->filter(function ($fiche) use ($matriculeTicket, $idAgentTicket) {
-        $matchVehicule = $matriculeTicket !== ''
-            && strcasecmp(trim((string) $fiche->matricule_vehicule), $matriculeTicket) === 0;
-        $matchAgent = $idAgentTicket > 0 && (int) $fiche->id_agent === $idAgentTicket;
+    $fichesPourTicket = collect();
+    if ($estCamionPgf) {
+        $fichesPourTicket = ($fichesNonDechargees ?? collect())->filter(function ($fiche) use ($matriculeTicket, $idAgentTicket) {
+            $matchVehicule = $matriculeTicket !== ''
+                && strcasecmp(trim((string) $fiche->matricule_vehicule), $matriculeTicket) === 0;
+            $matchAgent = $idAgentTicket > 0 && (int) $fiche->id_agent === $idAgentTicket;
 
-        return $matchVehicule || $matchAgent;
-    });
-    if ($fichesPourTicket->isEmpty()) {
-        $fichesPourTicket = $fichesNonDechargees ?? collect();
+            return $matchVehicule || $matchAgent;
+        });
+        if ($fichesPourTicket->isEmpty()) {
+            $fichesPourTicket = $fichesNonDechargees ?? collect();
+        }
     }
   @endphp
   <div class="modal fade" id="modalValiderTicket{{ $index }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-dialog {{ $estCamionPgf ? 'modal-xl modal-dialog-scrollable' : '' }}">
       <div class="modal-content">
         <div class="modal-header bg-success text-white">
           <h5 class="modal-title text-white">
@@ -447,57 +436,67 @@
               </div>
             </div>
 
-            <h6 class="mb-3">Fiches de sortie non déchargées</h6>
+            @if($estCamionPgf)
+              <p class="text-muted small mb-3">
+                <i class="bx bx-info-circle me-1"></i>Camion du groupe PGF — associez une fiche de sortie non déchargée.
+              </p>
+              <h6 class="mb-3">Fiches de sortie non déchargées</h6>
 
-            @if($fichesPourTicket->isEmpty())
-              <div class="alert alert-warning mb-0">
-                Aucune fiche de sortie en attente de déchargement pour votre équipe.
-              </div>
-            @else
-              <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0">
-                  <thead>
-                    <tr>
-                      <th style="width: 40px;"></th>
-                      <th>N° Fiche</th>
-                      <th>Date chargement</th>
-                      <th>Véhicule</th>
-                      <th>Agent</th>
-                      <th>Pont</th>
-                      <th>Usine</th>
-                      <th>Poids parc</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @foreach($fichesPourTicket as $fiche)
+              @if($fichesPourTicket->isEmpty())
+                <div class="alert alert-warning mb-0">
+                  Aucune fiche de sortie en attente de déchargement pour votre équipe.
+                </div>
+              @else
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead>
                       <tr>
-                        <td>
-                          <input
-                            type="radio"
-                            name="fiche_id"
-                            value="{{ $fiche->id }}"
-                            class="form-check-input"
-                            required
-                            {{ $loop->first ? 'checked' : '' }}
-                          />
-                        </td>
-                        <td>{{ $fiche->numero_fiche ?? ('#' . $fiche->id) }}</td>
-                        <td>{{ $fiche->date_chargement ? $fiche->date_chargement->format('d-m-Y') : '-' }}</td>
-                        <td>{{ $fiche->matricule_vehicule ?? '-' }}</td>
-                        <td>{{ $fiche->nom_agent ?? '-' }}</td>
-                        <td>{{ $fiche->nom_pont ?? '-' }}</td>
-                        <td>{{ $fiche->usine ?? '-' }}</td>
-                        <td>{{ $fiche->poids_pont ? number_format((float) $fiche->poids_pont, 0, ',', ' ') . ' kg' : '-' }}</td>
+                        <th style="width: 40px;"></th>
+                        <th>N° Fiche</th>
+                        <th>Date chargement</th>
+                        <th>Véhicule</th>
+                        <th>Agent</th>
+                        <th>Pont</th>
+                        <th>Usine</th>
+                        <th>Poids parc</th>
                       </tr>
-                    @endforeach
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      @foreach($fichesPourTicket as $fiche)
+                        <tr>
+                          <td>
+                            <input
+                              type="radio"
+                              name="fiche_id"
+                              value="{{ $fiche->id }}"
+                              class="form-check-input"
+                              required
+                              {{ $loop->first ? 'checked' : '' }}
+                            />
+                          </td>
+                          <td>{{ $fiche->numero_fiche ?? ('#' . $fiche->id) }}</td>
+                          <td>{{ $fiche->date_chargement ? $fiche->date_chargement->format('d-m-Y') : '-' }}</td>
+                          <td>{{ $fiche->matricule_vehicule ?? '-' }}</td>
+                          <td>{{ $fiche->nom_agent ?? '-' }}</td>
+                          <td>{{ $fiche->nom_pont ?? '-' }}</td>
+                          <td>{{ $fiche->usine ?? '-' }}</td>
+                          <td>{{ $fiche->poids_pont ? number_format((float) $fiche->poids_pont, 0, ',', ' ') . ' kg' : '-' }}</td>
+                        </tr>
+                      @endforeach
+                    </tbody>
+                  </table>
+                </div>
+              @endif
+            @else
+              <div class="alert alert-info mb-0">
+                <i class="bx bx-check-circle me-1"></i>
+                Ce camion n'appartient pas au groupe PGF. Le ticket sera validé directement, sans fiche de sortie.
               </div>
             @endif
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-            <button type="submit" class="btn btn-success" @if($fichesPourTicket->isEmpty()) disabled @endif>
+            <button type="submit" class="btn btn-success" @if($estCamionPgf && $fichesPourTicket->isEmpty()) disabled @endif>
               <i class="bx bx-check me-1"></i>Valider
             </button>
           </div>

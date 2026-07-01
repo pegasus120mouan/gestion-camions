@@ -265,6 +265,16 @@ class TicketController extends Controller
         }
         unset($ticket);
 
+        $vehiculesPgfLookup = $this->vehiculesPgfLookup();
+        foreach ($ticketsArray as &$ticket) {
+            $ticket['est_camion_pgf'] = $this->vehiculeEstCamionPgf(
+                (int) ($ticket['vehicule_id'] ?? 0),
+                (string) ($ticket['matricule_vehicule'] ?? ''),
+                $vehiculesPgfLookup
+            );
+        }
+        unset($ticket);
+
         // Récupérer les véhicules depuis l'API pour le modal
         $vehiculesApi = [];
         try {
@@ -416,6 +426,51 @@ class TicketController extends Controller
             ->orderByDesc('date_chargement')
             ->orderByDesc('id')
             ->get();
+    }
+
+    /**
+     * @return array{ids: array<int, true>, matricules: array<string, true>}
+     */
+    private function vehiculesPgfLookup(): array
+    {
+        $groupeIds = Groupe::query()
+            ->where('nom_groupe', 'like', '%PGF%')
+            ->pluck('id');
+
+        $rows = GroupeVehicule::query()
+            ->whereIn('groupe_id', $groupeIds)
+            ->get(['vehicule_id', 'matricule_vehicule']);
+
+        $ids = [];
+        $matricules = [];
+        foreach ($rows as $row) {
+            $id = (int) $row->vehicule_id;
+            if ($id > 0) {
+                $ids[$id] = true;
+            }
+            $matricule = strtoupper(trim((string) $row->matricule_vehicule));
+            if ($matricule !== '') {
+                $matricules[$matricule] = true;
+            }
+        }
+
+        return ['ids' => $ids, 'matricules' => $matricules];
+    }
+
+    /**
+     * @param  array{ids: array<int, true>, matricules: array<string, true>}|null  $lookup
+     */
+    private function vehiculeEstCamionPgf(int $vehiculeId, ?string $matricule, ?array $lookup = null): bool
+    {
+        $lookup ??= $this->vehiculesPgfLookup();
+
+        if ($vehiculeId > 0 && isset($lookup['ids'][$vehiculeId])) {
+            return true;
+        }
+
+        $matricule = strtoupper(trim((string) $matricule));
+
+        return $matricule !== '' && isset($lookup['matricules'][$matricule]);
     }
 
     /**
@@ -631,11 +686,6 @@ class TicketController extends Controller
 
     public function valider(Request $request, int $id, FicheSortieDechargementService $dechargementService)
     {
-        $validated = $request->validate([
-            'fiche_id' => ['required', 'integer', 'exists:fiches_sortie,id'],
-            'parc_id' => ['nullable', 'integer', 'exists:parcs,id'],
-        ]);
-
         $chefAgentIds = $this->mesAgentsService->chefAgentIds($request);
         $apiTicket = $this->mesTicketsService->findTicketById($id, $request);
 
@@ -644,24 +694,46 @@ class TicketController extends Controller
                 ->with('error', 'Ticket introuvable pour votre équipe.');
         }
 
-        $fiche = FicheSortie::query()
-            ->whereNull('date_dechargement')
-            ->whereIn('id_agent', $chefAgentIds ?: [-1])
-            ->find($validated['fiche_id']);
+        $estCamionPgf = $this->vehiculeEstCamionPgf(
+            (int) ($apiTicket['vehicule_id'] ?? 0),
+            (string) ($apiTicket['matricule_vehicule'] ?? '')
+        );
 
-        if (!$fiche) {
+        $rules = [
+            'parc_id' => ['nullable', 'integer', 'exists:parcs,id'],
+        ];
+        if ($estCamionPgf) {
+            $rules['fiche_id'] = ['required', 'integer', 'exists:fiches_sortie,id'];
+        }
+
+        $validated = $request->validate($rules, [
+            'fiche_id.required' => 'Sélectionnez une fiche de sortie pour ce camion PGF.',
+        ]);
+
+        $existing = Ticket::find($id);
+        if ($existing && in_array($existing->conformite, ['valide', 'conforme'], true)) {
             return redirect()->route('tickets.index')
-                ->with('error', 'Fiche de sortie introuvable ou déjà déchargée.');
+                ->with('error', 'Ce ticket est déjà validé.');
         }
 
-        $ticket = Ticket::find($id);
-        if (!$ticket) {
-            $ticket = new Ticket(['id_ticket' => $id]);
+        $fiche = null;
+        if ($estCamionPgf) {
+            $fiche = FicheSortie::query()
+                ->whereNull('date_dechargement')
+                ->whereIn('id_agent', $chefAgentIds ?: [-1])
+                ->find($validated['fiche_id']);
+
+            if (!$fiche) {
+                return redirect()->route('tickets.index')
+                    ->with('error', 'Fiche de sortie introuvable ou déjà déchargée.');
+            }
         }
+
+        $ticket = $existing ?? new Ticket(['id_ticket' => $id]);
 
         $dateTicket = $apiTicket['date_ticket'] ?? now()->format('Y-m-d');
         $poidsTicket = (float) ($apiTicket['poids'] ?? 0);
-        $nomUsine = trim((string) ($apiTicket['nom_usine'] ?? $fiche->usine ?? ''));
+        $nomUsine = trim((string) ($apiTicket['nom_usine'] ?? $fiche?->usine ?? ''));
 
         $ticket->fill([
             'numero_ticket' => (string) ($apiTicket['numero_ticket'] ?? ''),
@@ -678,12 +750,13 @@ class TicketController extends Controller
             'date_confirmation_unipalm' => now(),
         ]);
 
+        $produitId = $fiche?->produit_id ? (int) $fiche->produit_id : null;
         $prixUnitaire = $this->ticketPrixService->prixUnitairePourTicket(
             $ticket,
-            $fiche->produit_id ? (int) $fiche->produit_id : null,
+            $produitId,
             $dateTicket,
             null,
-            (int) ($apiTicket['id_agent'] ?? 0) ?: (int) $fiche->id_agent,
+            (int) ($apiTicket['id_agent'] ?? 0) ?: ($fiche?->id_agent ? (int) $fiche->id_agent : null),
             $nomUsine !== '' ? $nomUsine : null,
         );
         $montantPaie = ($prixUnitaire !== null && $poidsTicket > 0)
@@ -692,33 +765,41 @@ class TicketController extends Controller
 
         $ticket->prix_unitaire = $prixUnitaire ?? (float) ($apiTicket['prix_unitaire'] ?? 0);
         $ticket->montant_paie = $montantPaie ?? $apiTicket['montant_paie'] ?? null;
+
         try {
             DB::transaction(function () use ($ticket, $dechargementService, $fiche, $apiTicket, $dateTicket, $poidsTicket, $id, $validated) {
                 $ticket->save();
 
-                $dechargementService->decharger(
-                    $fiche,
-                    (string) ($apiTicket['numero_ticket'] ?? ''),
-                    $dateTicket,
-                    $poidsTicket,
-                    $id,
-                    isset($apiTicket['nom_usine']) ? (string) $apiTicket['nom_usine'] : null,
-                    isset($validated['parc_id']) ? (int) $validated['parc_id'] : null,
-                );
+                if ($fiche) {
+                    $dechargementService->decharger(
+                        $fiche,
+                        (string) ($apiTicket['numero_ticket'] ?? ''),
+                        $dateTicket,
+                        $poidsTicket,
+                        $id,
+                        isset($apiTicket['nom_usine']) ? (string) $apiTicket['nom_usine'] : null,
+                        isset($validated['parc_id']) ? (int) $validated['parc_id'] : null,
+                    );
+                }
             });
         } catch (\InvalidArgumentException $e) {
             return redirect()->route('tickets.index')
                 ->with('error', $e->getMessage());
         }
 
-        $fiche->refresh();
-        $stockMsg = $dechargementService->pontEstGerable((int) $fiche->id_pont)
-            ? ' Le stock du parc a été déduit.'
-            : '';
+        if ($fiche) {
+            $fiche->refresh();
+            $stockMsg = $dechargementService->pontEstGerable((int) $fiche->id_pont)
+                ? ' Le stock du parc a été déduit.'
+                : '';
+
+            return redirect()->route('tickets.index')
+                ->with('success', 'Ticket « ' . ($apiTicket['numero_ticket'] ?? $id) . ' » validé et associé à la fiche '
+                    . ($fiche->numero_fiche ?? $fiche->id) . '.' . $stockMsg);
+        }
 
         return redirect()->route('tickets.index')
-            ->with('success', 'Ticket « ' . ($apiTicket['numero_ticket'] ?? $id) . ' » validé et associé à la fiche '
-                . ($fiche->numero_fiche ?? $fiche->id) . '.' . $stockMsg);
+            ->with('success', 'Ticket « ' . ($apiTicket['numero_ticket'] ?? $id) . ' » validé avec succès.');
     }
 
     public function confirmUnipalm(Request $request, int $id, ChefEquipeContext $chefContext)
