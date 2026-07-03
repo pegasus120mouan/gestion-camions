@@ -24,6 +24,7 @@ class FicheSortie extends Model
         'nom_produit',
         'id_agent',
         'bordereau_agent_id',
+        'bordereau_transporteur_id',
         'nom_agent',
         'numero_agent',
         'id_chef_chargeur',

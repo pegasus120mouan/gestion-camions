@@ -2,15 +2,22 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BordereauTransporteur;
 use App\Models\Depense;
 use App\Models\FicheSortie;
 use App\Models\PaiementTransporteur;
 use App\Models\Transporteur;
+use App\Services\BordereauTransporteurService;
 use App\Services\TicketTransporteurFicheService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 
 class MontantTransporteurController extends Controller
 {
+    public function __construct(
+        private BordereauTransporteurService $bordereauTransporteur,
+    ) {}
+
     public function index()
     {
         $transporteurs = Transporteur::withCount('vehicules')->orderBy('nom')->get();
@@ -59,12 +66,24 @@ class MontantTransporteurController extends Controller
             return (int) $fiche->transporteur_id === (int) $transporteur->id;
         })->values();
 
-        $montants = $this->calculerMontantsTransporteur($transporteur, $fichesSortie);
+        $bordereaux = BordereauTransporteur::query()
+            ->where('transporteur_id', $transporteur->id)
+            ->orderByDesc('date_generation')
+            ->orderByDesc('id')
+            ->get();
+
+        $fichesHorsBordereau = $fichesSortie->filter(function (FicheSortie $fiche) {
+            return $fiche->bordereau_transporteur_id === null;
+        })->values();
+
+        $montants = $this->calculerMontantsTransporteur($transporteur, $fichesSortie, $bordereaux);
         $paiementsGestion = $transporteur->paiementsGestion()->orderBy('date_paiement', 'desc')->get();
 
         return view('gestion_financiere.transporteur_detail', array_merge([
             'transporteur' => $transporteur,
-            'fichesSortie' => $fichesSortie,
+            'fichesSortie' => $fichesHorsBordereau,
+            'bordereaux' => $bordereaux,
+            'exempleNumeroBordereau' => $this->bordereauTransporteur->exempleNumero($transporteur->code),
             'vehicules' => $vehicules,
             'paiementsGestion' => $paiementsGestion,
             'montantPayeGestion' => $paiementsGestion->sum('montant'),
@@ -212,15 +231,19 @@ class MontantTransporteurController extends Controller
             ->get();
     }
 
-    private function calculerMontantsTransporteur(Transporteur $transporteur, $fiches = null): array
+    private function calculerMontantsTransporteur(Transporteur $transporteur, $fiches = null, $bordereaux = null): array
     {
         $fiches = $this->queryFichesTransporteur($transporteur, $fiches);
+        $bordereaux = $bordereaux ?? collect();
 
         $montantDu = $fiches->sum(fn ($fiche) => $this->calculerMontantGlobalFiche($fiche));
         $totalAvance = $fiches->sum(fn ($fiche) => $this->calculerAvanceFiche($fiche));
-        $montantPayeFiches = $fiches->sum('montant_paye_transporteur');
+        $montantPayeFiches = $fiches
+            ->filter(fn ($fiche) => $fiche->bordereau_transporteur_id === null)
+            ->sum('montant_paye_transporteur');
+        $montantPayeBordereaux = (float) $bordereaux->sum('montant_paye');
         $montantPayeGestion = $transporteur->paiementsGestion()->sum('montant');
-        $montantPaye = $totalAvance + $montantPayeFiches + $montantPayeGestion;
+        $montantPaye = $totalAvance + $montantPayeFiches + $montantPayeBordereaux + $montantPayeGestion;
         $resteAPayer = $montantDu - $montantPaye;
 
         return [
@@ -269,5 +292,150 @@ class MontantTransporteurController extends Controller
         }
 
         return route('gestionfinanciere.montant_transporteur');
+    }
+
+    public function fichesEligiblesBordereau(Request $request, Transporteur $transporteur)
+    {
+        $validated = $request->validate([
+            'date_debut' => ['required', 'date'],
+            'date_fin' => ['required', 'date', 'after_or_equal:date_debut'],
+        ]);
+
+        $fiches = $this->bordereauTransporteur->fichesEligibles(
+            (int) $transporteur->id,
+            $validated['date_debut'],
+            $validated['date_fin']
+        );
+
+        return response()->json([
+            'fiches' => $fiches,
+            'total_montant' => (int) collect($fiches)->sum('montant'),
+            'total_poids' => (float) collect($fiches)->sum('poids'),
+        ]);
+    }
+
+    public function storeBordereau(Request $request, Transporteur $transporteur)
+    {
+        $validated = $request->validate([
+            'date_debut' => ['required', 'date'],
+            'date_fin' => ['required', 'date', 'after_or_equal:date_debut'],
+            'fiche_ids' => ['required', 'array', 'min:1'],
+            'fiche_ids.*' => ['integer'],
+        ]);
+
+        $fichesData = $this->bordereauTransporteur->construireFichesData(
+            (int) $transporteur->id,
+            $validated['fiche_ids']
+        );
+
+        if ($fichesData === []) {
+            return back()->withErrors(['error' => 'Aucune fiche valide sélectionnée (prix unitaire manquant, déjà bordereau ou introuvable).']);
+        }
+
+        $nomComplet = trim($transporteur->nom . ' ' . $transporteur->prenoms);
+
+        $bordereau = BordereauTransporteur::create([
+            'transporteur_id' => $transporteur->id,
+            'numero' => $this->bordereauTransporteur->genererNumero($transporteur->code),
+            'transporteur_nom' => $nomComplet,
+            'transporteur_code' => $transporteur->code,
+            'date_generation' => now()->toDateString(),
+            'date_debut' => $validated['date_debut'],
+            'date_fin' => $validated['date_fin'],
+            'montant_total' => collect($fichesData)->sum('montant'),
+            'poids_total' => collect($fichesData)->sum('poids'),
+            'fiches_data' => $fichesData,
+        ]);
+
+        $this->bordereauTransporteur->assignerFichesAuBordereau(
+            $bordereau,
+            collect($fichesData)->pluck('fiche_id')->all()
+        );
+
+        return redirect()->route('gestionfinanciere.transporteur.bordereau.show', [
+            'transporteur' => $transporteur->id,
+            'id' => $bordereau->id,
+        ])->with('success', 'Bordereau ' . $bordereau->numero . ' généré avec succès.');
+    }
+
+    public function showBordereau(Transporteur $transporteur, int $id)
+    {
+        $bordereau = BordereauTransporteur::query()
+            ->where('transporteur_id', $transporteur->id)
+            ->findOrFail($id);
+
+        $groupesUsine = $this->bordereauTransporteur->grouperParUsine($bordereau->fiches_data ?? []);
+
+        return view('gestion_financiere.bordereau_transporteur_show', [
+            'transporteur' => $transporteur,
+            'bordereau' => $bordereau,
+            'groupesUsine' => $groupesUsine,
+        ]);
+    }
+
+    public function exportBordereauPdf(Transporteur $transporteur, int $id)
+    {
+        $bordereau = BordereauTransporteur::query()
+            ->where('transporteur_id', $transporteur->id)
+            ->findOrFail($id);
+
+        $groupesUsine = $this->bordereauTransporteur->grouperParUsine($bordereau->fiches_data ?? []);
+        $logoPath = public_path('assets/img/logo.png');
+
+        $pdf = Pdf::loadView('gestion_financiere.bordereau_transporteur_pdf', [
+            'transporteur' => $transporteur,
+            'bordereau' => $bordereau,
+            'groupesUsine' => $groupesUsine,
+            'logoPath' => file_exists($logoPath) ? $logoPath : null,
+            'transporteurNom' => trim($transporteur->nom . ' ' . $transporteur->prenoms),
+            'dateCreation' => ($bordereau->created_at ?? now())->format('d/m/Y \à H:i'),
+        ])->setPaper('a4', 'portrait');
+
+        $filename = 'bordereau_' . preg_replace('/[^a-zA-Z0-9_-]+/', '_', $bordereau->numero) . '.pdf';
+
+        return $pdf->stream($filename);
+    }
+
+    public function destroyBordereau(Transporteur $transporteur, int $id)
+    {
+        $bordereau = BordereauTransporteur::query()
+            ->where('transporteur_id', $transporteur->id)
+            ->findOrFail($id);
+
+        $this->bordereauTransporteur->libererFichesDuBordereau($bordereau);
+        $bordereau->delete();
+
+        return redirect()->route('gestionfinanciere.transporteur.show', $transporteur)
+            ->with('success', 'Bordereau supprimé.');
+    }
+
+    public function storePaiementBordereau(Request $request, Transporteur $transporteur, int $id)
+    {
+        $montant = str_replace(' ', '', $request->input('montant', ''));
+        $request->merge(['montant' => $montant]);
+
+        $validated = $request->validate([
+            'montant' => ['required', 'numeric', 'min:1'],
+            'date_paiement' => ['required', 'date'],
+            'observation' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $bordereau = BordereauTransporteur::query()
+            ->where('transporteur_id', $transporteur->id)
+            ->findOrFail($id);
+
+        PaiementTransporteur::create([
+            'id_bordereau' => $bordereau->id,
+            'matricule_vehicule' => '',
+            'montant' => $validated['montant'],
+            'date_paiement' => $validated['date_paiement'],
+            'observation' => $validated['observation'] ?? ('Paiement bordereau ' . $bordereau->numero),
+        ]);
+
+        $bordereau->update([
+            'montant_paye' => (float) $bordereau->montant_paye + $validated['montant'],
+        ]);
+
+        return back()->with('success', 'Paiement de ' . number_format($validated['montant'], 0, ',', ' ') . ' FCFA enregistré pour le bordereau ' . $bordereau->numero . '.');
     }
 }

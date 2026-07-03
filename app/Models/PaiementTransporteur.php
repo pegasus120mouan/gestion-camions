@@ -10,6 +10,7 @@ class PaiementTransporteur extends Model
 
     protected $fillable = [
         'fiche_sortie_id',
+        'id_bordereau',
         'matricule_vehicule',
         'montant',
         'date_paiement',
@@ -24,5 +25,10 @@ class PaiementTransporteur extends Model
     public function ficheSortie()
     {
         return $this->belongsTo(FicheSortie::class, 'fiche_sortie_id');
+    }
+
+    public function bordereau()
+    {
+        return $this->belongsTo(BordereauTransporteur::class, 'id_bordereau');
     }
 }

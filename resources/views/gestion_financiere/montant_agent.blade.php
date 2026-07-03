@@ -44,7 +44,7 @@
 
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bx bx-user-check me-2"></i>Liste des agents</h5>
+        <h5 class="mb-0"><i class="bx bx-user-check me-2"></i>Liste des agents @if(count($data) > 0)<span class="badge bg-label-primary ms-2">{{ count($data) }}</span>@endif</h5>
       </div>
       <div class="table-responsive text-nowrap">
         <table class="table table-hover">

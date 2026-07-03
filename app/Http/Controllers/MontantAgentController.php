@@ -23,7 +23,8 @@ class MontantAgentController extends Controller
     {
         $filtres = $this->reporting->filtresDepuisRequest($request);
         $options = $this->reporting->optionsFiltres();
-        $agents = $this->fetchAgentsFromApi();
+        $search = trim((string) $request->query('q', ''));
+        $agents = $this->fetchAgentsFromApi($search !== '' ? $search : null);
         $data = [];
 
         if ($agents === null) {
@@ -86,7 +87,6 @@ class MontantAgentController extends Controller
             ->values()
             ->all();
 
-        $search = trim((string) $request->query('q', ''));
         if ($search !== '') {
             $needle = mb_strtolower($search);
             $data = array_values(array_filter($data, function ($item) use ($needle) {
@@ -138,14 +138,22 @@ class MontantAgentController extends Controller
     /**
      * @return array<int, array<string, mixed>>|null
      */
-    private function fetchAgentsFromApi(): ?array
+    private function fetchAgentsFromApi(?string $search = null): ?array
     {
-        $result = $this->mesAgentsService->listAgents();
-        if ($result['error']) {
-            return null;
+        $params = ['per_page' => 100];
+        if ($search !== null && $search !== '') {
+            $params['search'] = $search;
         }
 
-        return $result['agents'];
+        $agents = $this->mesAgentsService->fetchAllAgents($params);
+        if ($agents === []) {
+            $probe = $this->mesAgentsService->listAgents(array_merge($params, ['page' => 1]));
+            if ($probe['error']) {
+                return null;
+            }
+        }
+
+        return $agents;
     }
 
     public function show(Request $request, int $id_agent)

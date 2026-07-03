@@ -57,7 +57,7 @@ class DepenseController extends Controller
 
     private function enrichirPontsAvecAgents(array $ponts): array
     {
-        $connection = app(CamionsDatabaseResolver::class)->connection();
+        $connection = app(CamionsDatabaseResolver::class)->connectionForAuth();
         if ($connection === null || ! Schema::connection($connection)->hasTable('pont_bascule')) {
             return $ponts;
         }
@@ -163,6 +163,14 @@ class DepenseController extends Controller
         $ponts = $this->enrichirPontsAvecAgents($ponts);
         $agentIdsByName = $this->agentIdsByNameFromList($agents);
 
+        $pontsById = [];
+        foreach ($ponts as $pont) {
+            $idPont = (int) ($pont['id_pont'] ?? 0);
+            if ($idPont > 0) {
+                $pontsById[$idPont] = $pont;
+            }
+        }
+
         $map = [];
 
         foreach ($ponts as $pont) {
@@ -181,21 +189,102 @@ class DepenseController extends Controller
                 continue;
             }
 
-            $nom = trim((string) ($pont['nom_pont'] ?? ''));
-            $code = trim((string) ($pont['code_pont'] ?? ''));
-            $label = $code !== '' ? $nom.' ('.$code.')' : $nom;
+            $map[$agentId][] = $this->formatPontPourAgentMap($pont);
+        }
+
+        $map = $this->mergeAgentsPontsFromDatabase($map, $pontsById);
+
+        foreach ($map as &$agentPonts) {
+            $agentPonts = collect($agentPonts)
+                ->unique('id')
+                ->sortBy('nom', SORT_NATURAL | SORT_FLAG_CASE)
+                ->values()
+                ->all();
+        }
+        unset($agentPonts);
+
+        return $map;
+    }
+
+    /**
+     * @param  array<string, mixed>  $pont
+     * @return array{id: int, label: string, code: string, nom: string, gerable: bool}
+     */
+    private function formatPontPourAgentMap(array $pont): array
+    {
+        $nom = trim((string) ($pont['nom_pont'] ?? ''));
+        $code = trim((string) ($pont['code_pont'] ?? ''));
+        $label = $code !== '' ? $nom.' ('.$code.')' : $nom;
+
+        return [
+            'id' => (int) ($pont['id_pont'] ?? 0),
+            'label' => $label,
+            'code' => $code,
+            'nom' => $nom,
+            'gerable' => ! empty($pont['gerable']),
+        ];
+    }
+
+    /**
+     * Complète la carte agent → ponts avec les associations id_agent en base Unipalm.
+     *
+     * @param  array<int, list<array{id: int, label: string, code: string, nom: string, gerable: bool}>>  $map
+     * @param  array<int, array<string, mixed>>  $pontsById
+     * @return array<int, list<array{id: int, label: string, code: string, nom: string, gerable: bool}>>
+     */
+    private function mergeAgentsPontsFromDatabase(array $map, array $pontsById): array
+    {
+        $connection = app(CamionsDatabaseResolver::class)->connectionForAuth();
+        if ($connection === null || ! Schema::connection($connection)->hasTable('pont_bascule')) {
+            return $map;
+        }
+
+        $gerableParPont = $this->gerableParPontMap();
+        $agentIdsByName = $this->agentIdsByNameFromDatabase($connection);
+
+        try {
+            $rows = DB::connection($connection)
+                ->table('pont_bascule')
+                ->select(['id_pont', 'id_agent', 'nom_pont', 'code_pont', 'gerant'])
+                ->get();
+        } catch (\Throwable $e) {
+            return $map;
+        }
+
+        foreach ($rows as $row) {
+            $idPont = (int) ($row->id_pont ?? 0);
+            if ($idPont <= 0) {
+                continue;
+            }
+
+            $agentId = (int) ($row->id_agent ?? 0);
+            if ($agentId <= 0) {
+                $gerant = $this->normalizePersonName($row->gerant ?? '');
+                $agentId = (int) ($agentIdsByName[$gerant] ?? 0);
+            }
+
+            if ($agentId <= 0) {
+                continue;
+            }
+
+            $dejaPresent = collect($map[$agentId] ?? [])->contains(
+                fn (array $pont): bool => (int) ($pont['id'] ?? 0) === $idPont
+            );
+            if ($dejaPresent) {
+                continue;
+            }
+
+            $apiPont = $pontsById[$idPont] ?? [];
+            $nom = trim((string) ($apiPont['nom_pont'] ?? $row->nom_pont ?? ''));
+            $code = trim((string) ($apiPont['code_pont'] ?? $row->code_pont ?? ''));
 
             $map[$agentId][] = [
                 'id' => $idPont,
-                'label' => $label,
+                'label' => $code !== '' ? $nom.' ('.$code.')' : $nom,
                 'code' => $code,
                 'nom' => $nom,
-                'gerable' => ! empty($pont['gerable']),
+                'gerable' => (bool) ($gerableParPont[$idPont] ?? ! empty($apiPont['gerable'])),
             ];
-        }
-
-        foreach ($map as &$agentPonts) {
-            usort($agentPonts, fn (array $a, array $b) => strcmp($a['nom'], $b['nom']));
         }
 
         return $map;
