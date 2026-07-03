@@ -274,12 +274,15 @@
             <label class="form-label">Sélectionner une fiche de sortie</label>
             <select name="fiche_id" class="form-select" required>
               <option value="">-- Sélectionner une fiche --</option>
-              @foreach($fiches_disponibles ?? [] as $fiche)
+              @foreach($t['fiches_correspondantes'] ?? [] as $fiche)
                 <option value="{{ $fiche->id }}">
-                  {{ $fiche->matricule_vehicule }} - {{ $fiche->nom_pont }} ({{ $fiche->date_chargement ? $fiche->date_chargement->format('d/m/Y') : '-' }})
+                  {{ $fiche->matricule_vehicule }} - {{ $fiche->nom_pont }} - {{ $fiche->usine }} ({{ $fiche->date_chargement ? $fiche->date_chargement->format('d/m/Y') : '-' }})
                 </option>
               @endforeach
             </select>
+            @if(empty($t['fiches_correspondantes']))
+              <small class="text-danger">Aucune fiche ne correspond à ce ticket (véhicule, agent, pont et usine identiques).</small>
+            @endif
           </div>
         </div>
         <div class="modal-footer">

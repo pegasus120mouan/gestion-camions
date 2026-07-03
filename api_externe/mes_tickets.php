@@ -93,6 +93,7 @@ try {
             t.id_agent,
             t.numero_ticket,
             t.vehicule_id,
+            t.id_pont,
             t.poids,
             t.id_utilisateur,
             t.prix_unitaire,
@@ -115,12 +116,14 @@ try {
             ce.nom AS chef_nom,
             ce.prenoms AS chef_prenoms,
             ce.token AS chef_token,
-            u.nom_usine
+            u.nom_usine,
+            pb.nom_pont
         FROM tickets t
         INNER JOIN agents a ON a.id_agent = t.id_agent
         INNER JOIN chef_equipe ce ON ce.id_chef = a.id_chef
         LEFT JOIN vehicules v ON v.vehicules_id = t.vehicule_id
         LEFT JOIN usines u ON u.id_usine = t.id_usine
+        LEFT JOIN pont_bascule pb ON pb.id_pont = t.id_pont
         WHERE {$whereSql}
         ORDER BY t.id_ticket DESC
         LIMIT {$perPage} OFFSET {$offset}";

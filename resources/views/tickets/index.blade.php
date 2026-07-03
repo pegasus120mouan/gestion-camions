@@ -87,6 +87,7 @@
               <th>N°Ticket</th>
               <th>Usine</th>
               <th>Agent</th>
+              <th>Pont</th>
               <th>Vehicule</th>
               <th>Poids Usine</th>
               <th>Actions</th>
@@ -113,6 +114,7 @@
                 </td>
                 <td>{{ $t['nom_usine'] ?? '-' }}</td>
                 <td>{{ $t['nom_agent'] ?? '-' }}</td>
+                <td>{{ $t['nom_pont'] ?? ($t['origine'] ?? '-') }}</td>
                 <td>
                   @if(!empty($t['vehicule_id']))
                     <a href="{{ route('vehicules.depenses', ['vehicule_id' => $t['vehicule_id'], 'matricule' => $t['matricule_vehicule'] ?? '']) }}">
@@ -145,7 +147,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="7" class="text-center">Aucun ticket</td>
+                <td colspan="8" class="text-center">Aucun ticket</td>
               </tr>
             @endforelse
           </tbody>
@@ -246,6 +248,7 @@
                   @endphp
                   <div class="mb-2"><strong>Transporteur:</strong> <span class="badge bg-info">{{ $transporteurNom }}</span></div>
                   <div class="mb-2"><strong>Usine:</strong> {{ $t['nom_usine'] ?? '-' }}</div>
+                  <div class="mb-2"><strong>Pont:</strong> {{ $t['nom_pont'] ?? ($t['origine'] ?? '-') }}</div>
                   <div class="mb-2"><strong>Produit:</strong> {{ $t['nom_produit'] ?? '-' }}</div>
                   <div class="mb-2"><strong>Groupe:</strong> {{ $t['nom_groupe'] ?? '-' }}</div>
                   <div class="mb-2"><strong>Agent:</strong> {{ $t['nom_agent'] ?? '-' }}</div>
@@ -408,21 +411,7 @@
   @php
     $ticketValideModal = in_array($t['conformite'] ?? '', ['valide', 'conforme'], true);
     $estCamionPgf = (bool) ($t['est_camion_pgf'] ?? false);
-    $matriculeTicket = trim((string) ($t['matricule_vehicule'] ?? ''));
-    $idAgentTicket = (int) ($t['id_agent'] ?? 0);
-    $fichesPourTicket = collect();
-    if ($estCamionPgf) {
-        $fichesPourTicket = ($fichesNonDechargees ?? collect())->filter(function ($fiche) use ($matriculeTicket, $idAgentTicket) {
-            $matchVehicule = $matriculeTicket !== ''
-                && strcasecmp(trim((string) $fiche->matricule_vehicule), $matriculeTicket) === 0;
-            $matchAgent = $idAgentTicket > 0 && (int) $fiche->id_agent === $idAgentTicket;
-
-            return $matchVehicule || $matchAgent;
-        });
-        if ($fichesPourTicket->isEmpty()) {
-            $fichesPourTicket = $fichesNonDechargees ?? collect();
-        }
-    }
+    $fichesPourTicket = collect($t['fiches_correspondantes'] ?? []);
   @endphp
   @if(!$ticketValideModal)
   <div class="modal fade" id="modalValiderTicket{{ $index }}" tabindex="-1" aria-hidden="true">
@@ -442,19 +431,20 @@
                 <div class="col-md-3"><strong>Ticket :</strong> {{ $t['numero_ticket'] ?? '-' }}</div>
                 <div class="col-md-3"><strong>Véhicule :</strong> {{ $t['matricule_vehicule'] ?? '-' }}</div>
                 <div class="col-md-3"><strong>Agent :</strong> {{ $t['nom_agent'] ?? '-' }}</div>
+                <div class="col-md-3"><strong>Pont :</strong> {{ $t['nom_pont'] ?? '-' }}</div>
                 <div class="col-md-3"><strong>Usine :</strong> {{ $t['nom_usine'] ?? '-' }}</div>
               </div>
             </div>
 
             @if($estCamionPgf)
               <p class="text-muted small mb-3">
-                <i class="bx bx-info-circle me-1"></i>Camion du groupe PGF — associez une fiche de sortie non déchargée.
+                <i class="bx bx-info-circle me-1"></i>Camion du groupe PGF — associez une fiche de sortie non déchargée dont le <strong>véhicule</strong>, l'<strong>agent</strong>, le <strong>pont</strong> et l'<strong>usine</strong> correspondent au ticket.
               </p>
               <h6 class="mb-3">Fiches de sortie non déchargées</h6>
 
               @if($fichesPourTicket->isEmpty())
                 <div class="alert alert-warning mb-0">
-                  Aucune fiche de sortie en attente de déchargement pour votre équipe.
+                  Aucune fiche de sortie ne correspond à ce ticket (véhicule, agent, pont et usine identiques).
                 </div>
               @else
                 <div class="table-responsive">

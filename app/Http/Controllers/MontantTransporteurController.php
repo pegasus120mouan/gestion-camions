@@ -33,14 +33,11 @@ class MontantTransporteurController extends Controller
         $matricules = $this->getMatricules($transporteur);
         $vehicules = $matricules;
 
-        $fichesSortie = collect();
+        $ticketFicheService = app(TicketTransporteurFicheService::class);
+        $ticketFicheService->reconcilierFichesPourTransporteur($transporteur);
+
         $fichesQuery = FicheSortie::query()
-            ->where(function ($query) use ($transporteur, $matricules) {
-                $query->where('transporteur_id', $transporteur->id);
-                if (!empty($matricules)) {
-                    $query->orWhereIn('matricule_vehicule', $matricules);
-                }
-            });
+            ->where('transporteur_id', $transporteur->id);
 
         if ($request->filled('vehicule')) {
             $fichesQuery->where('matricule_vehicule', $request->vehicule);
@@ -56,10 +53,11 @@ class MontantTransporteurController extends Controller
 
         $fichesSortie = $fichesQuery->orderBy('date_chargement', 'desc')->get();
 
-        $ticketFicheService = app(TicketTransporteurFicheService::class);
         $fichesSortie = $fichesSortie->map(function (FicheSortie $fiche) use ($ticketFicheService) {
             return $ticketFicheService->synchroniserDonneesTicketSurFiche($fiche);
-        });
+        })->filter(function (FicheSortie $fiche) use ($transporteur) {
+            return (int) $fiche->transporteur_id === (int) $transporteur->id;
+        })->values();
 
         $montants = $this->calculerMontantsTransporteur($transporteur, $fichesSortie);
         $paiementsGestion = $transporteur->paiementsGestion()->orderBy('date_paiement', 'desc')->get();
@@ -209,15 +207,8 @@ class MontantTransporteurController extends Controller
             return $fiches;
         }
 
-        $matricules = $this->getMatricules($transporteur);
-
         return FicheSortie::query()
-            ->where(function ($query) use ($transporteur, $matricules) {
-                $query->where('transporteur_id', $transporteur->id);
-                if (!empty($matricules)) {
-                    $query->orWhereIn('matricule_vehicule', $matricules);
-                }
-            })
+            ->where('transporteur_id', $transporteur->id)
             ->get();
     }
 
@@ -262,6 +253,13 @@ class MontantTransporteurController extends Controller
 
     private function redirectUrlPourFiche(FicheSortie $fiche): string
     {
+        if ($fiche->transporteur_id) {
+            $transporteur = Transporteur::query()->find($fiche->transporteur_id);
+            if ($transporteur) {
+                return route('gestionfinanciere.transporteur.show', $transporteur);
+            }
+        }
+
         $transporteur = Transporteur::whereHas('vehicules', function ($query) use ($fiche) {
             $query->where('matricule_vehicule', $fiche->matricule_vehicule);
         })->first();

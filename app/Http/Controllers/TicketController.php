@@ -17,6 +17,7 @@ use App\Models\Ticket;
 use App\Services\ChefEquipeContext;
 use App\Services\FicheSortieDechargementService;
 use App\Services\FicheSortieNumeroService;
+use App\Services\FicheSortieTicketCorrespondanceService;
 use App\Services\MesAgentsService;
 use App\Services\MesTicketsService;
 use App\Services\ParticulierAgentsApiService;
@@ -39,6 +40,7 @@ class TicketController extends Controller
         private ParticulierAgentsApiService $particulierAgentsApiService,
         private MesAgentsService $mesAgentsService,
         private MesTicketsService $mesTicketsService,
+        private FicheSortieTicketCorrespondanceService $ficheTicketCorrespondance,
     ) {}
 
     public function index(Request $request)
@@ -175,10 +177,10 @@ class TicketController extends Controller
                 'poids' => $ticket['poids'] ?? 0,
                 'id_usine' => (int) ($ticket['id_usine'] ?? 0),
                 'nom_usine' => $ticket['nom_usine'] ?: ($usinesById[$ticket['id_usine'] ?? 0] ?? '-'),
+                'id_pont' => (int) ($ticket['id_pont'] ?? 0),
+                'nom_pont' => (string) ($ticket['nom_pont'] ?? ''),
                 'id_agent' => (int) ($ticket['id_agent'] ?? 0),
-                'nom_agent' => $local?->particulierAgent
-                    ? $local->particulierAgent->nom_complet
-                    : (($ticket['nom_agent'] ?? '-') !== '-' ? $ticket['nom_agent'] : ($agentsById[$ticket['id_agent'] ?? 0] ?? '-')),
+                'nom_agent' => $this->resolveNomAgentPourAffichage($ticket, $local, $agentsById),
                 'nom_groupe' => $local?->particulierAgent?->groupe?->nom_groupe ?? '-',
                 'particulier_agent_id' => $local?->particulier_agent_id,
                 'prix_unitaire' => $ticket['prix_unitaire'] ?? $local?->prix_unitaire,
@@ -297,6 +299,18 @@ class TicketController extends Controller
                 (string) ($ticket['matricule_vehicule'] ?? ''),
                 $vehiculesPgfLookup
             );
+
+            if ($ticket['est_camion_pgf']) {
+                $nomUsineTicket = trim((string) ($ticket['nom_usine'] ?? ''));
+                if ($nomUsineTicket === '' || $nomUsineTicket === '-') {
+                    $ticket['nom_usine'] = $usinesById[$ticket['id_usine'] ?? 0] ?? '';
+                }
+                $ticket['fiches_correspondantes'] = $this->ficheTicketCorrespondance
+                    ->filtrer($fichesNonDechargees, $this->ficheTicketCorrespondance->ticketDepuisApi($ticket))
+                    ->all();
+            } else {
+                $ticket['fiches_correspondantes'] = [];
+            }
         }
         unset($ticket);
 
@@ -378,6 +392,33 @@ class TicketController extends Controller
             $p['gerable'] = in_array((int) ($p['id_pont'] ?? 0), $idsPontsGerables, true);
             return $p;
         }, $pontsApi);
+
+        $pontsById = [];
+        foreach ($pontsApi as $pont) {
+            $idPont = (int) ($pont['id_pont'] ?? 0);
+            if ($idPont > 0) {
+                $pontsById[$idPont] = (string) ($pont['nom_pont'] ?? '');
+            }
+        }
+        foreach (PontEtat::query()->get(['id_pont', 'nom_pont']) as $pontEtat) {
+            $idPont = (int) $pontEtat->id_pont;
+            if ($idPont > 0 && ($pontsById[$idPont] ?? '') === '' && ($pontEtat->nom_pont ?? '') !== '') {
+                $pontsById[$idPont] = (string) $pontEtat->nom_pont;
+            }
+        }
+
+        foreach ($ticketsArray as &$ticket) {
+            $nomPont = trim((string) ($ticket['nom_pont'] ?? ''));
+            if ($nomPont === '' || $nomPont === '-') {
+                $idPont = (int) ($ticket['id_pont'] ?? 0);
+                if ($idPont > 0 && ($pontsById[$idPont] ?? '') !== '') {
+                    $ticket['nom_pont'] = $pontsById[$idPont];
+                } elseif (! empty($ticket['origine'])) {
+                    $ticket['nom_pont'] = (string) $ticket['origine'];
+                }
+            }
+        }
+        unset($ticket);
 
         // Produits locaux
         $produitsLocaux = Produit::orderBy('nom')->get();
@@ -787,6 +828,15 @@ class TicketController extends Controller
                 return redirect()->route('tickets.index')
                     ->with('error', 'Fiche de sortie introuvable ou déjà déchargée.');
             }
+
+            $raison = $this->ficheTicketCorrespondance->raisonNonCorrespondance(
+                $this->ficheTicketCorrespondance->ticketDepuisApi($apiTicket),
+                $fiche
+            );
+            if ($raison !== null) {
+                return redirect()->route('tickets.index')
+                    ->with('error', $raison);
+            }
         }
 
         $ticket = $existing ?? new Ticket(['id_ticket' => $id]);
@@ -1018,9 +1068,7 @@ class TicketController extends Controller
         $nomUsine = $this->nomUsinePourTicket($ticket->id_usine);
 
         $ficheSortie = \App\Models\FicheSortie::where('id_ticket', $ticket->id_ticket)->first();
-        $chargeMission = $ticket->particulierAgent
-            ? $ticket->particulierAgent->nom_complet
-            : ($ficheSortie?->nom_agent ?? ($ticket->id_agent ? '#' . $ticket->id_agent : '—'));
+        $chargeMission = $this->resolveNomAgentPourTicketLocal($ticket, $ficheSortie?->nom_agent);
         $nomGroupe = $ticket->particulierAgent?->groupe?->nom_groupe ?? null;
 
         $dateTicket = $ticket->date_ticket
@@ -1269,6 +1317,14 @@ class TicketController extends Controller
             ->orderBy('date_chargement', 'desc')
             ->get();
 
+        foreach ($tickets as &$ticket) {
+            $normalized = $this->mesTicketsService->normalizeTicketRow($ticket);
+            $ticket['fiches_correspondantes'] = $this->ficheTicketCorrespondance
+                ->filtrer($fichesDisponibles, $this->ficheTicketCorrespondance->ticketDepuisApi($normalized))
+                ->all();
+        }
+        unset($ticket);
+
         return view('tickets.unipalm', [
             'tickets' => $tickets,
             'pagination' => $pagination,
@@ -1286,6 +1342,19 @@ class TicketController extends Controller
         ]);
 
         $fiche = FicheSortie::findOrFail($validated['fiche_id']);
+
+        $apiTicket = $this->mesTicketsService->findTicketById((int) $validated['id_ticket'], $request);
+        if ($apiTicket) {
+            $raison = $this->ficheTicketCorrespondance->raisonNonCorrespondance(
+                $this->ficheTicketCorrespondance->ticketDepuisApi($apiTicket),
+                $fiche
+            );
+            if ($raison !== null) {
+                return redirect()->route('tickets.unipalm')
+                    ->with('error', $raison);
+            }
+        }
+
         $fiche->update([
             'id_ticket' => $validated['id_ticket'],
             'numero_ticket' => $validated['numero_ticket'],
@@ -1293,6 +1362,62 @@ class TicketController extends Controller
 
         return redirect()->route('tickets.unipalm')
             ->with('success', 'Fiche de sortie associée au ticket avec succès.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $ticketApi
+     * @param  array<int, string>  $agentsById
+     */
+    private function resolveNomAgentPourAffichage(array $ticketApi, ?Ticket $local, array $agentsById): string
+    {
+        $apiNom = trim((string) ($ticketApi['nom_agent'] ?? ''));
+        if ($apiNom !== '' && $apiNom !== '-') {
+            return $apiNom;
+        }
+
+        $idAgent = (int) ($ticketApi['id_agent'] ?? 0);
+        if ($idAgent > 0) {
+            $nomDepuisListe = trim((string) ($agentsById[$idAgent] ?? ''));
+            if ($nomDepuisListe !== '') {
+                return $nomDepuisListe;
+            }
+
+            $agent = $this->mesAgentsService->findAgentById($idAgent);
+            if ($agent) {
+                return trim((string) ($agent['nom_complet'] ?? ''));
+            }
+        }
+
+        if ($local?->particulierAgent) {
+            return $local->particulierAgent->nom_complet;
+        }
+
+        return '-';
+    }
+
+    private function resolveNomAgentPourTicketLocal(Ticket $ticket, ?string $nomAgentFiche = null): string
+    {
+        $idAgent = (int) ($ticket->id_agent ?? 0);
+        if ($idAgent > 0) {
+            $agent = $this->mesAgentsService->findAgentById($idAgent);
+            if ($agent) {
+                $nom = trim((string) ($agent['nom_complet'] ?? ''));
+                if ($nom !== '') {
+                    return $nom;
+                }
+            }
+        }
+
+        if ($ticket->particulierAgent) {
+            return $ticket->particulierAgent->nom_complet;
+        }
+
+        $nomFiche = trim((string) ($nomAgentFiche ?? ''));
+        if ($nomFiche !== '') {
+            return $nomFiche;
+        }
+
+        return $idAgent > 0 ? '#'.$idAgent : '—';
     }
 
     /**

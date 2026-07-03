@@ -344,7 +344,11 @@
           </div>
           <div class="alert alert-light border mb-0">
             <i class="bx bx-info-circle me-1"></i>
-            Véhicule de la fiche : <strong>{{ $fiche->matricule_vehicule }}</strong>
+            Seuls les tickets dont le <strong>véhicule</strong>, l'<strong>agent</strong>, le <strong>pont</strong> et l'<strong>usine</strong> correspondent à la fiche sont proposés.
+            <br>Véhicule : <strong>{{ $fiche->matricule_vehicule }}</strong> —
+            Agent : <strong>{{ $fiche->nom_agent }}</strong> —
+            Pont : <strong>{{ $fiche->nom_pont }}</strong> —
+            Usine : <strong>{{ $fiche->usine }}</strong>
           </div>
         </div>
         <div class="modal-footer">
@@ -395,7 +399,7 @@ document.addEventListener('DOMContentLoaded', function() {
       ticketInput.style.display = 'none';
       ticketsLoading.style.display = 'block';
 
-      fetch('{{ route("api.tickets_conformes") }}')
+      fetch('{{ route("api.tickets_conformes", ["fiche_id" => $fiche->id]) }}')
         .then(response => response.json())
         .then(tickets => {
           ticketsList.innerHTML = '';

@@ -5,6 +5,7 @@ namespace App\Services;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 class MesTicketsService
 {
@@ -132,8 +133,10 @@ class MesTicketsService
             $tickets = [];
         }
 
+        $normalized = array_map([$this, 'normalizeTicketRow'], $tickets);
+
         return [
-            'tickets' => array_map([$this, 'normalizeTicketRow'], $tickets),
+            'tickets' => $this->enrichTicketsWithPontData($normalized),
             'pagination' => is_array($response->json('pagination')) ? $response->json('pagination') : null,
             'chef' => is_array($response->json('chef')) ? $response->json('chef') : null,
             'error' => null,
@@ -185,6 +188,7 @@ class MesTicketsService
                     t.id_agent,
                     t.numero_ticket,
                     t.vehicule_id,
+                    t.id_pont,
                     t.poids,
                     t.prix_unitaire,
                     t.montant_paie,
@@ -195,12 +199,14 @@ class MesTicketsService
                     v.matricule_vehicule,
                     a.nom AS agent_nom,
                     a.prenom AS agent_prenom,
-                    u.nom_usine
+                    u.nom_usine,
+                    pb.nom_pont
                 FROM tickets t
                 INNER JOIN agents a ON a.id_agent = t.id_agent
                 INNER JOIN chef_equipe ce ON ce.id_chef = a.id_chef
                 LEFT JOIN vehicules v ON v.vehicules_id = t.vehicule_id
                 LEFT JOIN usines u ON u.id_usine = t.id_usine
+                LEFT JOIN pont_bascule pb ON pb.id_pont = t.id_pont
                 WHERE {$whereSql}
                 ORDER BY t.id_ticket DESC
                 LIMIT {$perPage} OFFSET {$offset}",
@@ -227,7 +233,9 @@ class MesTicketsService
             }
 
             return [
-                'tickets' => array_map(fn ($row) => $this->normalizeTicketRow((array) $row), $rows),
+                'tickets' => $this->enrichTicketsWithPontData(
+                    array_map(fn ($row) => $this->normalizeTicketRow((array) $row), $rows)
+                ),
                 'pagination' => [
                     'current_page' => $page,
                     'per_page' => $perPage,
@@ -240,6 +248,178 @@ class MesTicketsService
         } catch (\Throwable $e) {
             return $this->emptyResult('Erreur lors de la lecture des tickets : ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Complète id_pont / nom_pont lorsque l'API mes_tickets ne les fournit pas encore.
+     *
+     * @param  list<array<string, mixed>>  $tickets
+     * @return list<array<string, mixed>>
+     */
+    public function enrichTicketsWithPontData(array $tickets): array
+    {
+        if ($tickets === []) {
+            return $tickets;
+        }
+
+        $needsEnrichment = false;
+        foreach ($tickets as $ticket) {
+            if (trim((string) ($ticket['nom_pont'] ?? '')) === '') {
+                $needsEnrichment = true;
+                break;
+            }
+        }
+
+        if (! $needsEnrichment) {
+            return $tickets;
+        }
+
+        $ticketIds = array_values(array_filter(array_map(
+            static fn (array $ticket): int => (int) ($ticket['id_ticket'] ?? 0),
+            $tickets
+        )));
+
+        $pontByTicketId = $this->fetchPontDataForTicketIds($ticketIds);
+        $pontNamesById = $this->fetchPontNamesById();
+
+        return array_map(function (array $ticket) use ($pontByTicketId, $pontNamesById) {
+            $idTicket = (int) ($ticket['id_ticket'] ?? 0);
+
+            if ($idTicket > 0 && isset($pontByTicketId[$idTicket])) {
+                $fromDb = $pontByTicketId[$idTicket];
+                if ((int) ($ticket['id_pont'] ?? 0) <= 0 && $fromDb['id_pont'] > 0) {
+                    $ticket['id_pont'] = $fromDb['id_pont'];
+                }
+                if (trim((string) ($ticket['nom_pont'] ?? '')) === '' && $fromDb['nom_pont'] !== '') {
+                    $ticket['nom_pont'] = $fromDb['nom_pont'];
+                }
+            }
+
+            $idPont = (int) ($ticket['id_pont'] ?? 0);
+            if (trim((string) ($ticket['nom_pont'] ?? '')) === '' && $idPont > 0) {
+                $ticket['nom_pont'] = (string) ($pontNamesById[$idPont] ?? '');
+            }
+
+            return $ticket;
+        }, $tickets);
+    }
+
+    /**
+     * @param  list<int>  $ticketIds
+     * @return array<int, array{id_pont: int, nom_pont: string}>
+     */
+    private function fetchPontDataForTicketIds(array $ticketIds): array
+    {
+        $ticketIds = array_values(array_unique(array_filter($ticketIds, static fn (int $id): bool => $id > 0)));
+        if ($ticketIds === []) {
+            return [];
+        }
+
+        $connection = $this->databaseResolver->connectionForAuth();
+        if ($connection === null) {
+            return [];
+        }
+
+        try {
+            if (! Schema::connection($connection)->hasTable('tickets')
+                || ! Schema::connection($connection)->hasColumn('tickets', 'id_pont')) {
+                return [];
+            }
+
+            $placeholders = implode(',', array_fill(0, count($ticketIds), '?'));
+            $joinPont = Schema::connection($connection)->hasTable('pont_bascule')
+                ? 'LEFT JOIN pont_bascule pb ON pb.id_pont = t.id_pont'
+                : '';
+            $selectNomPont = $joinPont !== '' ? ', pb.nom_pont' : ", '' AS nom_pont";
+
+            $rows = DB::connection($connection)->select(
+                "SELECT t.id_ticket, t.id_pont{$selectNomPont}
+                FROM tickets t
+                {$joinPont}
+                WHERE t.id_ticket IN ({$placeholders})",
+                $ticketIds
+            );
+
+            $result = [];
+            foreach ($rows as $row) {
+                $idTicket = (int) ($row->id_ticket ?? 0);
+                if ($idTicket <= 0) {
+                    continue;
+                }
+
+                $result[$idTicket] = [
+                    'id_pont' => (int) ($row->id_pont ?? 0),
+                    'nom_pont' => trim((string) ($row->nom_pont ?? '')),
+                ];
+            }
+
+            return $result;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function fetchPontNamesById(): array
+    {
+        static $cache = null;
+        if (is_array($cache)) {
+            return $cache;
+        }
+
+        $cache = [];
+
+        $connection = $this->databaseResolver->connectionForAuth();
+        if ($connection !== null && Schema::connection($connection)->hasTable('pont_bascule')) {
+            try {
+                $rows = DB::connection($connection)
+                    ->table('pont_bascule')
+                    ->select(['id_pont', 'nom_pont'])
+                    ->get();
+
+                foreach ($rows as $row) {
+                    $idPont = (int) ($row->id_pont ?? 0);
+                    $nomPont = trim((string) ($row->nom_pont ?? ''));
+                    if ($idPont > 0 && $nomPont !== '') {
+                        $cache[$idPont] = $nomPont;
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Ignorer
+            }
+        }
+
+        if ($cache !== []) {
+            return $cache;
+        }
+
+        $url = (string) config('services.external_auth.mes_ponts_url', '');
+        if ($url === '') {
+            return $cache;
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout((int) config('services.external_auth.timeout', 10))
+                ->get($url);
+
+            if ($response->successful()) {
+                foreach ($response->json('ponts') ?? [] as $pont) {
+                    $idPont = (int) ($pont['id_pont'] ?? 0);
+                    $nomPont = trim((string) ($pont['nom_pont'] ?? ''));
+                    if ($idPont > 0 && $nomPont !== '') {
+                        $cache[$idPont] = $nomPont;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignorer
+        }
+
+        return $cache;
     }
 
     /**
@@ -261,6 +441,8 @@ class MesTicketsService
             'poids' => (float) ($row['poids'] ?? 0),
             'id_usine' => (int) ($row['id_usine'] ?? 0),
             'nom_usine' => (string) ($row['nom_usine'] ?? ''),
+            'id_pont' => (int) ($row['id_pont'] ?? 0),
+            'nom_pont' => (string) ($row['nom_pont'] ?? ''),
             'id_agent' => (int) ($row['id_agent'] ?? 0),
             'nom_agent' => $nomAgent !== '' ? $nomAgent : '-',
             'prix_unitaire' => $row['prix_unitaire'] ?? null,

@@ -6,6 +6,7 @@ use App\Models\Groupe;
 use App\Models\GroupeVehicule;
 use App\Models\Transporteur;
 use App\Models\TransporteurVehicule;
+use App\Services\TicketTransporteurFicheService;
 use App\Services\TransporteurCodeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -170,6 +171,8 @@ class TransporteurController extends Controller
             return redirect()->route('transporteurs.camions.ajouter', $transporteur)
                 ->with('error', 'Aucun camion valide n\'a pu être ajouté.');
         }
+
+        app(TicketTransporteurFicheService::class)->reconcilierFichesPourTransporteur($transporteur);
 
         $message = $count === 1
             ? '1 camion ajouté au transporteur.'

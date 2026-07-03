@@ -93,7 +93,7 @@
             </select>
             <input type="hidden" name="numero_ticket" id="numero_ticket_hidden" />
             @if(count($tickets ?? []) === 0)
-              <small class="text-danger">Aucun ticket disponible pour ce vehicule et cet agent.</small>
+              <small class="text-danger">Aucun ticket ne correspond à cette fiche (véhicule, agent, pont et usine identiques).</small>
             @else
               <small class="text-muted">{{ count($tickets) }} ticket(s) disponible(s)</small>
             @endif

@@ -8,13 +8,17 @@ use App\Models\FicheSortie;
 use App\Models\PontEtat;
 use App\Models\Stock;
 use App\Models\Usine;
+use App\Services\CamionsDatabaseResolver;
 use App\Services\ChefEquipeContext;
 use App\Services\FicheSortieNumeroService;
+use App\Services\FicheSortieTicketCorrespondanceService;
 use App\Services\MesAgentsService;
+use App\Services\MesTicketsService;
 use App\Services\MontantAgentFicheService;
 use App\Services\UsinesParProduitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
@@ -49,6 +53,152 @@ class DepenseController extends Controller
 
             return $pont;
         }, $ponts);
+    }
+
+    private function enrichirPontsAvecAgents(array $ponts): array
+    {
+        $connection = app(CamionsDatabaseResolver::class)->connection();
+        if ($connection === null || ! Schema::connection($connection)->hasTable('pont_bascule')) {
+            return $ponts;
+        }
+
+        $pontRows = DB::connection($connection)
+            ->table('pont_bascule')
+            ->select(['id_pont', 'id_agent', 'gerant'])
+            ->get()
+            ->keyBy('id_pont');
+
+        $agentIdsByName = $this->agentIdsByNameFromDatabase($connection);
+
+        return array_map(function (array $pont) use ($pontRows, $agentIdsByName) {
+            $idPont = (int) ($pont['id_pont'] ?? 0);
+            if ($idPont <= 0) {
+                return $pont;
+            }
+
+            $row = $pontRows->get($idPont);
+            if ($row) {
+                if (! empty($row->id_agent)) {
+                    $pont['id_agent'] = (int) $row->id_agent;
+                } elseif (empty($pont['gerant']) && ! empty($row->gerant)) {
+                    $pont['gerant'] = $row->gerant;
+                }
+            }
+
+            if (empty($pont['id_agent'])) {
+                $gerant = $this->normalizePersonName($pont['gerant'] ?? ($row->gerant ?? ''));
+                if ($gerant !== '' && isset($agentIdsByName[$gerant])) {
+                    $pont['id_agent'] = $agentIdsByName[$gerant];
+                }
+            }
+
+            return $pont;
+        }, $ponts);
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function agentIdsByNameFromDatabase(string $connection): array
+    {
+        if (! Schema::connection($connection)->hasTable('agents')) {
+            return [];
+        }
+
+        $map = [];
+        $agents = DB::connection($connection)
+            ->table('agents')
+            ->select(['id_agent', 'nom', 'prenom'])
+            ->get();
+
+        foreach ($agents as $agent) {
+            $id = (int) ($agent->id_agent ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+
+            $name = $this->normalizePersonName(trim(($agent->nom ?? '').' '.($agent->prenom ?? '')));
+            if ($name !== '') {
+                $map[$name] = $id;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function agentIdsByNameFromList(array $agents): array
+    {
+        $map = [];
+
+        foreach ($agents as $agent) {
+            $id = (int) ($agent['id_agent'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+
+            $name = $this->normalizePersonName($agent['nom_complet'] ?? '');
+            if ($name !== '') {
+                $map[$name] = $id;
+            }
+        }
+
+        return $map;
+    }
+
+    private function normalizePersonName(string $name): string
+    {
+        $name = trim(preg_replace('/\s+/', ' ', $name) ?? $name);
+
+        return mb_strtolower($name, 'UTF-8');
+    }
+
+    /**
+     * @return array<int, list<array{id: int, label: string, code: string, nom: string, gerable: bool}>>
+     */
+    private function buildAgentsPontsMap(array $ponts, array $agents): array
+    {
+        $ponts = $this->enrichirPontsAvecAgents($ponts);
+        $agentIdsByName = $this->agentIdsByNameFromList($agents);
+
+        $map = [];
+
+        foreach ($ponts as $pont) {
+            $idPont = (int) ($pont['id_pont'] ?? 0);
+            if ($idPont <= 0) {
+                continue;
+            }
+
+            $agentId = (int) ($pont['id_agent'] ?? 0);
+            if ($agentId <= 0) {
+                $gerant = $this->normalizePersonName($pont['gerant'] ?? '');
+                $agentId = (int) ($agentIdsByName[$gerant] ?? 0);
+            }
+
+            if ($agentId <= 0) {
+                continue;
+            }
+
+            $nom = trim((string) ($pont['nom_pont'] ?? ''));
+            $code = trim((string) ($pont['code_pont'] ?? ''));
+            $label = $code !== '' ? $nom.' ('.$code.')' : $nom;
+
+            $map[$agentId][] = [
+                'id' => $idPont,
+                'label' => $label,
+                'code' => $code,
+                'nom' => $nom,
+                'gerable' => ! empty($pont['gerable']),
+            ];
+        }
+
+        foreach ($map as &$agentPonts) {
+            usort($agentPonts, fn (array $a, array $b) => strcmp($a['nom'], $b['nom']));
+        }
+
+        return $map;
     }
 
     private function calculerStockDisponible(Stock $stock, ?int $excludeFicheId = null): float
@@ -628,6 +778,7 @@ class DepenseController extends Controller
         // Charger les ponts et agents pour le modal fiche de sortie
         $timeout = 10;
         $ponts = [];
+        $agentsPontsMap = [];
         $agents = [];
 
         try {
@@ -648,6 +799,8 @@ class DepenseController extends Controller
             // Ignorer l'erreur
         }
 
+        $agentsPontsMap = $this->buildAgentsPontsMap($ponts, $agents);
+
         // Charger les chefs des chargeurs
         $chefChargeurs = \App\Models\ChefChargeur::orderBy('nom')->get();
 
@@ -667,6 +820,7 @@ class DepenseController extends Controller
             ],
             'vehicule_id' => $vehiculeId,
             'ponts' => $ponts,
+            'agentsPontsMap' => $agentsPontsMap,
             'agents' => $agents,
             'usinesParProduit' => $usinesParProduit,
             'chefChargeurs' => $chefChargeurs,
@@ -809,29 +963,16 @@ class DepenseController extends Controller
         
         if ($ficheSortie && !$ficheSortie->id_ticket) {
             try {
-                $phpsessid = session('external_auth.phpsessid', '');
-                $chefParams = app(ChefEquipeContext::class)->apiQueryParams($request);
-                $ticketsResponse = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->withHeaders(['Cookie' => 'PHPSESSID=' . $phpsessid])
-                    ->get(config('services.external_auth.mes_tickets_url'), $chefParams);
-                if ($ticketsResponse->successful()) {
-                    $allTickets = $ticketsResponse->json('tickets') ?? [];
-                    // Filtrer les tickets du véhicule par matricule ET par nom d'agent de la fiche
-                    $agentNom = strtolower(trim($ficheSortie->nom_agent ?? ''));
-                    $tickets = array_filter($allTickets, function($t) use ($matricule, $agentNom) {
-                        $matchMatricule = ($t['matricule_vehicule'] ?? '') === $matricule;
-                        // Comparer par nom d'agent (nom complet ou partiel)
-                        $ticketAgentNom = strtolower(trim(($t['agent_nom'] ?? '') . ' ' . ($t['agent_prenom'] ?? '')));
-                        if (empty($ticketAgentNom) || $ticketAgentNom === ' ') {
-                            $ticketAgentNom = strtolower(trim($t['nom_agent'] ?? ''));
-                        }
-                        $matchAgent = empty($agentNom) || str_contains($ticketAgentNom, $agentNom) || str_contains($agentNom, $ticketAgentNom);
-                        return $matchMatricule && $matchAgent;
-                    });
-                    $tickets = array_values($tickets);
-                }
+                $mesTicketsService = app(MesTicketsService::class);
+                $correspondance = app(FicheSortieTicketCorrespondanceService::class);
+                $allTickets = $mesTicketsService->fetchAllTickets([], $request);
+                $tickets = array_values(array_filter(
+                    $allTickets,
+                    static fn (array $t) => $correspondance->correspond(
+                        $correspondance->ticketDepuisApi($t),
+                        $ficheSortie
+                    )
+                ));
             } catch (\Throwable $e) {
                 // Ignorer
             }
@@ -1010,6 +1151,18 @@ class DepenseController extends Controller
         if (str_contains($numeroTicket, ' - ')) {
             $parts = explode(' - ', $numeroTicket);
             $numeroTicket = trim($parts[0]);
+        }
+
+        $apiTicket = app(MesTicketsService::class)->findTicketById((int) $validated['id_ticket'], $request);
+        if ($apiTicket) {
+            $raison = app(FicheSortieTicketCorrespondanceService::class)->raisonNonCorrespondance(
+                app(FicheSortieTicketCorrespondanceService::class)->ticketDepuisApi($apiTicket),
+                $ficheSortie
+            );
+            if ($raison !== null) {
+                return redirect()->route('fiches_sortie.show', ['fiche_id' => $ficheSortie->id])
+                    ->with('error', $raison);
+            }
         }
 
         $ficheSortie->update([
@@ -1274,32 +1427,33 @@ class DepenseController extends Controller
 
     public function getTicketsConformesApi(Request $request, ChefEquipeContext $chefContext)
     {
-        // Récupérer les tickets depuis l'API Unipalm
-        $timeout = (int) config('services.external_auth.timeout', 10);
+        $fiche = null;
+        $ficheId = (int) $request->query('fiche_id', 0);
+        if ($ficheId > 0) {
+            $fiche = FicheSortie::find($ficheId);
+        }
+
+        $mesTicketsService = app(MesTicketsService::class);
+        $correspondance = app(FicheSortieTicketCorrespondanceService::class);
+        $allTickets = $mesTicketsService->fetchAllTickets([], $request);
         $tickets = [];
-        $mesTicketsUrl = (string) config('services.external_auth.mes_tickets_url');
-        
-        try {
-            $response = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout($timeout)
-                ->get($mesTicketsUrl, $chefContext->apiQueryParams($request));
-            
-            if ($response->successful()) {
-                $ticketsApi = $response->json('tickets') ?? [];
-                // Formater les tickets pour le frontend
-                foreach ($ticketsApi as $t) {
-                    $tickets[] = [
-                        'id_ticket' => $t['id_ticket'] ?? 0,
-                        'numero_ticket' => $t['numero_ticket'] ?? '',
-                        'matricule_vehicule' => $t['matricule_vehicule'] ?? '',
-                        'date_ticket' => $t['date_ticket'] ?? '',
-                        'agent_nom' => trim(($t['agent_nom'] ?? '') . ' ' . ($t['agent_prenom'] ?? '')),
-                        'poids' => $t['poids'] ?? 0,
-                    ];
-                }
+
+        foreach ($allTickets as $normalized) {
+            if ($fiche && ! $correspondance->correspond($correspondance->ticketDepuisApi($normalized), $fiche)) {
+                continue;
             }
-        } catch (\Throwable $e) {}
+
+            $tickets[] = [
+                'id_ticket' => $normalized['id_ticket'],
+                'numero_ticket' => $normalized['numero_ticket'],
+                'matricule_vehicule' => $normalized['matricule_vehicule'],
+                'date_ticket' => $normalized['date_ticket'] ?? '',
+                'agent_nom' => $normalized['nom_agent'],
+                'nom_pont' => $normalized['nom_pont'] ?? '',
+                'nom_usine' => $normalized['nom_usine'] ?? '',
+                'poids' => $normalized['poids'] ?? 0,
+            ];
+        }
 
         return response()->json($tickets);
     }

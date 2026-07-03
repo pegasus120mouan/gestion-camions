@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\FicheSortie;
 use App\Models\Ticket;
 use App\Models\Transporteur;
+use App\Models\TransporteurVehicule;
+use App\Models\Usine;
 
 class TicketTransporteurFicheService
 {
@@ -37,6 +39,42 @@ class TicketTransporteurFicheService
             : null;
     }
 
+    public function agentNomEffectif(FicheSortie $fiche): ?string
+    {
+        $nomFiche = trim((string) ($fiche->nom_agent ?? ''));
+        if ($nomFiche !== '') {
+            return $nomFiche;
+        }
+
+        $ticket = $this->ticketPourFiche($fiche);
+        if (!$ticket || !(int) ($ticket->id_agent ?? 0)) {
+            return null;
+        }
+
+        $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
+
+        return $agent ? trim((string) ($agent['nom_complet'] ?? '')) : null;
+    }
+
+    public function usineNomEffectif(FicheSortie $fiche): ?string
+    {
+        $usineFiche = trim((string) ($fiche->usine ?? ''));
+        if ($usineFiche !== '') {
+            return $usineFiche;
+        }
+
+        $ticket = $this->ticketPourFiche($fiche);
+        if (!$ticket || !(int) ($ticket->id_usine ?? 0)) {
+            return null;
+        }
+
+        $nomUsine = Usine::query()
+            ->where('id_usine', (int) $ticket->id_usine)
+            ->value('nom_usine');
+
+        return $nomUsine ? trim((string) $nomUsine) : null;
+    }
+
     /**
      * Complète la fiche avec le numéro et le poids du ticket lié si manquants.
      */
@@ -61,8 +99,75 @@ class TicketTransporteurFicheService
             $updates['poids_pont'] = $ticket->poids;
         }
 
+        $matriculeTicket = trim((string) ($ticket->matricule_vehicule ?? ''));
+        if ($matriculeTicket !== '' && strcasecmp(trim((string) $fiche->matricule_vehicule), $matriculeTicket) !== 0) {
+            $updates['matricule_vehicule'] = $matriculeTicket;
+        }
+
+        if ((int) ($ticket->vehicule_id ?? 0) > 0 && (int) $fiche->vehicule_id !== (int) $ticket->vehicule_id) {
+            $updates['vehicule_id'] = (int) $ticket->vehicule_id;
+        }
+
+        if ($ticket->date_ticket) {
+            $dateTicket = $ticket->date_ticket->format('Y-m-d');
+            $dateChargement = $fiche->date_chargement?->format('Y-m-d');
+            if ($dateChargement !== $dateTicket) {
+                $updates['date_chargement'] = $dateTicket;
+            }
+            $dateDechargement = $fiche->date_dechargement?->format('Y-m-d');
+            if ($dateDechargement !== $dateTicket) {
+                $updates['date_dechargement'] = $dateTicket;
+            }
+        }
+
+        if ((int) ($ticket->id_agent ?? 0) > 0) {
+            $updates['id_agent'] = (int) $ticket->id_agent;
+            $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
+            if ($agent) {
+                $nomAgent = trim((string) ($agent['nom_complet'] ?? ''));
+                if ($nomAgent !== '' && trim((string) ($fiche->nom_agent ?? '')) !== $nomAgent) {
+                    $updates['nom_agent'] = $nomAgent;
+                }
+                $numeroAgent = trim((string) ($agent['numero_agent'] ?? ''));
+                if ($numeroAgent !== '' && trim((string) ($fiche->numero_agent ?? '')) !== $numeroAgent) {
+                    $updates['numero_agent'] = $numeroAgent;
+                }
+            }
+        }
+
+        if ((int) ($ticket->id_usine ?? 0) > 0) {
+            $nomUsine = Usine::query()
+                ->where('id_usine', (int) $ticket->id_usine)
+                ->value('nom_usine');
+            if ($nomUsine && trim((string) ($fiche->usine ?? '')) !== trim((string) $nomUsine)) {
+                $updates['usine'] = trim((string) $nomUsine);
+            }
+        }
+
         if (!empty($updates)) {
             $fiche->update($updates);
+            $fiche->refresh();
+        }
+
+        return $this->assurerTransporteurSurFiche($fiche);
+    }
+
+    /**
+     * Aligne transporteur_id sur le compte lié au véhicule (une fiche = un transporteur).
+     */
+    public function assurerTransporteurSurFiche(FicheSortie $fiche): FicheSortie
+    {
+        $transporteur = app(TransporteurVehiculeService::class)->transporteurPourVehicule(
+            $fiche->vehicule_id ? (int) $fiche->vehicule_id : null,
+            $fiche->matricule_vehicule
+        );
+
+        if (!$transporteur) {
+            return $fiche;
+        }
+
+        if ((int) $fiche->transporteur_id !== (int) $transporteur->id) {
+            $fiche->update(['transporteur_id' => $transporteur->id]);
             $fiche->refresh();
         }
 
@@ -139,6 +244,78 @@ class TicketTransporteurFicheService
         return $transporteur;
     }
 
+    /**
+     * Rattache les fiches/tickets des camions de ce transporteur (ex. après ajout d'un camion).
+     */
+    public function reconcilierFichesPourTransporteur(Transporteur $transporteur): int
+    {
+        $links = TransporteurVehicule::query()
+            ->where('transporteur_id', $transporteur->id)
+            ->get(['vehicule_id', 'matricule_vehicule']);
+
+        $matricules = $links->pluck('matricule_vehicule')
+            ->map(fn ($m) => trim((string) $m))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $vehiculeIds = $links->pluck('vehicule_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($matricules === [] && $vehiculeIds === []) {
+            return 0;
+        }
+
+        $ticketIds = Ticket::query()
+            ->where(function ($query) use ($matricules, $vehiculeIds) {
+                if ($matricules !== []) {
+                    $query->whereIn('matricule_vehicule', $matricules);
+                }
+                if ($vehiculeIds !== []) {
+                    $method = $matricules !== [] ? 'orWhereIn' : 'whereIn';
+                    $query->{$method}('vehicule_id', $vehiculeIds);
+                }
+            })
+            ->pluck('id_ticket');
+
+        $fiches = FicheSortie::query()
+            ->where(function ($query) use ($matricules, $vehiculeIds, $ticketIds) {
+                $hasClause = false;
+
+                if ($matricules !== []) {
+                    $query->whereIn('matricule_vehicule', $matricules);
+                    $hasClause = true;
+                }
+
+                if ($vehiculeIds !== []) {
+                    $hasClause
+                        ? $query->orWhereIn('vehicule_id', $vehiculeIds)
+                        : $query->whereIn('vehicule_id', $vehiculeIds);
+                    $hasClause = true;
+                }
+
+                if ($ticketIds->isNotEmpty()) {
+                    $hasClause
+                        ? $query->orWhereIn('id_ticket', $ticketIds)
+                        : $query->whereIn('id_ticket', $ticketIds);
+                }
+            })
+            ->get();
+
+        $count = 0;
+        foreach ($fiches as $fiche) {
+            $this->synchroniserDonneesTicketSurFiche($fiche);
+            $count++;
+        }
+
+        return $count;
+    }
+
     private function ticketPourFiche(FicheSortie $fiche): ?Ticket
     {
         if ($fiche->id_ticket) {
@@ -185,6 +362,39 @@ class TicketTransporteurFicheService
 
         if ($ticket->date_ticket) {
             $data['date_dechargement'] = $ticket->date_ticket->format('Y-m-d');
+        }
+
+        $matricule = trim((string) ($ticket->matricule_vehicule ?? ''));
+        if ($matricule !== '') {
+            $data['matricule_vehicule'] = $matricule;
+        }
+
+        if ((int) ($ticket->vehicule_id ?? 0) > 0) {
+            $data['vehicule_id'] = (int) $ticket->vehicule_id;
+        }
+
+        if ((int) ($ticket->id_agent ?? 0) > 0) {
+            $data['id_agent'] = (int) $ticket->id_agent;
+            $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
+            if ($agent) {
+                $nomAgent = trim((string) ($agent['nom_complet'] ?? ''));
+                if ($nomAgent !== '') {
+                    $data['nom_agent'] = $nomAgent;
+                }
+                $numeroAgent = trim((string) ($agent['numero_agent'] ?? ''));
+                if ($numeroAgent !== '') {
+                    $data['numero_agent'] = $numeroAgent;
+                }
+            }
+        }
+
+        if ((int) ($ticket->id_usine ?? 0) > 0) {
+            $nomUsine = Usine::query()
+                ->where('id_usine', (int) $ticket->id_usine)
+                ->value('nom_usine');
+            if ($nomUsine) {
+                $data['usine'] = trim((string) $nomUsine);
+            }
         }
 
         return $data;

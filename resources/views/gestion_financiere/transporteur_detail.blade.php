@@ -9,9 +9,6 @@
         <span class="badge bg-secondary ms-1">{{ $transporteur->vehicules->count() }} camion(s)</span>
       </div>
       <div>
-        <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalPaiementGestion">
-          <i class="bx bx-plus me-1"></i>Paiement
-        </button>
         <a href="{{ route('gestionfinanciere.montant_transporteur') }}" class="btn btn-secondary">
           <i class="bx bx-arrow-back me-1"></i>Retour
         </a>
@@ -60,7 +57,7 @@
     </div>
 
     <div class="row mb-4">
-      <div class="col-md-8">
+      <div class="col-12">
         <div class="card mb-4">
           <div class="card-header">
             <h5 class="mb-0">Filtres de recherche</h5>
@@ -110,6 +107,8 @@
                 <tr>
                   <th>Date</th>
                   <th>N° ticket</th>
+                  <th>Usine</th>
+                  <th>Agent</th>
                   <th>Véhicule</th>
                   <th>Poids (kg)</th>
                   <th>PU</th>
@@ -125,6 +124,8 @@
                   @php
                     $poids = $ticketFicheService->poidsEffectif($fiche);
                     $numeroTicket = $ticketFicheService->numeroTicketEffectif($fiche);
+                    $nomUsine = $ticketFicheService->usineNomEffectif($fiche);
+                    $nomAgent = $ticketFicheService->agentNomEffectif($fiche);
                     $pu = $fiche->prix_unitaire_transport;
                     $montantGlobalFiche = $pu ? ($poids * $pu) : 0;
                     $depensesTableau = \App\Models\Depense::where('matricule_vehicule', $fiche->matricule_vehicule)
@@ -144,6 +145,8 @@
                         <span class="text-muted">—</span>
                       @endif
                     </td>
+                    <td>{{ $nomUsine ?: '—' }}</td>
+                    <td>{{ $nomAgent ?: '—' }}</td>
                     <td>
                       <a href="{{ route('gestionfinanciere.transporteur.vehicule', ['matricule' => $fiche->matricule_vehicule]) }}" class="fw-bold text-primary text-decoration-none">
                         {{ $fiche->matricule_vehicule }}
@@ -172,7 +175,7 @@
                   </tr>
                 @empty
                   <tr>
-                    <td colspan="10" class="text-center text-muted py-4">Aucune fiche de sortie pour ce transporteur</td>
+                    <td colspan="12" class="text-center text-muted py-4">Aucune fiche de sortie pour ce transporteur</td>
                   </tr>
                 @endforelse
               </tbody>
@@ -180,101 +183,6 @@
           </div>
         </div>
       </div>
-
-      <div class="col-md-4">
-        <div class="card">
-          <div class="card-header d-flex justify-content-between align-items-center" style="background-color: #d1e7dd; border-bottom: 1px solid #badbcc;">
-            <h5 class="card-title mb-0" style="color: #0f5132;"><i class="bx bx-plus-circle me-2"></i>Paiements ({{ $paiementsGestion->count() }})</h5>
-            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalPaiementGestion">
-              <i class="bx bx-plus"></i>
-            </button>
-          </div>
-          <div class="table-responsive">
-            <table class="table table-sm">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Mode</th>
-                  <th class="text-end">Montant</th>
-                </tr>
-              </thead>
-              <tbody>
-                @forelse($paiementsGestion as $paiement)
-                  <tr>
-                    <td>{{ $paiement->date_paiement ? $paiement->date_paiement->format('d/m/Y') : '-' }}</td>
-                    <td>
-                      @if($paiement->mode_paiement)
-                        <span class="badge bg-info">{{ $paiement->mode_paiement }}</span>
-                      @else
-                        -
-                      @endif
-                    </td>
-                    <td class="text-end text-success">{{ number_format($paiement->montant, 0, ',', ' ') }} FCFA</td>
-                  </tr>
-                @empty
-                  <tr>
-                    <td colspan="3" class="text-center text-muted">Aucun paiement enregistré</td>
-                  </tr>
-                @endforelse
-              </tbody>
-              @if($paiementsGestion->count() > 0)
-                <tfoot>
-                  <tr class="table-success">
-                    <td colspan="2"><strong>Total paiements</strong></td>
-                    <td class="text-end"><strong>{{ number_format($montantPayeGestion, 0, ',', ' ') }} FCFA</strong></td>
-                  </tr>
-                </tfoot>
-              @endif
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal fade" id="modalPaiementGestion" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header bg-primary text-white">
-        <h5 class="modal-title text-white"><i class="bx bx-money me-2"></i>Nouveau paiement - {{ $transporteur->nom }} {{ $transporteur->prenoms }}</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <form action="{{ route('gestionfinanciere.paiement_transporteur.store', $transporteur) }}" method="POST">
-        @csrf
-        <div class="modal-body">
-          <div class="alert alert-info">
-            <strong>Reste à payer:</strong> {{ number_format($resteAPayer, 0, ',', ' ') }} FCFA
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Montant</label>
-            <input type="text" id="montant_display" class="form-control" required placeholder="0">
-            <input type="hidden" name="montant" id="montant_hidden">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Date de paiement</label>
-            <input type="date" name="date_paiement" class="form-control" required value="{{ date('Y-m-d') }}">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Mode de paiement</label>
-            <select name="mode_paiement" id="mode_paiement" class="form-select">
-              <option value="">-- Sélectionner --</option>
-              <option value="Espèces">Espèces</option>
-              <option value="Virement">Virement</option>
-              <option value="Chèque">Chèque</option>
-              <option value="Mobile Money">Mobile Money</option>
-            </select>
-          </div>
-          <div class="mb-3" id="reference_container" style="display: none;">
-            <label class="form-label">Référence</label>
-            <input type="text" name="reference" class="form-control" placeholder="Numéro de chèque ou référence">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-primary"><i class="bx bx-save me-1"></i>Enregistrer</button>
-        </div>
-      </form>
     </div>
   </div>
 </div>
@@ -425,30 +333,6 @@
 @section('page-scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  var montantDisplay = document.getElementById('montant_display');
-  var montantHidden = document.getElementById('montant_hidden');
-
-  if (montantDisplay) {
-    montantDisplay.addEventListener('input', function(e) {
-      var value = e.target.value.replace(/\s/g, '').replace(/[^0-9]/g, '');
-      if (value) {
-        montantHidden.value = value;
-        e.target.value = parseInt(value, 10).toLocaleString('fr-FR').replace(/,/g, ' ');
-      } else {
-        montantHidden.value = '';
-        e.target.value = '';
-      }
-    });
-  }
-
-  var modePaiement = document.getElementById('mode_paiement');
-  var refContainer = document.getElementById('reference_container');
-  if (modePaiement && refContainer) {
-    modePaiement.addEventListener('change', function() {
-      refContainer.style.display = (this.value === 'Chèque' || this.value === 'Virement') ? 'block' : 'none';
-    });
-  }
-
   function formatNumber(value) {
     value = value.replace(/\D/g, '');
     return value ? parseInt(value, 10).toLocaleString('fr-FR').replace(/\u202F/g, ' ').replace(/,/g, ' ') : '';

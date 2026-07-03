@@ -150,24 +150,31 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label">Pont de pesage <span class="text-danger">*</span></label>
-            <input type="text" id="pont_input" class="form-control" placeholder="Tapez pour rechercher un pont..." list="ponts_list" autocomplete="off" required />
-            <datalist id="ponts_list">
-              @foreach($ponts ?? [] as $pont)
-                <option data-id="{{ $pont['id_pont'] }}" value="{{ $pont['nom_pont'] }} ({{ $pont['code_pont'] }})">
-              @endforeach
-            </datalist>
-          </div>
-
-          <div class="mb-3">
             <label class="form-label">Agent <span class="text-danger">*</span></label>
             <div class="position-relative">
-              <input type="text" id="agent_search" class="form-control" placeholder="Tapez pour rechercher un agent..." autocomplete="off" required />
+              <input type="text" id="agent_search" class="form-control" placeholder="Rechercher par N° agent ou nom..." autocomplete="off" required />
               <div id="agent_dropdown" class="dropdown-menu w-100" style="max-height: 250px; overflow-y: auto; display: none;">
                 @foreach($agents ?? [] as $agent)
-                  <a href="#" class="dropdown-item agent-option" data-id="{{ $agent['id_agent'] }}" data-display="{{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})">{{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})</a>
+                  <a href="#" class="dropdown-item agent-option"
+                    data-id="{{ $agent['id_agent'] }}"
+                    data-display="{{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})"
+                    data-numero="{{ strtolower($agent['numero_agent'] ?? '') }}"
+                    data-nom="{{ strtolower($agent['nom_complet'] ?? '') }}">
+                    {{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})
+                  </a>
                 @endforeach
               </div>
+            </div>
+          </div>
+
+          <div class="mb-3 d-none" id="pont_section">
+            <label class="form-label" for="pont_select">Pont de pesage <span class="text-danger">*</span></label>
+            <input type="text" id="pont_readonly" class="form-control bg-light d-none" readonly>
+            <select id="pont_select" class="form-select d-none">
+              <option value="">— Sélectionner un pont —</option>
+            </select>
+            <div id="pont_empty" class="form-text text-muted d-none">
+              Aucun pont-bascule associé à cet agent.
             </div>
           </div>
 
@@ -226,26 +233,22 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  // Mapping ponts
-  var pontsMap = {!! json_encode(collect($ponts ?? [])->mapWithKeys(function($pont) {
-      return [$pont['nom_pont'] . ' (' . $pont['code_pont'] . ')' => $pont['id_pont']];
-  })->toArray()) !!};
+  var agentsPontsMap = {!! json_encode($agentsPontsMap ?? []) !!};
+
   var pontsGerableMap = {!! json_encode(collect($ponts ?? [])->mapWithKeys(function($pont) {
       return [(string) $pont['id_pont'] => !empty($pont['gerable'])];
   })->toArray()) !!};
 
-  // Mapping agents
-  var agentsMap = {!! json_encode(collect($agents ?? [])->mapWithKeys(function($agent) {
-      return [$agent['nom_complet'] . ' (' . $agent['numero_agent'] . ')' => $agent['id_agent']];
-  })->toArray()) !!};
-
-  var pontInput = document.getElementById('pont_input');
   var agentSearch = document.getElementById('agent_search');
   var agentDropdown = document.getElementById('agent_dropdown');
   var idPontHidden = document.getElementById('id_pont_hidden');
   var idAgentHidden = document.getElementById('id_agent_hidden');
   var pontDisplayHidden = document.getElementById('pont_display_hidden');
   var agentDisplayHidden = document.getElementById('agent_display_hidden');
+  var pontSection = document.getElementById('pont_section');
+  var pontReadonly = document.getElementById('pont_readonly');
+  var pontSelect = document.getElementById('pont_select');
+  var pontEmpty = document.getElementById('pont_empty');
   var produitSelect = document.getElementById('produit_select');
   var usineSelect = document.getElementById('usine_select');
   var usinesParProduit = {!! json_encode($usinesParProduit ?? []) !!};
@@ -322,18 +325,82 @@ document.addEventListener('DOMContentLoaded', function() {
 
   mettreAJourBoutonEnregistrer();
 
-  if (pontInput) {
-    pontInput.addEventListener('change', function() {
-      var val = this.value;
-      idPontHidden.value = pontsMap[val] || '';
-      pontDisplayHidden.value = val;
-      verifierStockPontProduit();
+  function resetPontField() {
+    if (idPontHidden) idPontHidden.value = '';
+    if (pontDisplayHidden) pontDisplayHidden.value = '';
+    if (pontReadonly) {
+      pontReadonly.value = '';
+      pontReadonly.classList.add('d-none');
+    }
+    if (pontSelect) {
+      pontSelect.innerHTML = '<option value="">— Sélectionner un pont —</option>';
+      pontSelect.classList.add('d-none');
+      pontSelect.value = '';
+    }
+    if (pontEmpty) pontEmpty.classList.add('d-none');
+    if (pontSection) pontSection.classList.add('d-none');
+    stockPontProduitValide = false;
+    masquerAlerteStock();
+    mettreAJourBoutonEnregistrer();
+  }
+
+  function selectPont(pont) {
+    if (!pont) {
+      return;
+    }
+    idPontHidden.value = String(pont.id);
+    pontDisplayHidden.value = pont.label;
+    verifierStockPontProduit();
+  }
+
+  function updatePontField(agentId) {
+    resetPontField();
+
+    if (!agentId) {
+      return;
+    }
+
+    var ponts = agentsPontsMap[String(agentId)] || agentsPontsMap[agentId] || [];
+    pontSection.classList.remove('d-none');
+
+    if (ponts.length === 0) {
+      pontEmpty.classList.remove('d-none');
+      return;
+    }
+
+    if (ponts.length === 1) {
+      pontReadonly.value = ponts[0].label;
+      pontReadonly.classList.remove('d-none');
+      selectPont(ponts[0]);
+      return;
+    }
+
+    ponts.forEach(function (pont) {
+      var option = document.createElement('option');
+      option.value = pont.id;
+      option.textContent = pont.label;
+      pontSelect.appendChild(option);
     });
-    pontInput.addEventListener('input', function() {
-      var val = this.value;
-      idPontHidden.value = pontsMap[val] || '';
-      pontDisplayHidden.value = val;
-      verifierStockPontProduit();
+    pontSelect.classList.remove('d-none');
+  }
+
+  if (pontSelect) {
+    pontSelect.addEventListener('change', function () {
+      var selectedId = this.value;
+      if (!selectedId) {
+        idPontHidden.value = '';
+        pontDisplayHidden.value = '';
+        stockPontProduitValide = false;
+        masquerAlerteStock();
+        mettreAJourBoutonEnregistrer();
+        return;
+      }
+
+      var ponts = agentsPontsMap[String(idAgentHidden.value)] || agentsPontsMap[idAgentHidden.value] || [];
+      var pont = ponts.find(function (item) {
+        return String(item.id) === String(selectedId);
+      });
+      selectPont(pont || null);
     });
   }
 
@@ -383,19 +450,29 @@ document.addEventListener('DOMContentLoaded', function() {
     var agentOptions = agentDropdown.querySelectorAll('.agent-option');
     
     agentSearch.addEventListener('input', function() {
-      var searchVal = this.value.toLowerCase();
+      var searchVal = this.value.toLowerCase().trim();
       var hasVisible = false;
-      
+
+      if (idAgentHidden.value) {
+        idAgentHidden.value = '';
+        agentDisplayHidden.value = '';
+        resetPontField();
+      }
+
       agentOptions.forEach(function(option) {
         var text = option.textContent.toLowerCase();
-        if (text.includes(searchVal)) {
-          option.style.display = 'block';
+        var numero = option.dataset.numero || '';
+        var nom = option.dataset.nom || '';
+        var match = text.includes(searchVal)
+          || numero.includes(searchVal)
+          || nom.includes(searchVal);
+
+        option.style.display = match ? 'block' : 'none';
+        if (match) {
           hasVisible = true;
-        } else {
-          option.style.display = 'none';
         }
       });
-      
+
       agentDropdown.style.display = hasVisible && searchVal.length > 0 ? 'block' : 'none';
     });
     
@@ -412,6 +489,7 @@ document.addEventListener('DOMContentLoaded', function() {
         idAgentHidden.value = this.dataset.id;
         agentDisplayHidden.value = this.dataset.display;
         agentDropdown.style.display = 'none';
+        updatePontField(this.dataset.id);
         mettreAJourBoutonEnregistrer();
       });
     });
@@ -431,8 +509,12 @@ document.addEventListener('DOMContentLoaded', function() {
       e.preventDefault();
       
       if (!idPontHidden.value) {
-        alert('Veuillez selectionner un pont valide dans la liste.');
-        pontInput.focus();
+        alert('Veuillez selectionner un pont associe a cet agent.');
+        if (pontSelect && !pontSelect.classList.contains('d-none')) {
+          pontSelect.focus();
+        } else if (agentSearch) {
+          agentSearch.focus();
+        }
         return false;
       }
       if (!idAgentHidden.value) {
