@@ -855,7 +855,7 @@ class TicketController extends Controller
             'vehicule_id' => (int) ($apiTicket['vehicule_id'] ?? 0) ?: null,
             'poids' => $apiTicket['poids'] ?? null,
             'id_usine' => (int) ($apiTicket['id_usine'] ?? 0) ?: null,
-            'id_agent' => (int) ($apiTicket['id_agent'] ?? 0) ?: null,
+            'id_agent' => (int) ($apiTicket['id_agent'] ?? 0) ?: ($fiche?->id_agent ? (int) $fiche->id_agent : null),
             'statut_ticket' => $apiTicket['statut_ticket'] ?? 'non soldé',
             'id_utilisateur' => $ticket->id_utilisateur ?? 1,
             'conformite' => 'valide',

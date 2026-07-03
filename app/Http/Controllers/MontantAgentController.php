@@ -167,6 +167,8 @@ class MontantAgentController extends Controller
         $filtres = $this->reporting->filtresDepuisRequest($request);
         $filtres['id_agent'] = $id_agent;
 
+        $this->reporting->synchroniserTicketsAgent($id_agent, $request);
+
         $montantDu = (int) round($this->reporting->calculerMontantDuAgent($id_agent, $filtres));
         $montantDuGlobal = (int) round($this->reporting->calculerMontantDuAgent($id_agent, ['id_agent' => $id_agent]));
         $paiements = PaiementAgent::where('id_agent', $id_agent)
