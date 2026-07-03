@@ -15,7 +15,8 @@ use Illuminate\Support\Facades\Schema;
 class MontantAgentReportingService
 {
     public function __construct(
-        private MontantAgentFicheService $montantAgentFiche
+        private MontantAgentFicheService $montantAgentFiche,
+        private TicketPrixService $ticketPrix,
     ) {}
 
     /**
@@ -41,7 +42,60 @@ class MontantAgentReportingService
     }
 
     /**
+     * Tickets validés dans gest-camions — source principale de l'espace agent-financier.
+     *
      * @param  array<string, mixed>  $filtres
+     */
+    public function queryTicketsValidesAgent(array $filtres = []): Builder
+    {
+        $query = Ticket::query()
+            ->whereIn('conformite', ['valide', 'conforme'])
+            ->where('id_agent', '>', 0);
+
+        if (! empty($filtres['id_agent'])) {
+            $query->where('id_agent', (int) $filtres['id_agent']);
+        }
+
+        if (! empty($filtres['date_debut'])) {
+            $query->whereDate('date_ticket', '>=', $filtres['date_debut']);
+        }
+
+        if (! empty($filtres['date_fin'])) {
+            $query->whereDate('date_ticket', '<=', $filtres['date_fin']);
+        }
+
+        if (! empty($filtres['sans_bordereau'])) {
+            $query->whereNull('bordereau_agent_id');
+        }
+
+        if (! empty($filtres['usine'])) {
+            $nomUsine = trim((string) $filtres['usine']);
+            $idsUsine = Usine::query()
+                ->where('nom_usine', $nomUsine)
+                ->pluck('id_usine');
+
+            $query->where(function (Builder $sub) use ($nomUsine, $idsUsine) {
+                if ($idsUsine->isNotEmpty()) {
+                    $sub->whereIn('id_usine', $idsUsine);
+                }
+                $sub->orWhereHas('ficheSortie', fn (Builder $f) => $f->where('usine', $nomUsine));
+            });
+        }
+
+        if (! empty($filtres['produit_id'])) {
+            $produitId = (int) $filtres['produit_id'];
+            $query->where(function (Builder $sub) use ($produitId) {
+                $sub->whereHas('ficheSortie', fn (Builder $f) => $f->where('produit_id', $produitId))
+                    ->orWhereDoesntHave('ficheSortie');
+            });
+        }
+
+        return $query;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtres
+     * @deprecated Conservé pour compatibilité interne ; préférer queryTicketsValidesAgent.
      */
     public function queryFichesDechargees(array $filtres = []): Builder
     {
@@ -95,55 +149,195 @@ class MontantAgentReportingService
             : 0;
     }
 
+    public function montantLigneTicket(Ticket $ticket, ?FicheSortie $fiche = null, ?int $produitIdOverride = null): int
+    {
+        if ($ticket->montant_paie !== null && (float) $ticket->montant_paie > 0) {
+            return (int) round((float) $ticket->montant_paie);
+        }
+
+        if ($fiche && $fiche->exists && $fiche->montant_agent !== null) {
+            return (int) round((float) $fiche->montant_agent);
+        }
+
+        $usinesById = $this->buildUsinesById();
+        $nomUsine = $fiche?->usine
+            ?: ($usinesById[(string) ($ticket->id_usine ?? '')] ?? null);
+        $produitId = $produitIdOverride
+            ?: ($fiche?->produit_id ? (int) $fiche->produit_id : null);
+
+        $pu = (float) ($ticket->prix_unitaire ?? 0) > 0
+            ? (float) $ticket->prix_unitaire
+            : $this->ticketPrix->prixUnitairePourTicket(
+                $ticket,
+                $produitId,
+                null,
+                null,
+                (int) ($ticket->id_agent ?? 0) ?: null,
+                $nomUsine,
+            );
+
+        $poids = (float) ($ticket->poids ?? 0);
+        if ($poids <= 0 && $fiche) {
+            $poids = (float) ($fiche->poids_pont ?? 0);
+        }
+
+        return $pu !== null && $poids > 0 ? (int) round($pu * $poids) : 0;
+    }
+
+    public function prixUnitaireLigneTicket(Ticket $ticket, ?FicheSortie $fiche = null, ?int $produitIdOverride = null): ?float
+    {
+        if ((float) ($ticket->prix_unitaire ?? 0) > 0) {
+            return (float) $ticket->prix_unitaire;
+        }
+
+        if ($fiche && $fiche->exists) {
+            $puFiche = $this->montantAgentFiche->prixUnitairePourFiche($fiche);
+            if ($puFiche !== null) {
+                return $puFiche;
+            }
+        }
+
+        $usinesById = $this->buildUsinesById();
+        $nomUsine = $fiche?->usine
+            ?: ($usinesById[(string) ($ticket->id_usine ?? '')] ?? null);
+        $produitId = $produitIdOverride
+            ?: ($fiche?->produit_id ? (int) $fiche->produit_id : null);
+
+        return $this->ticketPrix->prixUnitairePourTicket(
+            $ticket,
+            $produitId,
+            null,
+            null,
+            (int) ($ticket->id_agent ?? 0) ?: null,
+            $nomUsine,
+        );
+    }
+
     /**
      * @param  array<string, mixed>  $filtres
      */
     public function calculerMontantDuAgent(int $idAgent, array $filtres = []): float
     {
         $filtres['id_agent'] = $idAgent;
-        $fiches = $this->queryFichesDechargees($filtres)->get();
         $total = 0.0;
 
-        foreach ($fiches as $fiche) {
-            $total += $this->montantLigneFiche($fiche);
+        foreach ($this->lignesAvecMontant($filtres) as $item) {
+            $total += (int) ($item['montant'] ?? 0);
         }
 
         return $total;
     }
 
     /**
+     * Lignes agent : ticket validé (+ fiche PGF optionnelle).
+     *
      * @param  array<string, mixed>  $filtres
-     * @return list<array{fiche: FicheSortie, montant: int, prix_unitaire: float|null}>
+     * @return list<array{
+     *   ticket: Ticket,
+     *   fiche: FicheSortie,
+     *   a_fiche: bool,
+     *   montant: int,
+     *   prix_unitaire: float|null,
+     *   poids_effectif: float
+     * }>
      */
-    public function fichesAvecMontant(array $filtres = []): array
+    public function lignesAvecMontant(array $filtres = []): array
     {
-        $fiches = $this->queryFichesDechargees($filtres)
-            ->orderBy('nom_produit')
-            ->orderBy('usine')
-            ->orderBy('date_chargement', 'desc')
+        $tickets = $this->queryTicketsValidesAgent($filtres)
+            ->orderByDesc('date_ticket')
+            ->orderByDesc('id_ticket')
             ->get();
 
-        $usinesById = $this->buildUsinesById();
+        if ($tickets->isEmpty()) {
+            return [];
+        }
 
+        $ticketIds = $tickets->pluck('id_ticket')->all();
+        $numeros = $tickets->pluck('numero_ticket')->filter()->all();
+
+        $fichesByTicket = FicheSortie::query()
+            ->whereIn('id_ticket', $ticketIds)
+            ->get()
+            ->keyBy('id_ticket');
+
+        $fichesByNumero = $numeros !== []
+            ? FicheSortie::query()->whereIn('numero_ticket', $numeros)->get()->keyBy('numero_ticket')
+            : collect();
+
+        $usinesById = $this->buildUsinesById();
+        $produitIdFiltre = ! empty($filtres['produit_id']) ? (int) $filtres['produit_id'] : null;
         $result = [];
-        foreach ($fiches as $fiche) {
-            if (is_numeric($fiche->usine) && isset($usinesById[(string) $fiche->usine])) {
-                $fiche->usine = $usinesById[(string) $fiche->usine];
+
+        foreach ($tickets as $ticket) {
+            $fiche = $fichesByTicket->get($ticket->id_ticket);
+            if (! $fiche && trim((string) $ticket->numero_ticket) !== '') {
+                $fiche = $fichesByNumero->get($ticket->numero_ticket);
             }
-            $poids = (float) $fiche->poids_pont;
-            if ($poids <= 0 && $fiche->id_ticket) {
-                $ticket = Ticket::where('id_ticket', $fiche->id_ticket)->first();
-                $poids = $ticket ? (float) ($ticket->poids ?? 0) : 0;
+
+            if ($produitIdFiltre && $fiche && $fiche->produit_id && (int) $fiche->produit_id !== $produitIdFiltre) {
+                continue;
             }
+
+            $nomUsine = $fiche?->usine
+                ?: ($usinesById[(string) ($ticket->id_usine ?? '')] ?? null);
+            $produitId = $fiche?->produit_id ?: $produitIdFiltre;
+            $poids = (float) ($ticket->poids ?? 0);
+            if ($poids <= 0 && $fiche) {
+                $poids = (float) ($fiche->poids_pont ?? 0);
+            }
+
             $result[] = [
-                'fiche' => $fiche,
-                'montant' => $this->montantLigneFiche($fiche),
-                'prix_unitaire' => $this->montantAgentFiche->prixUnitairePourFiche($fiche),
+                'ticket' => $ticket,
+                'fiche' => $fiche ?? $this->ficheVirtuelleDepuisTicket($ticket, $nomUsine, $produitId),
+                'a_fiche' => $fiche !== null,
+                'montant' => $this->montantLigneTicket($ticket, $fiche, $produitId),
+                'prix_unitaire' => $this->prixUnitaireLigneTicket($ticket, $fiche, $produitId),
                 'poids_effectif' => $poids,
             ];
         }
 
         return $result;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtres
+     * @return list<array{fiche: FicheSortie, montant: int, prix_unitaire: float|null, poids_effectif: float, ticket?: Ticket, a_fiche?: bool}>
+     */
+    public function fichesAvecMontant(array $filtres = []): array
+    {
+        $lignes = $this->lignesAvecMontant($filtres);
+
+        return array_map(function (array $item) {
+            return [
+                'ticket' => $item['ticket'],
+                'fiche' => $item['fiche'],
+                'a_fiche' => $item['a_fiche'],
+                'montant' => $item['montant'],
+                'prix_unitaire' => $item['prix_unitaire'],
+                'poids_effectif' => $item['poids_effectif'],
+            ];
+        }, $lignes);
+    }
+
+    private function ficheVirtuelleDepuisTicket(Ticket $ticket, ?string $nomUsine, ?int $produitId): FicheSortie
+    {
+        $fiche = new FicheSortie([
+            'numero_fiche' => '—',
+            'matricule_vehicule' => (string) ($ticket->matricule_vehicule ?? ''),
+            'vehicule_id' => (int) ($ticket->vehicule_id ?? 0),
+            'id_ticket' => (int) $ticket->id_ticket,
+            'numero_ticket' => (string) ($ticket->numero_ticket ?? ''),
+            'id_agent' => (int) ($ticket->id_agent ?? 0),
+            'usine' => $nomUsine,
+            'produit_id' => $produitId,
+            'nom_produit' => $produitId ? (Produit::find($produitId)?->nom) : null,
+            'date_chargement' => $ticket->date_ticket,
+            'date_dechargement' => $ticket->date_ticket,
+            'poids_pont' => $ticket->poids,
+        ]);
+        $fiche->id = 0;
+
+        return $fiche;
     }
 
     private function buildUsinesById(): array
@@ -272,21 +466,15 @@ class MontantAgentReportingService
         $produits = Produit::orderBy('nom')->get();
 
         $usinesFiches = FicheSortie::query()
-            ->whereNotNull('date_dechargement')
             ->whereNotNull('usine')
             ->where('usine', '!=', '')
             ->distinct()
-            ->orderBy('usine')
             ->pluck('usine')
             ->all();
 
-        if (Schema::hasColumn('usines', 'produit_id')) {
-            $usinesLocales = Usine::query()->orderBy('nom_usine')->pluck('nom_usine')->all();
-            $usines = array_values(array_unique(array_merge($usinesLocales, $usinesFiches)));
-            sort($usines);
-        } else {
-            $usines = $usinesFiches;
-        }
+        $usinesTickets = Usine::query()->orderBy('nom_usine')->pluck('nom_usine')->all();
+        $usines = array_values(array_unique(array_merge($usinesTickets, $usinesFiches)));
+        sort($usines);
 
         return [
             'produits' => $produits,

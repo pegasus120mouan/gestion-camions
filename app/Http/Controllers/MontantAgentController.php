@@ -178,11 +178,23 @@ class MontantAgentController extends Controller
         $resteAPayer = $montantDuGlobal - $montantPaye;
 
         $fichesAvecMontant = $this->reporting->fichesAvecMontant($filtres);
-        $idsFichesBordereau = $this->bordereauAgent->ficheIdsDejaBorderees($id_agent);
-        if ($idsFichesBordereau !== []) {
+        $ticketIdsBordereau = $this->bordereauAgent->ticketIdsDejaBorderees($id_agent);
+        $ficheIdsBordereau = $this->bordereauAgent->ficheIdsDejaBorderees($id_agent);
+        if ($ticketIdsBordereau !== [] || $ficheIdsBordereau !== []) {
             $fichesAvecMontant = array_values(array_filter(
                 $fichesAvecMontant,
-                fn ($item) => !in_array((int) $item['fiche']->id, $idsFichesBordereau, true)
+                function ($item) use ($ticketIdsBordereau, $ficheIdsBordereau) {
+                    $ticketId = (int) ($item['ticket']->id_ticket ?? 0);
+                    if ($ticketId > 0 && in_array($ticketId, $ticketIdsBordereau, true)) {
+                        return false;
+                    }
+                    $ficheId = (int) ($item['fiche']->id ?? 0);
+                    if ($ficheId > 0 && in_array($ficheId, $ficheIdsBordereau, true)) {
+                        return false;
+                    }
+
+                    return true;
+                }
             ));
         }
         $groupesProduitUsine = $this->reporting->grouperParProduitEtUsine($fichesAvecMontant);
@@ -354,14 +366,17 @@ class MontantAgentController extends Controller
         $validated = $request->validate([
             'date_debut' => ['required', 'date'],
             'date_fin' => ['required', 'date', 'after_or_equal:date_debut'],
-            'fiche_ids' => ['required', 'array', 'min:1'],
+            'fiche_ids' => ['nullable', 'array'],
             'fiche_ids.*' => ['integer'],
+            'ticket_ids' => ['required', 'array', 'min:1'],
+            'ticket_ids.*' => ['integer'],
         ]);
 
-        $fichesData = $this->bordereauAgent->construireFichesData($id_agent, $validated['fiche_ids']);
+        $ticketIds = $validated['ticket_ids'] ?? $validated['fiche_ids'] ?? [];
+        $lignesData = $this->bordereauAgent->construireLignesData($id_agent, $ticketIds);
 
-        if ($fichesData === []) {
-            return back()->withErrors(['error' => 'Aucune fiche valide sélectionnée (déjà bordereau ou introuvable).']);
+        if ($lignesData === []) {
+            return back()->withErrors(['error' => 'Aucun ticket valide sélectionné (déjà bordereau ou introuvable).']);
         }
 
         $nomComplet = trim((string) ($agent['nom_complet'] ?? ''));
@@ -380,15 +395,12 @@ class MontantAgentController extends Controller
             'date_generation' => now()->toDateString(),
             'date_debut' => $validated['date_debut'],
             'date_fin' => $validated['date_fin'],
-            'montant_total' => collect($fichesData)->sum('montant'),
-            'poids_total' => collect($fichesData)->sum('poids'),
-            'fiches_data' => $fichesData,
+            'montant_total' => collect($lignesData)->sum('montant'),
+            'poids_total' => collect($lignesData)->sum('poids'),
+            'fiches_data' => $lignesData,
         ]);
 
-        $this->bordereauAgent->assignerFichesAuBordereau(
-            $bordereau,
-            collect($fichesData)->pluck('fiche_id')->all()
-        );
+        $this->bordereauAgent->assignerLignesAuBordereau($bordereau, $lignesData);
 
         return redirect()->route('gestionfinanciere.agent.bordereau.show', [
             'id_agent' => $id_agent,

@@ -28,6 +28,7 @@ class Ticket extends Model
         'statut_ticket',
         'numero_bordereau',
         'conformite',
+        'bordereau_agent_id',
         'poids_unipalm',
         'date_confirmation_unipalm',
     ];

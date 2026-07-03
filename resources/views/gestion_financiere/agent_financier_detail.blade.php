@@ -62,7 +62,7 @@
             @if(!empty($filtresActifs))
               <small class="text-muted">Total agent : {{ number_format($montantDuGlobal, 0, ',', ' ') }} FCFA</small>
             @else
-              <small class="text-muted">Fiches déchargées (tarif produit / usine / type camion)</small>
+              <small class="text-muted">Tickets validés (avec ou sans fiche PGF)</small>
             @endif
           </div>
         </div>
@@ -189,7 +189,7 @@
         <div class="card mb-4">
           <div class="card-header" style="background-color: #f8d7da; border-bottom: 1px solid #f5c2c7;">
             <h5 class="card-title mb-0" style="color: #842029;">
-              <i class="bx bx-file me-2"></i>Détail des fiches ({{ count($fichesAvecMontant) }})
+              <i class="bx bx-file me-2"></i>Détail des tickets ({{ count($fichesAvecMontant) }})
             </h5>
           </div>
           <div class="table-responsive gf-table-wrap">
@@ -201,6 +201,7 @@
                   <th>Produit</th>
                   <th>Usine</th>
                   <th>N° ticket</th>
+                  <th>Fiche</th>
                   <th class="text-end">Poids</th>
                   <th class="text-end">PU</th>
                   <th class="text-end">Montant</th>
@@ -210,8 +211,11 @@
                 @forelse($groupesProduitUsine as $groupe)
                   @foreach($groupe['usines'] as $blocUsine)
                     @foreach($blocUsine['lignes'] as $item)
+                      @php
+                        $dateLigne = $item['ticket']->date_ticket ?? $item['fiche']->date_chargement;
+                      @endphp
                       <tr>
-                        <td>{{ $item['fiche']->date_chargement ? $item['fiche']->date_chargement->format('d/m/Y') : '-' }}</td>
+                        <td>{{ $dateLigne ? $dateLigne->format('d/m/Y') : '-' }}</td>
                         <td>{{ $item['fiche']->matricule_vehicule ?? '-' }}</td>
                         <td>
                           @if($item['fiche']->nom_produit)
@@ -222,10 +226,17 @@
                         </td>
                         <td><small>{{ $item['fiche']->usine ?? '—' }}</small></td>
                         <td>
-                          @if($item['fiche']->numero_ticket)
-                            <code class="small">{{ $item['fiche']->numero_ticket }}</code>
+                          @if($item['ticket']->numero_ticket ?? $item['fiche']->numero_ticket)
+                            <code class="small">{{ $item['ticket']->numero_ticket ?? $item['fiche']->numero_ticket }}</code>
                           @else
                             <span class="text-muted">—</span>
+                          @endif
+                        </td>
+                        <td>
+                          @if(!empty($item['a_fiche']))
+                            <span class="badge bg-label-success">{{ $item['fiche']->numero_fiche }}</span>
+                          @else
+                            <span class="badge bg-label-secondary">Sans fiche</span>
                           @endif
                         </td>
                         <td class="text-end">
@@ -246,28 +257,28 @@
                       </tr>
                     @endforeach
                     <tr class="table-secondary">
-                      <td colspan="5" class="text-end"><strong>Sous-total {{ $blocUsine['usine'] }}</strong></td>
+                      <td colspan="6" class="text-end"><strong>Sous-total {{ $blocUsine['usine'] }}</strong></td>
                       <td class="text-end"><strong>{{ number_format($blocUsine['poids_total'], 0, ',', ' ') }}</strong></td>
                       <td></td>
                       <td class="text-end text-danger"><strong>{{ number_format($blocUsine['montant_total'], 0, ',', ' ') }} FCFA</strong></td>
                     </tr>
                   @endforeach
                   <tr class="table-warning">
-                    <td colspan="5" class="text-end"><strong>Total {{ $groupe['produit'] }}</strong></td>
+                    <td colspan="6" class="text-end"><strong>Total {{ $groupe['produit'] }}</strong></td>
                     <td class="text-end"><strong>{{ number_format($groupe['poids_total'], 0, ',', ' ') }}</strong></td>
                     <td></td>
                     <td class="text-end text-danger"><strong>{{ number_format($groupe['montant_total'], 0, ',', ' ') }} FCFA</strong></td>
                   </tr>
                 @empty
                   <tr>
-                    <td colspan="8" class="text-center">Aucune fiche</td>
+                    <td colspan="9" class="text-center">Aucun ticket validé</td>
                   </tr>
                 @endforelse
               </tbody>
               @if(count($fichesAvecMontant) > 0)
                 <tfoot>
                   <tr class="table-danger">
-                    <td colspan="7" class="text-end"><strong>Total affiché</strong></td>
+                    <td colspan="8" class="text-end"><strong>Total affiché</strong></td>
                     <td class="text-end"><strong>{{ number_format($montantDu, 0, ',', ' ') }} FCFA</strong></td>
                   </tr>
                 </tfoot>
@@ -485,7 +496,7 @@
           </div>
 
           <div id="bordereauAucuneFiche" class="alert alert-warning d-none mb-0">
-            Aucune fiche déchargée disponible sur cette période (fiches déjà incluses dans un bordereau exclues).
+            Aucun ticket validé disponible sur cette période (tickets déjà inclus dans un bordereau exclus).
           </div>
 
           <div id="bordereauListeFiches" class="d-none">
@@ -560,7 +571,7 @@
     checks.forEach(function(c) {
       montant += parseInt(c.dataset.montant || '0', 10);
     });
-    nbSel.textContent = checks.length + ' fiche(s)';
+    nbSel.textContent = checks.length + ' ticket(s)';
     montantSel.textContent = formatNombre(montant) + ' FCFA';
     btnSubmit.disabled = checks.length === 0;
     if (checkAll) {
@@ -574,9 +585,9 @@
     fiches.forEach(function(f) {
       var tr = document.createElement('tr');
       tr.innerHTML =
-        '<td><input type="checkbox" class="form-check-input fiche-bordereau-check" name="fiche_ids[]" value="' + f.fiche_id + '" data-montant="' + f.montant + '" checked></td>' +
-        '<td><small>' + (f.numero_fiche || ('#' + f.fiche_id)) + '</small></td>' +
+        '<td><input type="checkbox" class="form-check-input fiche-bordereau-check" name="ticket_ids[]" value="' + f.ticket_id + '" data-montant="' + f.montant + '" checked></td>' +
         '<td><small>' + (f.numero_ticket || '—') + '</small></td>' +
+        '<td><small>' + (f.a_fiche ? (f.numero_fiche || ('#' + (f.fiche_id || ''))) : 'Sans fiche') + '</small></td>' +
         '<td><small>' + (f.date_dechargement ? f.date_dechargement.split('-').reverse().join('/') : '-') + '</small></td>' +
         '<td>' + (f.matricule_vehicule || '-') + '</td>' +
         '<td><small>' + (f.nom_produit || '—') + '</small></td>' +

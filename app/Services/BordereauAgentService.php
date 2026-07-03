@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\BordereauAgent;
 use App\Models\FicheSortie;
+use App\Models\Ticket;
 use Illuminate\Support\Facades\DB;
 
 class BordereauAgentService
@@ -71,6 +72,21 @@ class BordereauAgentService
     /**
      * @return list<int>
      */
+    public function ticketIdsDejaBorderees(int $idAgent): array
+    {
+        return Ticket::query()
+            ->where('id_agent', $idAgent)
+            ->whereNotNull('bordereau_agent_id')
+            ->pluck('id_ticket')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return list<int>
+     */
     public function ficheIdsDejaBorderees(int $idAgent): array
     {
         return FicheSortie::query()
@@ -83,6 +99,32 @@ class BordereauAgentService
             ->all();
     }
 
+    /**
+     * @param  list<array<string, mixed>>  $lignesData
+     */
+    public function assignerLignesAuBordereau(BordereauAgent $bordereau, array $lignesData): void
+    {
+        $ticketIds = collect($lignesData)->pluck('ticket_id')->filter()->map(fn ($id) => (int) $id)->unique()->values()->all();
+        $ficheIds = collect($lignesData)->pluck('fiche_id')->filter()->map(fn ($id) => (int) $id)->unique()->values()->all();
+
+        if ($ticketIds !== []) {
+            Ticket::query()
+                ->where('id_agent', $bordereau->id_agent)
+                ->whereIn('id_ticket', $ticketIds)
+                ->whereNull('bordereau_agent_id')
+                ->update(['bordereau_agent_id' => $bordereau->id]);
+        }
+
+        if ($ficheIds !== []) {
+            FicheSortie::query()
+                ->where('id_agent', $bordereau->id_agent)
+                ->whereIn('id', $ficheIds)
+                ->whereNull('bordereau_agent_id')
+                ->update(['bordereau_agent_id' => $bordereau->id]);
+        }
+    }
+
+    /** @deprecated Utiliser assignerLignesAuBordereau */
     public function assignerFichesAuBordereau(BordereauAgent $bordereau, array $ficheIds): void
     {
         $ficheIds = array_values(array_unique(array_map('intval', $ficheIds)));
@@ -102,90 +144,93 @@ class BordereauAgentService
         FicheSortie::query()
             ->where('bordereau_agent_id', $bordereau->id)
             ->update(['bordereau_agent_id' => null]);
+
+        Ticket::query()
+            ->where('bordereau_agent_id', $bordereau->id)
+            ->update(['bordereau_agent_id' => null]);
     }
 
     /**
      * @return list<array<string, mixed>>
      */
-    public function fichesEligibles(int $idAgent, string $dateDebut, string $dateFin): array
+    public function lignesEligibles(int $idAgent, string $dateDebut, string $dateFin): array
     {
-        $fichesAvecMontant = $this->reporting->fichesAvecMontant([
+        $lignes = $this->reporting->lignesAvecMontant([
             'id_agent' => $idAgent,
             'date_debut' => $dateDebut,
             'date_fin' => $dateFin,
             'sans_bordereau' => true,
         ]);
 
-        $lignes = [];
-        foreach ($fichesAvecMontant as $item) {
-            $lignes[] = $this->serialiserLigneFiche($item);
-        }
+        return array_map(fn (array $item) => $this->serialiserLigne($item), $lignes);
+    }
 
-        return $lignes;
+    /** @deprecated Utiliser lignesEligibles */
+    public function fichesEligibles(int $idAgent, string $dateDebut, string $dateFin): array
+    {
+        return $this->lignesEligibles($idAgent, $dateDebut, $dateFin);
     }
 
     /**
-     * @param  list<int>  $ficheIds
+     * @param  list<int>  $ticketIds
      * @return list<array<string, mixed>>
      */
-    public function construireFichesData(int $idAgent, array $ficheIds): array
+    public function construireLignesData(int $idAgent, array $ticketIds): array
     {
-        $ficheIds = array_values(array_unique(array_map('intval', $ficheIds)));
-        if ($ficheIds === []) {
+        $ticketIds = array_values(array_unique(array_map('intval', $ticketIds)));
+        if ($ticketIds === []) {
             return [];
         }
 
-        $fiches = FicheSortie::query()
-            ->where('id_agent', $idAgent)
-            ->whereIn('id', $ficheIds)
-            ->whereNotNull('date_dechargement')
-            ->whereNull('bordereau_agent_id')
-            ->get()
-            ->keyBy('id');
+        $lignes = $this->reporting->lignesAvecMontant([
+            'id_agent' => $idAgent,
+            'sans_bordereau' => true,
+        ]);
 
-        $lignes = [];
-        foreach ($ficheIds as $ficheId) {
-            $fiche = $fiches->get($ficheId);
-            if (!$fiche) {
+        $lignesByTicket = collect($lignes)->keyBy(fn (array $item) => (int) $item['ticket']->id_ticket);
+        $result = [];
+
+        foreach ($ticketIds as $ticketId) {
+            $item = $lignesByTicket->get($ticketId);
+            if (! $item) {
                 continue;
             }
-
-            $montant = $this->reporting->montantLigneFiche($fiche);
-            $poids = (float) $fiche->poids_pont;
-            if ($poids <= 0 && $fiche->id_ticket) {
-                $ticket = \App\Models\Ticket::where('id_ticket', $fiche->id_ticket)->first();
-                $poids = $ticket ? (float) ($ticket->poids ?? 0) : 0;
-            }
-
-            $lignes[] = $this->serialiserLigneFiche([
-                'fiche' => $fiche,
-                'montant' => $montant,
-                'prix_unitaire' => $this->montantAgentFiche->prixUnitairePourFiche($fiche),
-                'poids_effectif' => $poids,
-            ]);
+            $result[] = $this->serialiserLigne($item);
         }
 
-        return $lignes;
+        return $result;
+    }
+
+    /** @deprecated Utiliser construireLignesData */
+    public function construireFichesData(int $idAgent, array $ficheIds): array
+    {
+        return $this->construireLignesData($idAgent, $ficheIds);
     }
 
     /**
-     * @param  array{fiche: FicheSortie, montant: int, prix_unitaire: float|null, poids_effectif?: float}  $item
+     * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
-    private function serialiserLigneFiche(array $item): array
+    private function serialiserLigne(array $item): array
     {
+        /** @var Ticket $ticket */
+        $ticket = $item['ticket'];
+        /** @var FicheSortie $fiche */
         $fiche = $item['fiche'];
-        $poids = (float) ($item['poids_effectif'] ?? $fiche->poids_pont ?? 0);
+        $poids = (float) ($item['poids_effectif'] ?? 0);
+        $aFiche = (bool) ($item['a_fiche'] ?? false);
 
         return [
-            'fiche_id' => (int) $fiche->id,
-            'numero_fiche' => $fiche->numero_fiche,
-            'date_chargement' => $fiche->date_chargement?->format('Y-m-d'),
-            'date_dechargement' => $fiche->date_dechargement?->format('Y-m-d'),
-            'matricule_vehicule' => $fiche->matricule_vehicule,
+            'ticket_id' => (int) $ticket->id_ticket,
+            'fiche_id' => $aFiche && (int) $fiche->id > 0 ? (int) $fiche->id : null,
+            'a_fiche' => $aFiche,
+            'numero_fiche' => $aFiche ? $fiche->numero_fiche : '—',
+            'date_chargement' => ($fiche->date_chargement ?? $ticket->date_ticket)?->format('Y-m-d'),
+            'date_dechargement' => ($fiche->date_dechargement ?? $ticket->date_ticket)?->format('Y-m-d'),
+            'matricule_vehicule' => $fiche->matricule_vehicule ?: $ticket->matricule_vehicule,
             'nom_produit' => $fiche->nom_produit,
             'usine' => $fiche->usine,
-            'numero_ticket' => $fiche->numero_ticket,
+            'numero_ticket' => $ticket->numero_ticket ?: $fiche->numero_ticket,
             'poids' => $poids,
             'prix_unitaire' => $item['prix_unitaire'] ?? null,
             'montant' => (int) ($item['montant'] ?? 0),

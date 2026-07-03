@@ -933,6 +933,7 @@ class TicketController extends Controller
                 'date_dechargement' => $dateTicket,
             ], fn ($value) => $value !== null && $value !== ''));
             $ficheTransporteur->refresh();
+            app(TicketTransporteurFicheService::class)->synchroniserDonneesTicketSurFiche($ficheTransporteur);
         }
 
         $transporteurLie = app(TicketTransporteurFicheService::class)->synchroniserTicketTransporteur(
