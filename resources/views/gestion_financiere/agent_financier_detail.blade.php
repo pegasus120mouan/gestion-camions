@@ -39,6 +39,13 @@
       </div>
     @endif
 
+    @if(session('error'))
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ session('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
     @include('gestion_financiere._filtres_montant_agent', [
       'actionRoute' => route('gestionfinanciere.agent.show', ['id_agent' => $idAgent]),
       'filtres' => $filtres,
@@ -218,10 +225,29 @@
                         <td>{{ $dateLigne ? $dateLigne->format('d/m/Y') : '-' }}</td>
                         <td>{{ $item['fiche']->matricule_vehicule ?? '-' }}</td>
                         <td>
+                          @php
+                            $ticketLigne = $item['ticket'];
+                            $surBordereau = (bool) ($ticketLigne->bordereau_agent_id ?? false)
+                              || (!empty($item['a_fiche']) && (bool) ($item['fiche']->bordereau_agent_id ?? false));
+                          @endphp
                           @if($item['fiche']->nom_produit)
                             <span class="badge bg-label-info">{{ $item['fiche']->nom_produit }}</span>
-                          @else
+                          @elseif($surBordereau)
                             <span class="text-muted">—</span>
+                          @else
+                            <form
+                              method="POST"
+                              action="{{ route('gestionfinanciere.agent.ticket.produit', ['id_agent' => $idAgent, 'id_ticket' => $ticketLigne->id_ticket]) }}"
+                              class="gf-produit-select-form"
+                            >
+                              @csrf
+                              <select name="produit_id" class="form-select form-select-sm" required onchange="this.form.submit()">
+                                <option value="" selected disabled>Choisir un produit</option>
+                                @foreach($produits as $produit)
+                                  <option value="{{ $produit->id }}">{{ $produit->nom }}</option>
+                                @endforeach
+                              </select>
+                            </form>
                           @endif
                         </td>
                         <td><small>{{ $item['fiche']->usine ?? '—' }}</small></td>

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\CodeTransporteurVehicule;
 use App\Models\FicheSortie;
 use App\Models\PrixAgent;
+use App\Models\Ticket;
 
 class MontantAgentFicheService
 {
@@ -99,5 +100,102 @@ class MontantAgentFicheService
         }
 
         return $pu * $poids;
+    }
+
+    public function fichePourTicket(Ticket $ticket, bool $reconcilier = true): ?FicheSortie
+    {
+        $fiche = FicheSortie::query()
+            ->where('id_ticket', $ticket->id_ticket)
+            ->orderByDesc('id')
+            ->first();
+
+        $numero = trim((string) ($ticket->numero_ticket ?? ''));
+        if (! $fiche && $numero !== '') {
+            $fiche = FicheSortie::query()
+                ->where('numero_ticket', $numero)
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        if (! $fiche) {
+            return null;
+        }
+
+        if ($reconcilier) {
+            $this->reconcilierFicheAvecTicket($fiche, $ticket);
+        }
+
+        return $this->ficheCorrespondAuTicket($fiche, $ticket) ? $fiche : null;
+    }
+
+    public function reconcilierFicheAvecTicket(FicheSortie $fiche, Ticket $ticket): void
+    {
+        if (! $this->ficheCorrespondAuTicket($fiche, $ticket, false)) {
+            return;
+        }
+
+        $updates = [];
+
+        if ((int) $fiche->id_ticket !== (int) $ticket->id_ticket) {
+            $updates['id_ticket'] = $ticket->id_ticket;
+        }
+
+        $numero = trim((string) ($ticket->numero_ticket ?? ''));
+        if ($numero !== '' && trim((string) ($fiche->numero_ticket ?? '')) === '') {
+            $updates['numero_ticket'] = $numero;
+        }
+
+        if ((int) ($ticket->id_agent ?? 0) > 0 && (int) ($fiche->id_agent ?? 0) !== (int) $ticket->id_agent) {
+            $updates['id_agent'] = (int) $ticket->id_agent;
+        }
+
+        if (! empty($updates)) {
+            $fiche->update($updates);
+            $fiche->refresh();
+        }
+    }
+
+    public function ficheCorrespondAuTicket(FicheSortie $fiche, Ticket $ticket, bool $exigerIdTicket = false): bool
+    {
+        if ((int) $fiche->id_ticket === (int) $ticket->id_ticket) {
+            return true;
+        }
+
+        if ($exigerIdTicket) {
+            return false;
+        }
+
+        $numero = trim((string) ($ticket->numero_ticket ?? ''));
+        $numeroFiche = trim((string) ($fiche->numero_ticket ?? ''));
+
+        return $numero !== '' && $numeroFiche !== '' && strcasecmp($numero, $numeroFiche) === 0;
+    }
+
+    public function assurerFichePourTicketAgent(Ticket $ticket): FicheSortie
+    {
+        $existing = $this->fichePourTicket($ticket);
+        if ($existing) {
+            return $existing;
+        }
+
+        $date = $ticket->date_ticket?->format('Y-m-d') ?? now()->format('Y-m-d');
+        $numero = trim((string) ($ticket->numero_ticket ?? ''));
+        $usine = app(MontantAgentReportingService::class)->nomUsinePourTicket(null, $ticket);
+
+        return FicheSortie::create([
+            'numero_fiche' => 'TKT-' . preg_replace('/[^A-Za-z0-9\-_]/', '', $numero !== '' ? $numero : (string) $ticket->id_ticket),
+            'vehicule_id' => (int) ($ticket->vehicule_id ?? 0) ?: null,
+            'matricule_vehicule' => (string) ($ticket->matricule_vehicule ?? ''),
+            'id_ticket' => $ticket->id_ticket,
+            'numero_ticket' => $numero,
+            'id_agent' => (int) ($ticket->id_agent ?? 0) ?: null,
+            'usine' => $usine,
+            'date_chargement' => $date,
+            'date_dechargement' => $date,
+            'poids_pont' => $ticket->poids,
+            'id_pont' => 0,
+            'nom_pont' => 'Usine',
+            'code_pont' => '',
+        ]);
     }
 }

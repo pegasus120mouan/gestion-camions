@@ -224,8 +224,7 @@ class MontantAgentReportingService
         }
 
         $usinesById = $this->buildUsinesById();
-        $nomUsine = $fiche?->usine
-            ?: ($usinesById[(string) ($ticket->id_usine ?? '')] ?? null);
+        $nomUsine = $this->nomUsineEffectif($fiche, $ticket, $usinesById);
         $produitId = $produitIdOverride
             ?: ($fiche?->produit_id ? (int) $fiche->produit_id : null);
 
@@ -262,8 +261,7 @@ class MontantAgentReportingService
         }
 
         $usinesById = $this->buildUsinesById();
-        $nomUsine = $fiche?->usine
-            ?: ($usinesById[(string) ($ticket->id_usine ?? '')] ?? null);
+        $nomUsine = $this->nomUsineEffectif($fiche, $ticket, $usinesById);
         $produitId = $produitIdOverride
             ?: ($fiche?->produit_id ? (int) $fiche->produit_id : null);
 
@@ -317,37 +315,74 @@ class MontantAgentReportingService
         }
 
         $ticketIds = $tickets->pluck('id_ticket')->all();
-        $numeros = $tickets->pluck('numero_ticket')->filter()->all();
+        $numerosTickets = $tickets
+            ->pluck('numero_ticket')
+            ->map(fn ($numero) => trim((string) $numero))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
 
-        $fichesByTicket = FicheSortie::query()
-            ->whereIn('id_ticket', $ticketIds)
-            ->get()
-            ->keyBy('id_ticket');
+        $fichesCandidates = FicheSortie::query()
+            ->where(function ($query) use ($ticketIds, $numerosTickets) {
+                if ($ticketIds !== []) {
+                    $query->whereIn('id_ticket', $ticketIds);
+                }
+                if ($numerosTickets !== []) {
+                    $method = $ticketIds !== [] ? 'orWhereIn' : 'whereIn';
+                    $query->{$method}('numero_ticket', $numerosTickets);
+                }
+            })
+            ->orderByDesc('id')
+            ->get();
 
-        $fichesByNumero = $numeros !== []
-            ? FicheSortie::query()->whereIn('numero_ticket', $numeros)->get()->keyBy('numero_ticket')
-            : collect();
+        $fichesByTicketId = $fichesCandidates->keyBy('id_ticket');
+        $fichesByNumero = $fichesCandidates
+            ->filter(fn (FicheSortie $fiche) => trim((string) ($fiche->numero_ticket ?? '')) !== '')
+            ->keyBy(fn (FicheSortie $fiche) => mb_strtolower(trim((string) $fiche->numero_ticket)));
 
         $usinesById = $this->buildUsinesById();
         $produitIdFiltre = ! empty($filtres['produit_id']) ? (int) $filtres['produit_id'] : null;
         $result = [];
 
         foreach ($tickets as $ticket) {
-            $fiche = $fichesByTicket->get($ticket->id_ticket);
-            if (! $fiche && trim((string) $ticket->numero_ticket) !== '') {
-                $fiche = $fichesByNumero->get($ticket->numero_ticket);
+            if ($ticket->bordereau_agent_id) {
+                continue;
+            }
+
+            $fiche = $fichesByTicketId->get($ticket->id_ticket);
+            if (! $fiche) {
+                $numero = trim((string) ($ticket->numero_ticket ?? ''));
+                if ($numero !== '') {
+                    $fiche = $fichesByNumero->get(mb_strtolower($numero));
+                }
+            }
+
+            $aFiche = false;
+            if ($fiche && $this->montantAgentFiche->ficheCorrespondAuTicket($fiche, $ticket)) {
+                $this->montantAgentFiche->reconcilierFicheAvecTicket($fiche, $ticket);
+                $aFiche = true;
+            } else {
+                $fiche = null;
             }
 
             if ($produitIdFiltre && $fiche && $fiche->produit_id && (int) $fiche->produit_id !== $produitIdFiltre) {
                 continue;
             }
 
-            $nomUsine = $fiche?->usine
-                ?: ($usinesById[(string) ($ticket->id_usine ?? '')] ?? null);
+            if ($produitIdFiltre && ! $fiche) {
+                continue;
+            }
+
+            $nomUsine = $this->nomUsineEffectif($fiche, $ticket, $usinesById);
             $produitId = $fiche?->produit_id ?: $produitIdFiltre;
             $poids = (float) ($ticket->poids ?? 0);
             if ($poids <= 0 && $fiche) {
                 $poids = (float) ($fiche->poids_pont ?? 0);
+            }
+
+            if ($fiche !== null) {
+                $this->appliquerUsineSurFiche($fiche, $nomUsine);
             }
 
             $result[] = [
@@ -402,6 +437,48 @@ class MontantAgentReportingService
         $fiche->id = 0;
 
         return $fiche;
+    }
+
+    public function nomUsinePourTicket(?FicheSortie $fiche, Ticket $ticket): ?string
+    {
+        return $this->nomUsineEffectif($fiche, $ticket, $this->buildUsinesById());
+    }
+
+    /**
+     * @param  array<string, string>  $usinesById
+     */
+    private function nomUsineEffectif(?FicheSortie $fiche, Ticket $ticket, array $usinesById): ?string
+    {
+        $fromFiche = trim((string) ($fiche?->usine ?? ''));
+        if ($fromFiche !== '') {
+            return $fromFiche;
+        }
+
+        $fromTicket = $usinesById[(string) ($ticket->id_usine ?? '')] ?? null;
+
+        return $fromTicket ? trim((string) $fromTicket) : null;
+    }
+
+    private function appliquerUsineSurFiche(FicheSortie $fiche, ?string $nomUsine): void
+    {
+        if ($nomUsine === null || $nomUsine === '') {
+            return;
+        }
+
+        if (trim((string) ($fiche->usine ?? '')) !== '') {
+            return;
+        }
+
+        $fiche->usine = $nomUsine;
+
+        if ($fiche->exists && (int) $fiche->id > 0) {
+            FicheSortie::query()
+                ->whereKey($fiche->id)
+                ->where(function ($query) {
+                    $query->whereNull('usine')->orWhere('usine', '');
+                })
+                ->update(['usine' => $nomUsine]);
+        }
     }
 
     private function buildUsinesById(): array

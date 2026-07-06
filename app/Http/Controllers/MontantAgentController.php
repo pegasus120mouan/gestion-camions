@@ -3,9 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\BordereauAgent;
+use App\Models\FicheSortie;
 use App\Models\PaiementAgent;
+use App\Models\Produit;
+use App\Models\Ticket;
 use App\Services\BordereauAgentService;
 use App\Services\MesAgentsService;
+use App\Services\MontantAgentFicheService;
 use App\Services\MontantAgentReportingService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -15,6 +19,7 @@ class MontantAgentController extends Controller
 {
     public function __construct(
         private MontantAgentReportingService $reporting,
+        private MontantAgentFicheService $montantAgentFiche,
         private BordereauAgentService $bordereauAgent,
         private MesAgentsService $mesAgentsService,
     ) {}
@@ -180,25 +185,6 @@ class MontantAgentController extends Controller
         $resteAPayer = $montantDuGlobal - $montantPaye;
 
         $fichesAvecMontant = $this->reporting->fichesAvecMontant($filtres);
-        $ticketIdsBordereau = $this->bordereauAgent->ticketIdsDejaBorderees($id_agent);
-        $ficheIdsBordereau = $this->bordereauAgent->ficheIdsDejaBorderees($id_agent);
-        if ($ticketIdsBordereau !== [] || $ficheIdsBordereau !== []) {
-            $fichesAvecMontant = array_values(array_filter(
-                $fichesAvecMontant,
-                function ($item) use ($ticketIdsBordereau, $ficheIdsBordereau) {
-                    $ticketId = (int) ($item['ticket']->id_ticket ?? 0);
-                    if ($ticketId > 0 && in_array($ticketId, $ticketIdsBordereau, true)) {
-                        return false;
-                    }
-                    $ficheId = (int) ($item['fiche']->id ?? 0);
-                    if ($ficheId > 0 && in_array($ficheId, $ficheIdsBordereau, true)) {
-                        return false;
-                    }
-
-                    return true;
-                }
-            ));
-        }
         $groupesProduitUsine = $this->reporting->grouperParProduitEtUsine($fichesAvecMontant);
         $options = $this->reporting->optionsFiltres();
         $bordereaux = BordereauAgent::where('id_agent', $id_agent)
@@ -247,6 +233,47 @@ class MontantAgentController extends Controller
         $avances = (int) round((float) PaiementAgent::where('id_agent', $idAgent)->whereNull('id_bordereau')->sum('montant'));
 
         return $viaBordereaux + $avances;
+    }
+
+    public function updateProduitTicket(Request $request, int $id_agent, int $id_ticket)
+    {
+        if (! $this->findAgentById($id_agent)) {
+            return redirect()->route('gestionfinanciere.montant_agent')
+                ->withErrors(['error' => 'Agent non trouvé.']);
+        }
+
+        $validated = $request->validate([
+            'produit_id' => ['required', 'integer', 'exists:produits,id'],
+        ]);
+
+        $ticket = Ticket::query()
+            ->where('id_ticket', $id_ticket)
+            ->where('id_agent', $id_agent)
+            ->whereIn('conformite', ['valide', 'conforme'])
+            ->firstOrFail();
+
+        if ($ticket->bordereau_agent_id) {
+            return back()->with('error', 'Impossible de modifier le produit : ticket déjà sur un bordereau.');
+        }
+
+        $fiche = $this->montantAgentFiche->fichePourTicket($ticket);
+        if ($fiche?->bordereau_agent_id) {
+            return back()->with('error', 'Impossible de modifier le produit : fiche déjà sur un bordereau.');
+        }
+
+        $fiche = $fiche ?? $this->montantAgentFiche->assurerFichePourTicketAgent($ticket);
+
+        $produit = Produit::query()->findOrFail((int) $validated['produit_id']);
+
+        $fiche->update([
+            'produit_id' => $produit->id,
+            'nom_produit' => $produit->nom,
+        ]);
+
+        return back()->with(
+            'success',
+            'Produit « ' . $produit->nom . ' » enregistré pour le ticket ' . ($ticket->numero_ticket ?: $ticket->id_ticket) . '.'
+        );
     }
 
     public function storeAvance(Request $request, int $id_agent)

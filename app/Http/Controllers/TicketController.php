@@ -20,6 +20,7 @@ use App\Services\FicheSortieNumeroService;
 use App\Services\FicheSortieTicketCorrespondanceService;
 use App\Services\MesAgentsService;
 use App\Services\MesTicketsService;
+use App\Services\MontantAgentFicheService;
 use App\Services\ParticulierAgentsApiService;
 use App\Services\TicketPrixService;
 use App\Services\TicketTransporteurFicheService;
@@ -848,6 +849,15 @@ class TicketController extends Controller
         $poidsTicket = (float) ($apiTicket['poids'] ?? 0);
         $nomUsine = trim((string) ($apiTicket['nom_usine'] ?? $fiche?->usine ?? ''));
 
+        $idAgentApi = (int) ($apiTicket['id_agent'] ?? 0);
+        if ($idAgentApi <= 0 && $fiche) {
+            $idAgentApi = (int) $fiche->id_agent;
+        }
+        if ($idAgentApi <= 0) {
+            return redirect()->route('tickets.index')
+                ->with('error', 'Impossible de valider : agent introuvable sur ce ticket.');
+        }
+
         $ticket->fill([
             'numero_ticket' => (string) ($apiTicket['numero_ticket'] ?? ''),
             'date_ticket' => $dateTicket,
@@ -855,7 +865,7 @@ class TicketController extends Controller
             'vehicule_id' => (int) ($apiTicket['vehicule_id'] ?? 0) ?: null,
             'poids' => $apiTicket['poids'] ?? null,
             'id_usine' => (int) ($apiTicket['id_usine'] ?? 0) ?: null,
-            'id_agent' => (int) ($apiTicket['id_agent'] ?? 0) ?: ($fiche?->id_agent ? (int) $fiche->id_agent : null),
+            'id_agent' => $idAgentApi,
             'statut_ticket' => $apiTicket['statut_ticket'] ?? 'non soldé',
             'id_utilisateur' => $ticket->id_utilisateur ?? 1,
             'conformite' => 'valide',
@@ -869,7 +879,7 @@ class TicketController extends Controller
             $produitId,
             $dateTicket,
             null,
-            (int) ($apiTicket['id_agent'] ?? 0) ?: ($fiche?->id_agent ? (int) $fiche->id_agent : null),
+            (int) ($apiTicket['id_agent'] ?? 0) ?: $idAgentApi,
             $nomUsine !== '' ? $nomUsine : null,
         );
         $montantPaie = ($prixUnitaire !== null && $poidsTicket > 0)
@@ -904,34 +914,7 @@ class TicketController extends Controller
         }
 
         $ficheTransporteur = $fiche;
-        $matriculeApi = (string) ($apiTicket['matricule_vehicule'] ?? '');
-        if (!$ficheTransporteur) {
-            $ficheTransporteur = FicheSortie::query()
-                ->where('id_ticket', $id)
-                ->orderByDesc('id')
-                ->first();
-        }
-        if (!$ficheTransporteur && $numeroTicket !== '') {
-            $ficheTransporteur = FicheSortie::query()
-                ->where('numero_ticket', $numeroTicket)
-                ->orderByDesc('id')
-                ->first();
-        }
-        if (!$ficheTransporteur && $matriculeApi !== '') {
-            $ficheTransporteur = FicheSortie::query()
-                ->where('matricule_vehicule', $matriculeApi)
-                ->whereNull('id_ticket')
-                ->orderByDesc('id')
-                ->first();
-        }
-
-        if ($ficheTransporteur) {
-            $ficheTransporteur->update(array_filter([
-                'id_ticket' => $id,
-                'numero_ticket' => $numeroTicket !== '' ? $numeroTicket : $ficheTransporteur->numero_ticket,
-                'poids_pont' => $poidsTicket > 0 ? $poidsTicket : $ficheTransporteur->poids_pont,
-                'date_dechargement' => $dateTicket,
-            ], fn ($value) => $value !== null && $value !== ''));
+        if ($estCamionPgf && $ficheTransporteur) {
             $ficheTransporteur->refresh();
             app(TicketTransporteurFicheService::class)->synchroniserDonneesTicketSurFiche($ficheTransporteur);
         }
@@ -943,11 +926,13 @@ class TicketController extends Controller
                 'nom_usine' => $nomUsine !== '' ? $nomUsine : null,
                 'produit_id' => $ficheTransporteur?->produit_id,
                 'nom_produit' => $ficheTransporteur?->nom_produit ?? '',
-                'id_agent' => (int) ($apiTicket['id_agent'] ?? 0) ?: $ficheTransporteur?->id_agent,
-                'nom_agent' => $ficheTransporteur?->nom_agent ?? '',
+                'id_agent' => $idAgentApi,
+                'nom_agent' => $ficheTransporteur?->nom_agent ?? trim((string) ($apiTicket['nom_agent'] ?? '')),
                 'numero_agent' => $ficheTransporteur?->numero_agent ?? '',
             ]
         );
+
+        app(MontantAgentFicheService::class)->fichePourTicket($ticket->fresh());
 
         if ($fiche) {
             $fiche->refresh();

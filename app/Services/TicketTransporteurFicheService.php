@@ -271,7 +271,10 @@ class TicketTransporteurFicheService
             return 0;
         }
 
-        $ticketIds = Ticket::query()
+        $count = 0;
+
+        $ticketsValides = Ticket::query()
+            ->whereIn('conformite', ['valide', 'conforme'])
             ->where(function ($query) use ($matricules, $vehiculeIds) {
                 if ($matricules !== []) {
                     $query->whereIn('matricule_vehicule', $matricules);
@@ -281,7 +284,28 @@ class TicketTransporteurFicheService
                     $query->{$method}('vehicule_id', $vehiculeIds);
                 }
             })
-            ->pluck('id_ticket');
+            ->get();
+
+        $fichesExistantesParTicket = FicheSortie::query()
+            ->whereIn('id_ticket', $ticketsValides->pluck('id_ticket')->filter()->all())
+            ->get()
+            ->keyBy('id_ticket');
+
+        foreach ($ticketsValides as $ticket) {
+            $ficheExistante = $fichesExistantesParTicket->get($ticket->id_ticket);
+            if ($ficheExistante) {
+                $this->synchroniserDonneesTicketSurFiche($ficheExistante);
+                $count++;
+
+                continue;
+            }
+
+            if ($this->synchroniserTicketTransporteur($ticket, null, $this->contextDepuisTicket($ticket))) {
+                $count++;
+            }
+        }
+
+        $ticketIds = $ticketsValides->pluck('id_ticket');
 
         $fiches = FicheSortie::query()
             ->where(function ($query) use ($matricules, $vehiculeIds, $ticketIds) {
@@ -307,13 +331,56 @@ class TicketTransporteurFicheService
             })
             ->get();
 
-        $count = 0;
+        $ticketIdsTraites = $ticketsValides->pluck('id_ticket')->filter()->map(fn ($id) => (int) $id)->all();
+
         foreach ($fiches as $fiche) {
+            if ($fiche->id_ticket && in_array((int) $fiche->id_ticket, $ticketIdsTraites, true)) {
+                continue;
+            }
+
             $this->synchroniserDonneesTicketSurFiche($fiche);
             $count++;
         }
 
         return $count;
+    }
+
+    /**
+     * @return array{nom_usine?: string|null, produit_id?: int|null, nom_produit?: string, nom_agent?: string, numero_agent?: string, id_agent?: int|null}
+     */
+    private function contextDepuisTicket(Ticket $ticket): array
+    {
+        $context = [
+            'nom_usine' => null,
+            'produit_id' => null,
+            'nom_produit' => '',
+            'id_agent' => (int) ($ticket->id_agent ?? 0) ?: null,
+            'nom_agent' => '',
+            'numero_agent' => '',
+        ];
+
+        if ((int) ($ticket->id_usine ?? 0) > 0) {
+            $nomUsine = Usine::query()
+                ->where('id_usine', (int) $ticket->id_usine)
+                ->value('nom_usine');
+            if ($nomUsine) {
+                $context['nom_usine'] = trim((string) $nomUsine);
+            }
+        }
+
+        if ((int) ($ticket->id_agent ?? 0) > 0) {
+            try {
+                $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
+            } catch (\Throwable $e) {
+                $agent = null;
+            }
+            if ($agent) {
+                $context['nom_agent'] = trim((string) ($agent['nom_complet'] ?? ''));
+                $context['numero_agent'] = trim((string) ($agent['numero_agent'] ?? ''));
+            }
+        }
+
+        return $context;
     }
 
     private function ticketPourFiche(FicheSortie $fiche): ?Ticket
@@ -375,7 +442,11 @@ class TicketTransporteurFicheService
 
         if ((int) ($ticket->id_agent ?? 0) > 0) {
             $data['id_agent'] = (int) $ticket->id_agent;
-            $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
+            try {
+                $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
+            } catch (\Throwable $e) {
+                $agent = null;
+            }
             if ($agent) {
                 $nomAgent = trim((string) ($agent['nom_complet'] ?? ''));
                 if ($nomAgent !== '') {

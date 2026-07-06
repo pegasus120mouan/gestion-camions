@@ -116,7 +116,21 @@ class MesAgentsService
             }
         }
 
-        return $this->findAgentByIdFromApi($idAgent, request());
+        return $this->findAgentByIdFromApiSafe($idAgent);
+    }
+
+    private function findAgentByIdFromApiSafe(int $idAgent): ?array
+    {
+        try {
+            $request = request();
+            if (! $request->hasSession()) {
+                return null;
+            }
+
+            return $this->findAgentByIdFromApi($idAgent, $request);
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /**

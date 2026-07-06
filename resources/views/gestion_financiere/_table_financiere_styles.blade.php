@@ -57,4 +57,9 @@
   .gf-financier-page .modal .gf-table-financier thead th {
     background-color: #eef1f4;
   }
+
+  .gf-financier-page .gf-produit-select-form .form-select {
+    min-width: 9rem;
+    max-width: 11rem;
+  }
 </style>
