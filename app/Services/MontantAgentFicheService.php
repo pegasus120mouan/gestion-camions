@@ -6,6 +6,8 @@ use App\Models\CodeTransporteurVehicule;
 use App\Models\FicheSortie;
 use App\Models\PrixAgent;
 use App\Models\Ticket;
+use App\Services\MontantAgentReportingService;
+use App\Services\UsinesParProduitService;
 
 class MontantAgentFicheService
 {
@@ -171,16 +173,37 @@ class MontantAgentFicheService
         return $numero !== '' && $numeroFiche !== '' && strcasecmp($numero, $numeroFiche) === 0;
     }
 
-    public function assurerFichePourTicketAgent(Ticket $ticket): FicheSortie
+    public function assurerFichePourTicketAgent(Ticket $ticket, ?array $produitInfo = null): FicheSortie
     {
-        $existing = $this->fichePourTicket($ticket);
+        $existing = $this->fichePourTicket($ticket, false);
+        $usine = app(MontantAgentReportingService::class)->nomUsinePourTicket($existing, $ticket);
+
+        if ($produitInfo === null) {
+            $produitInfo = app(UsinesParProduitService::class)->produitPourUsine(
+                (int) ($ticket->id_usine ?? 0) ?: null,
+                $usine
+            );
+        }
+
         if ($existing) {
+            $updates = [];
+            if ($usine && trim((string) ($existing->usine ?? '')) === '') {
+                $updates['usine'] = $usine;
+            }
+            if ($produitInfo && ! (int) ($existing->produit_id ?? 0)) {
+                $updates['produit_id'] = (int) $produitInfo['produit_id'];
+                $updates['nom_produit'] = (string) ($produitInfo['nom'] ?? '');
+            }
+            if ($updates !== []) {
+                $existing->update($updates);
+                $existing->refresh();
+            }
+
             return $existing;
         }
 
         $date = $ticket->date_ticket?->format('Y-m-d') ?? now()->format('Y-m-d');
         $numero = trim((string) ($ticket->numero_ticket ?? ''));
-        $usine = app(MontantAgentReportingService::class)->nomUsinePourTicket(null, $ticket);
 
         return FicheSortie::create([
             'numero_fiche' => 'TKT-' . preg_replace('/[^A-Za-z0-9\-_]/', '', $numero !== '' ? $numero : (string) $ticket->id_ticket),
@@ -190,6 +213,8 @@ class MontantAgentFicheService
             'numero_ticket' => $numero,
             'id_agent' => (int) ($ticket->id_agent ?? 0) ?: null,
             'usine' => $usine,
+            'produit_id' => $produitInfo ? (int) $produitInfo['produit_id'] : null,
+            'nom_produit' => $produitInfo ? (string) ($produitInfo['nom'] ?? '') : null,
             'date_chargement' => $date,
             'date_dechargement' => $ticket->estValide() ? $date : null,
             'poids_pont' => $ticket->poids,

@@ -61,6 +61,93 @@ class UsinesParProduitService
     }
 
     /**
+     * Produit associé à une usine (local, API enrichie, ou historique fiches).
+     *
+     * @return array{produit_id: int, nom: string}|null
+     */
+    public function produitPourUsine(?int $idUsine, ?string $nomUsine = null): ?array
+    {
+        if ($idUsine !== null && $idUsine > 0) {
+            $locale = Usine::query()
+                ->where('id_usine', $idUsine)
+                ->with('produit')
+                ->first();
+
+            if ($locale?->produit_id && $locale->produit) {
+                return [
+                    'produit_id' => (int) $locale->produit_id,
+                    'nom' => (string) $locale->produit->nom,
+                ];
+            }
+
+            if (($nomUsine === null || trim($nomUsine) === '') && $locale) {
+                $nomUsine = (string) $locale->nom_usine;
+            }
+        }
+
+        $nom = trim((string) $nomUsine);
+        $key = $nom !== '' ? mb_strtolower($nom, 'UTF-8') : '';
+
+        if ($key !== '' && Schema::hasColumn('usines', 'produit_id')) {
+            $localeParNom = Usine::query()
+                ->whereRaw('LOWER(TRIM(nom_usine)) = ?', [$key])
+                ->with('produit')
+                ->first();
+
+            if ($localeParNom?->produit_id && $localeParNom->produit) {
+                return [
+                    'produit_id' => (int) $localeParNom->produit_id,
+                    'nom' => (string) $localeParNom->produit->nom,
+                ];
+            }
+        }
+
+        foreach ($this->fetchApiUsinesEnrichies() as $usine) {
+            if (! is_array($usine)) {
+                continue;
+            }
+
+            $match = false;
+            if ($idUsine !== null && $idUsine > 0 && (int) ($usine['id_usine'] ?? 0) === $idUsine) {
+                $match = true;
+            } elseif ($key !== '' && mb_strtolower(trim((string) ($usine['nom_usine'] ?? '')), 'UTF-8') === $key) {
+                $match = true;
+            }
+
+            if (! $match) {
+                continue;
+            }
+
+            $produits = $usine['produits'] ?? [];
+            if ($produits !== []) {
+                $premier = $produits[0];
+
+                return [
+                    'produit_id' => (int) ($premier['id'] ?? 0),
+                    'nom' => (string) ($premier['nom'] ?? ''),
+                ];
+            }
+        }
+
+        if ($key !== '') {
+            $fiche = FicheSortie::query()
+                ->whereNotNull('produit_id')
+                ->whereRaw('LOWER(TRIM(usine)) = ?', [$key])
+                ->orderByDesc('id')
+                ->first(['produit_id', 'nom_produit']);
+
+            if ($fiche && (int) $fiche->produit_id > 0) {
+                return [
+                    'produit_id' => (int) $fiche->produit_id,
+                    'nom' => trim((string) ($fiche->nom_produit ?? '')) ?: (Produit::find($fiche->produit_id)?->nom ?? ''),
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $apiUsines
      * @return list<array{id_usine: int|string, nom: string, code: string, source: string}>
      */
@@ -111,6 +198,14 @@ class UsinesParProduitService
         usort($liste, fn ($a, $b) => strcasecmp($a['nom'], $b['nom']));
 
         return $liste;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function fetchApiUsinesEnrichiesForLookup(): array
+    {
+        return $this->fetchApiUsinesEnrichies();
     }
 
     /**

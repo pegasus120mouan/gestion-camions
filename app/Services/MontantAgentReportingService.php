@@ -13,7 +13,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 
 class MontantAgentReportingService
@@ -21,6 +20,7 @@ class MontantAgentReportingService
     public function __construct(
         private MontantAgentFicheService $montantAgentFiche,
         private TicketPrixService $ticketPrix,
+        private UsinesParProduitService $usinesParProduit,
     ) {}
 
     /**
@@ -50,10 +50,12 @@ class MontantAgentReportingService
      *
      * @param  array<string, mixed>  $filtres
      */
-    public function queryTicketsValidesAgent(array $filtres = []): Builder
+    public function queryTicketsValidesAgent(array $filtres = [], bool $inclureRefsApi = true): Builder
     {
         $idAgent = ! empty($filtres['id_agent']) ? (int) $filtres['id_agent'] : 0;
-        $apiRefs = $idAgent > 0 ? $this->referencesApiTicketsAgent($idAgent) : ['ids' => [], 'numeros' => []];
+        $apiRefs = ($idAgent > 0 && $inclureRefsApi)
+            ? $this->referencesApiTicketsAgent($idAgent)
+            : ['ids' => [], 'numeros' => []];
 
         $query = Ticket::query()
             ->where(function (Builder $validatedQuery) {
@@ -111,6 +113,27 @@ class MontantAgentReportingService
         }
 
         return $query;
+    }
+
+    /**
+     * Montant dû pour la liste agents (index) — sans sync API ni refs API.
+     *
+     * @param  array<string, mixed>  $filtres
+     */
+    public function calculerMontantDuAgentPourIndex(int $idAgent, array $filtres = []): float
+    {
+        $cacheKey = 'montant_agent_index:' . $idAgent . ':' . md5(json_encode($filtres));
+
+        return (float) Cache::remember($cacheKey, 300, function () use ($idAgent, $filtres) {
+            $filtres['id_agent'] = $idAgent;
+            $total = 0.0;
+
+            foreach ($this->lignesAvecMontant($filtres, syncApi: false, inclureRefsApi: false) as $item) {
+                $total += (int) ($item['montant'] ?? 0);
+            }
+
+            return $total;
+        });
     }
 
     /**
@@ -360,8 +383,12 @@ class MontantAgentReportingService
             : 0;
     }
 
-    public function montantLigneTicket(Ticket $ticket, ?FicheSortie $fiche = null, ?int $produitIdOverride = null): int
-    {
+    public function montantLigneTicket(
+        Ticket $ticket,
+        ?FicheSortie $fiche = null,
+        ?int $produitIdOverride = null,
+        ?array $usinesById = null,
+    ): int {
         if ($ticket->montant_paie !== null && (float) $ticket->montant_paie > 0) {
             return (int) round((float) $ticket->montant_paie);
         }
@@ -370,10 +397,11 @@ class MontantAgentReportingService
             return (int) round((float) $fiche->montant_agent);
         }
 
-        $usinesById = $this->buildUsinesById();
+        $usinesById ??= $this->buildUsinesById();
         $nomUsine = $this->nomUsineEffectif($fiche, $ticket, $usinesById);
         $produitId = $produitIdOverride
-            ?: ($fiche?->produit_id ? (int) $fiche->produit_id : null);
+            ?: ($fiche?->produit_id ? (int) $fiche->produit_id : null)
+            ?: $this->produitIdDepuisUsine((int) ($ticket->id_usine ?? 0), $nomUsine);
 
         $pu = (float) ($ticket->prix_unitaire ?? 0) > 0
             ? (float) $ticket->prix_unitaire
@@ -394,8 +422,12 @@ class MontantAgentReportingService
         return $pu !== null && $poids > 0 ? (int) round($pu * $poids) : 0;
     }
 
-    public function prixUnitaireLigneTicket(Ticket $ticket, ?FicheSortie $fiche = null, ?int $produitIdOverride = null): ?float
-    {
+    public function prixUnitaireLigneTicket(
+        Ticket $ticket,
+        ?FicheSortie $fiche = null,
+        ?int $produitIdOverride = null,
+        ?array $usinesById = null,
+    ): ?float {
         if ((float) ($ticket->prix_unitaire ?? 0) > 0) {
             return (float) $ticket->prix_unitaire;
         }
@@ -407,10 +439,11 @@ class MontantAgentReportingService
             }
         }
 
-        $usinesById = $this->buildUsinesById();
+        $usinesById ??= $this->buildUsinesById();
         $nomUsine = $this->nomUsineEffectif($fiche, $ticket, $usinesById);
         $produitId = $produitIdOverride
-            ?: ($fiche?->produit_id ? (int) $fiche->produit_id : null);
+            ?: ($fiche?->produit_id ? (int) $fiche->produit_id : null)
+            ?: $this->produitIdDepuisUsine((int) ($ticket->id_usine ?? 0), $nomUsine);
 
         return $this->ticketPrix->prixUnitairePourTicket(
             $ticket,
@@ -425,12 +458,12 @@ class MontantAgentReportingService
     /**
      * @param  array<string, mixed>  $filtres
      */
-    public function calculerMontantDuAgent(int $idAgent, array $filtres = []): float
+    public function calculerMontantDuAgent(int $idAgent, array $filtres = [], bool $syncApi = true): float
     {
         $filtres['id_agent'] = $idAgent;
         $total = 0.0;
 
-        foreach ($this->lignesAvecMontant($filtres) as $item) {
+        foreach ($this->lignesAvecMontant($filtres, $syncApi) as $item) {
             $total += (int) ($item['montant'] ?? 0);
         }
 
@@ -450,13 +483,13 @@ class MontantAgentReportingService
      *   poids_effectif: float
      * }>
      */
-    public function lignesAvecMontant(array $filtres = []): array
+    public function lignesAvecMontant(array $filtres = [], bool $syncApi = true, bool $inclureRefsApi = true): array
     {
-        if (! empty($filtres['id_agent'])) {
+        if ($syncApi && ! empty($filtres['id_agent'])) {
             $this->synchroniserTicketsAgent((int) $filtres['id_agent']);
         }
 
-        $tickets = $this->queryTicketsValidesAgent($filtres)
+        $tickets = $this->queryTicketsValidesAgent($filtres, $inclureRefsApi)
             ->orderByDesc('date_ticket')
             ->orderByDesc('id_ticket')
             ->get();
@@ -517,16 +550,16 @@ class MontantAgentReportingService
                 $fiche = null;
             }
 
-            if ($produitIdFiltre && $fiche && $fiche->produit_id && (int) $fiche->produit_id !== $produitIdFiltre) {
-                continue;
-            }
-
-            if ($produitIdFiltre && ! $fiche) {
-                continue;
-            }
-
             $nomUsine = $this->nomUsineEffectif($fiche, $ticket, $usinesById);
-            $produitId = $fiche?->produit_id ?: $produitIdFiltre;
+            $produitInfo = $this->produitDepuisUsine((int) ($ticket->id_usine ?? 0), $nomUsine);
+            $produitId = $fiche?->produit_id
+                ? (int) $fiche->produit_id
+                : ($produitInfo['produit_id'] ?? $produitIdFiltre);
+
+            if ($produitIdFiltre && (int) $produitId !== $produitIdFiltre) {
+                continue;
+            }
+
             $poids = (float) ($ticket->poids ?? 0);
             if ($poids <= 0 && $fiche) {
                 $poids = (float) ($fiche->poids_pont ?? 0);
@@ -534,14 +567,15 @@ class MontantAgentReportingService
 
             if ($fiche !== null) {
                 $this->appliquerUsineSurFiche($fiche, $nomUsine);
+                $this->appliquerProduitSurFiche($fiche, $produitInfo);
             }
 
             $result[] = [
                 'ticket' => $ticket,
-                'fiche' => $fiche ?? $this->ficheVirtuelleDepuisTicket($ticket, $nomUsine, $produitId),
+                'fiche' => $fiche ?? $this->ficheVirtuelleDepuisTicket($ticket, $nomUsine, $produitId, $produitInfo['nom'] ?? null),
                 'a_fiche' => $fiche !== null,
-                'montant' => $this->montantLigneTicket($ticket, $fiche, $produitId),
-                'prix_unitaire' => $this->prixUnitaireLigneTicket($ticket, $fiche, $produitId),
+                'montant' => $this->montantLigneTicket($ticket, $fiche, $produitId, $usinesById),
+                'prix_unitaire' => $this->prixUnitaireLigneTicket($ticket, $fiche, $produitId, $usinesById),
                 'poids_effectif' => $poids,
             ];
         }
@@ -569,8 +603,12 @@ class MontantAgentReportingService
         }, $lignes);
     }
 
-    private function ficheVirtuelleDepuisTicket(Ticket $ticket, ?string $nomUsine, ?int $produitId): FicheSortie
-    {
+    private function ficheVirtuelleDepuisTicket(
+        Ticket $ticket,
+        ?string $nomUsine,
+        ?int $produitId,
+        ?string $nomProduit = null,
+    ): FicheSortie {
         $fiche = new FicheSortie([
             'numero_fiche' => '—',
             'matricule_vehicule' => (string) ($ticket->matricule_vehicule ?? ''),
@@ -580,7 +618,7 @@ class MontantAgentReportingService
             'id_agent' => (int) ($ticket->id_agent ?? 0),
             'usine' => $nomUsine,
             'produit_id' => $produitId,
-            'nom_produit' => $produitId ? (Produit::find($produitId)?->nom) : null,
+            'nom_produit' => $nomProduit ?: ($produitId ? Produit::find($produitId)?->nom : null),
             'date_chargement' => $ticket->date_ticket,
             'date_dechargement' => $ticket->date_ticket,
             'poids_pont' => $ticket->poids,
@@ -634,25 +672,73 @@ class MontantAgentReportingService
 
     private function buildUsinesById(): array
     {
-        $index = [];
-        foreach (Usine::all() as $ul) {
-            $index[(string) $ul->id_usine] = $ul->nom_usine;
-        }
-        try {
-            $url = (string) config('services.external_auth.mes_usines_url');
-            $timeout = (int) config('services.external_auth.timeout', 10);
-            $resp = Http::acceptJson()->withoutVerifying()->timeout($timeout)->get($url);
-            if ($resp->successful()) {
-                foreach ($resp->json('usines') ?? [] as $u) {
-                    $key = (string) ($u['id_usine'] ?? '');
-                    if ($key !== '' && !isset($index[$key])) {
-                        $index[$key] = $u['nom_usine'] ?? '';
-                    }
+        return Cache::remember('montant_agent_usines_by_id', 3600, function () {
+            $index = [];
+            foreach (Usine::all() as $ul) {
+                $index[(string) $ul->id_usine] = $ul->nom_usine;
+            }
+
+            foreach ($this->usinesParProduit->fetchApiUsinesEnrichiesForLookup() as $u) {
+                $key = (string) ($u['id_usine'] ?? '');
+                if ($key !== '' && ! isset($index[$key])) {
+                    $index[$key] = (string) ($u['nom_usine'] ?? '');
                 }
             }
-        } catch (\Throwable $e) {}
 
-        return $index;
+            return $index;
+        });
+    }
+
+    /**
+     * @return array{produit_id: int, nom: string}|null
+     */
+    private function produitDepuisUsine(?int $idUsine, ?string $nomUsine): ?array
+    {
+        $info = $this->usinesParProduit->produitPourUsine($idUsine, $nomUsine);
+        if (! $info || (int) ($info['produit_id'] ?? 0) <= 0) {
+            return null;
+        }
+
+        return $info;
+    }
+
+    private function produitIdDepuisUsine(?int $idUsine, ?string $nomUsine): ?int
+    {
+        $info = $this->produitDepuisUsine($idUsine, $nomUsine);
+
+        return $info ? (int) $info['produit_id'] : null;
+    }
+
+    /**
+     * @param  array{produit_id: int, nom: string}|null  $produitInfo
+     */
+    private function appliquerProduitSurFiche(FicheSortie $fiche, ?array $produitInfo): void
+    {
+        if (! $produitInfo || (int) ($produitInfo['produit_id'] ?? 0) <= 0) {
+            return;
+        }
+
+        $produitId = (int) $produitInfo['produit_id'];
+        $nomProduit = trim((string) ($produitInfo['nom'] ?? ''));
+
+        if ((int) ($fiche->produit_id ?? 0) === $produitId) {
+            return;
+        }
+
+        $fiche->produit_id = $produitId;
+        $fiche->nom_produit = $nomProduit !== '' ? $nomProduit : (Produit::find($produitId)?->nom);
+
+        if ($fiche->exists && (int) $fiche->id > 0) {
+            FicheSortie::query()
+                ->whereKey($fiche->id)
+                ->where(function ($query) {
+                    $query->whereNull('produit_id')->orWhere('produit_id', 0);
+                })
+                ->update([
+                    'produit_id' => $produitId,
+                    'nom_produit' => $fiche->nom_produit,
+                ]);
+        }
     }
 
     /**

@@ -51,8 +51,10 @@ class MontantAgentController extends Controller
                 continue;
             }
 
-            $montantDu = (int) round($this->reporting->calculerMontantDuAgent($idAgent, $filtres));
-            $montantDuGlobal = (int) round($this->reporting->calculerMontantDuAgent($idAgent, ['id_agent' => $idAgent]));
+            $montantDuGlobal = (int) round($this->reporting->calculerMontantDuAgentPourIndex($idAgent, ['id_agent' => $idAgent]));
+            $montantDu = $this->reporting->filtresActifs($filtres)
+                ? (int) round($this->reporting->calculerMontantDuAgentPourIndex($idAgent, $filtres))
+                : $montantDuGlobal;
             $montantPaye = $this->montantPayeAgent($idAgent);
             $filtresActifs = $this->reporting->filtresActifs($filtres);
 
