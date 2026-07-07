@@ -4,39 +4,151 @@ namespace App\Services;
 
 use App\Models\CodeTransporteurVehicule;
 use App\Models\FicheSortie;
+use App\Models\Groupe;
+use App\Models\GroupeVehicule;
 use App\Models\PrixAgent;
 use App\Models\Ticket;
+use App\Models\TransporteurVehicule;
 use App\Services\MontantAgentReportingService;
 use App\Services\UsinesParProduitService;
 
 class MontantAgentFicheService
 {
+    /** @var array{ids: array<int, true>, matricules: array<string, true>}|null */
+    private ?array $vehiculesPgfLookup = null;
+
     /**
-     * Type de grille tarifaire PrixAgent : transporteur (camion Pisteur), pgf, autre_camion.
+     * Grille PrixAgent : pgf (camion PGF), autre_camion (camion transporteur TRP), transporteur (camion Pisteur).
      */
-    public function typePrixPourMatricule(?string $matricule): string
+    public function typePrixPourMatricule(?string $matricule, ?int $vehiculeId = null): string
     {
-        if ($matricule === null || $matricule === '') {
-            return 'transporteur';
-        }
+        return $this->typePrixPourVehicule($vehiculeId, $matricule);
+    }
 
-        $link = CodeTransporteurVehicule::with('codeTransporteur')
-            ->where('matricule_vehicule', $matricule)
-            ->first();
+    public function typePrixPourVehicule(?int $vehiculeId = null, ?string $matricule = null): string
+    {
+        $vehiculeId = (int) ($vehiculeId ?? 0);
+        $matricule = trim((string) $matricule);
 
-        if (!$link || !$link->codeTransporteur) {
-            return 'transporteur';
-        }
-
-        $nom = trim((string) $link->codeTransporteur->nom);
-        if ($nom === 'Camion PGF') {
+        if ($this->vehiculeEstCamionPgf($vehiculeId, $matricule)) {
             return 'pgf';
         }
-        if (strcasecmp($nom, 'Autre Camion') === 0 || strcasecmp($nom, 'Autre') === 0) {
+
+        $link = $this->lienCodeTransporteur($vehiculeId, $matricule);
+        if ($link?->codeTransporteur) {
+            return $this->typeSlugDepuisNomCodeTransporteur((string) $link->codeTransporteur->nom);
+        }
+
+        if ($this->vehiculeEstCamionTransporteur($vehiculeId, $matricule)) {
             return 'autre_camion';
         }
 
         return 'transporteur';
+    }
+
+    private function typeSlugDepuisNomCodeTransporteur(string $nom): string
+    {
+        $nom = trim($nom);
+        if ($nom === '') {
+            return 'transporteur';
+        }
+
+        if (stripos($nom, 'PGF') !== false) {
+            return 'pgf';
+        }
+
+        if (strcasecmp($nom, 'Autre Camion') === 0 || strcasecmp($nom, 'Autre') === 0) {
+            return 'autre_camion';
+        }
+
+        if (stripos($nom, 'Pisteur') !== false) {
+            return 'transporteur';
+        }
+
+        return 'transporteur';
+    }
+
+    private function lienCodeTransporteur(int $vehiculeId, string $matricule): ?CodeTransporteurVehicule
+    {
+        if ($vehiculeId > 0) {
+            $link = CodeTransporteurVehicule::query()
+                ->with('codeTransporteur')
+                ->where('vehicule_id', $vehiculeId)
+                ->first();
+            if ($link) {
+                return $link;
+            }
+        }
+
+        if ($matricule !== '') {
+            return CodeTransporteurVehicule::query()
+                ->with('codeTransporteur')
+                ->where('matricule_vehicule', $matricule)
+                ->first();
+        }
+
+        return null;
+    }
+
+    private function vehiculeEstCamionTransporteur(int $vehiculeId, string $matricule): bool
+    {
+        if ($vehiculeId > 0 && TransporteurVehicule::query()->where('vehicule_id', $vehiculeId)->exists()) {
+            return true;
+        }
+
+        if ($matricule !== '') {
+            return TransporteurVehicule::query()
+                ->where('matricule_vehicule', $matricule)
+                ->exists();
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array{ids: array<int, true>, matricules: array<string, true>}
+     */
+    private function vehiculesPgfLookup(): array
+    {
+        if ($this->vehiculesPgfLookup !== null) {
+            return $this->vehiculesPgfLookup;
+        }
+
+        $groupeIds = Groupe::query()
+            ->where('nom_groupe', 'like', '%PGF%')
+            ->pluck('id');
+
+        $rows = GroupeVehicule::query()
+            ->whereIn('groupe_id', $groupeIds)
+            ->get(['vehicule_id', 'matricule_vehicule']);
+
+        $ids = [];
+        $matricules = [];
+        foreach ($rows as $row) {
+            $id = (int) $row->vehicule_id;
+            if ($id > 0) {
+                $ids[$id] = true;
+            }
+            $mat = strtoupper(trim((string) $row->matricule_vehicule));
+            if ($mat !== '') {
+                $matricules[$mat] = true;
+            }
+        }
+
+        return $this->vehiculesPgfLookup = ['ids' => $ids, 'matricules' => $matricules];
+    }
+
+    private function vehiculeEstCamionPgf(int $vehiculeId, string $matricule): bool
+    {
+        $lookup = $this->vehiculesPgfLookup();
+
+        if ($vehiculeId > 0 && isset($lookup['ids'][$vehiculeId])) {
+            return true;
+        }
+
+        $matricule = strtoupper(trim($matricule));
+
+        return $matricule !== '' && isset($lookup['matricules'][$matricule]);
     }
 
     public function prixUnitairePourFiche(FicheSortie $fiche): ?float
@@ -50,7 +162,10 @@ class MontantAgentFicheService
             return null;
         }
 
-        $type = $this->typePrixPourMatricule($fiche->matricule_vehicule);
+        $type = $this->typePrixPourVehicule(
+            (int) ($fiche->vehicule_id ?? 0) ?: null,
+            $fiche->matricule_vehicule
+        );
 
         $query = PrixAgent::query()
             ->where('id_agent', $fiche->id_agent)

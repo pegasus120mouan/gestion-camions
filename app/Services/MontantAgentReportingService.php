@@ -389,10 +389,6 @@ class MontantAgentReportingService
         ?int $produitIdOverride = null,
         ?array $usinesById = null,
     ): int {
-        if ($ticket->montant_paie !== null && (float) $ticket->montant_paie > 0) {
-            return (int) round((float) $ticket->montant_paie);
-        }
-
         if ($fiche && $fiche->exists && $fiche->montant_agent !== null) {
             return (int) round((float) $fiche->montant_agent);
         }
@@ -403,16 +399,14 @@ class MontantAgentReportingService
             ?: ($fiche?->produit_id ? (int) $fiche->produit_id : null)
             ?: $this->produitIdDepuisUsine((int) ($ticket->id_usine ?? 0), $nomUsine);
 
-        $pu = (float) ($ticket->prix_unitaire ?? 0) > 0
-            ? (float) $ticket->prix_unitaire
-            : $this->ticketPrix->prixUnitairePourTicket(
-                $ticket,
-                $produitId,
-                null,
-                null,
-                (int) ($ticket->id_agent ?? 0) ?: null,
-                $nomUsine,
-            );
+        $pu = $this->ticketPrix->prixUnitairePourTicket(
+            $ticket,
+            $produitId,
+            null,
+            null,
+            (int) ($ticket->id_agent ?? 0) ?: null,
+            $nomUsine,
+        );
 
         $poids = (float) ($ticket->poids ?? 0);
         if ($poids <= 0 && $fiche) {
@@ -428,10 +422,6 @@ class MontantAgentReportingService
         ?int $produitIdOverride = null,
         ?array $usinesById = null,
     ): ?float {
-        if ((float) ($ticket->prix_unitaire ?? 0) > 0) {
-            return (float) $ticket->prix_unitaire;
-        }
-
         if ($fiche && $fiche->exists) {
             $puFiche = $this->montantAgentFiche->prixUnitairePourFiche($fiche);
             if ($puFiche !== null) {

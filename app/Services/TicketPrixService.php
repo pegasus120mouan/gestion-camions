@@ -15,9 +15,9 @@ class TicketPrixService
         private MontantAgentFicheService $montantAgentFicheService
     ) {}
 
-    public function typePrixPourMatricule(?string $matricule): string
+    public function typePrixPourMatricule(?string $matricule, ?int $vehiculeId = null): string
     {
-        return $this->montantAgentFicheService->typePrixPourMatricule($matricule);
+        return $this->montantAgentFicheService->typePrixPourMatricule($matricule, $vehiculeId);
     }
 
     public function nomTypeTransporteurPourMatricule(?string $matricule): ?string
@@ -59,7 +59,10 @@ class TicketPrixService
         }
 
         $date = $dateReference ?? $ticket->date_ticket?->format('Y-m-d');
-        $typeVehicule = $this->typePrixPourMatricule($ticket->matricule_vehicule);
+        $typeVehicule = $this->typePrixPourMatricule(
+            $ticket->matricule_vehicule,
+            (int) ($ticket->vehicule_id ?? 0) ?: null
+        );
         $nomTypeTransporteur = $this->nomTypeTransporteurPourMatricule($ticket->matricule_vehicule);
 
         if ($ticket->particulier_agent_id) {
@@ -206,25 +209,14 @@ class TicketPrixService
             return null;
         }
 
-        $types = array_values(array_unique([$type, 'pgf', 'transporteur', 'autre_camion']));
-
-        foreach ($types as $typeEssai) {
-            if ($nomUsine !== null) {
-                $prix = $this->chercherPrixAgent($idAgentApi, null, $nomUsine, $produitId, $dateTicket, $typeEssai);
-                if ($prix !== null) {
-                    return $prix;
-                }
-            }
-
-            if ($idUsine !== null && $idUsine > 0) {
-                $prix = $this->chercherPrixAgent($idAgentApi, $idUsine, null, $produitId, $dateTicket, $typeEssai);
-                if ($prix !== null) {
-                    return $prix;
-                }
-            }
-        }
-
-        return null;
+        return $this->chercherPrixAgent(
+            $idAgentApi,
+            $idUsine,
+            $nomUsine,
+            $produitId,
+            $dateTicket,
+            $type
+        );
     }
 
     private function chercherPrixAgent(
