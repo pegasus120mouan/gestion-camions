@@ -366,7 +366,7 @@ class MontantAgentReportingService
 
     public function montantLigneFiche(FicheSortie $fiche): int
     {
-        if ($fiche->montant_agent !== null) {
+        if ($fiche->montant_agent !== null && (float) $fiche->montant_agent > 0) {
             return (int) round((float) $fiche->montant_agent);
         }
 
@@ -389,24 +389,11 @@ class MontantAgentReportingService
         ?int $produitIdOverride = null,
         ?array $usinesById = null,
     ): int {
-        if ($fiche && $fiche->exists && $fiche->montant_agent !== null) {
+        if ($fiche && $fiche->exists && $fiche->montant_agent !== null && (float) $fiche->montant_agent > 0) {
             return (int) round((float) $fiche->montant_agent);
         }
 
-        $usinesById ??= $this->buildUsinesById();
-        $nomUsine = $this->nomUsineEffectif($fiche, $ticket, $usinesById);
-        $produitId = $produitIdOverride
-            ?: ($fiche?->produit_id ? (int) $fiche->produit_id : null)
-            ?: $this->produitIdDepuisUsine((int) ($ticket->id_usine ?? 0), $nomUsine);
-
-        $pu = $this->ticketPrix->prixUnitairePourTicket(
-            $ticket,
-            $produitId,
-            null,
-            null,
-            (int) ($ticket->id_agent ?? 0) ?: null,
-            $nomUsine,
-        );
+        $pu = $this->prixUnitaireLigneTicket($ticket, $fiche, $produitIdOverride, $usinesById);
 
         $poids = (float) ($ticket->poids ?? 0);
         if ($poids <= 0 && $fiche) {
