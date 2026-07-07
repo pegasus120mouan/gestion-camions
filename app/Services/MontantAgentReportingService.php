@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 
@@ -187,13 +188,15 @@ class MontantAgentReportingService
             throw new \InvalidArgumentException('Ticket API sans identifiant.');
         }
 
+        $numero = trim((string) ($apiTicket['numero_ticket'] ?? ''));
+
         $prixFromApi = $apiTicket['prix_unitaire'] ?? null;
         $prixUnitaire = ($prixFromApi !== null && $prixFromApi !== '')
             ? (float) $prixFromApi
             : null;
 
         $attrs = [
-            'numero_ticket' => (string) ($apiTicket['numero_ticket'] ?? ''),
+            'numero_ticket' => $numero,
             'date_ticket' => $apiTicket['date_ticket'] ?? now()->format('Y-m-d'),
             'matricule_vehicule' => (string) ($apiTicket['matricule_vehicule'] ?? ''),
             'vehicule_id' => (int) ($apiTicket['vehicule_id'] ?? 0) ?: null,
@@ -212,10 +215,20 @@ class MontantAgentReportingService
         }
 
         $ticket = Ticket::query()->find($idTicket);
+        if (! $ticket && $numero !== '') {
+            $ticket = Ticket::query()->where('numero_ticket', $numero)->first();
+        }
+
         if ($ticket) {
+            if ((int) $ticket->id_ticket !== $idTicket && ! Ticket::query()->where('id_ticket', $idTicket)->exists()) {
+                $this->realignerIdTicketLocal((int) $ticket->id_ticket, $idTicket);
+                $ticket = Ticket::query()->find($idTicket) ?? $ticket;
+            }
+
             if (! isset($attrs['prix_unitaire'])) {
                 unset($attrs['prix_unitaire']);
             }
+
             $ticket->fill($attrs);
             $ticket->save();
 
@@ -229,6 +242,19 @@ class MontantAgentReportingService
         $ticket->save();
 
         return $ticket->fresh();
+    }
+
+    private function realignerIdTicketLocal(int $ancienId, int $nouvelId): void
+    {
+        if ($ancienId === $nouvelId || $ancienId <= 0 || $nouvelId <= 0) {
+            return;
+        }
+
+        DB::transaction(function () use ($ancienId, $nouvelId) {
+            FicheSortie::query()->where('id_ticket', $ancienId)->update(['id_ticket' => $nouvelId]);
+            TicketValidation::query()->where('id_ticket', $ancienId)->update(['id_ticket' => $nouvelId]);
+            Ticket::query()->where('id_ticket', $ancienId)->update(['id_ticket' => $nouvelId]);
+        });
     }
 
     /**
