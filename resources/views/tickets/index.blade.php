@@ -138,7 +138,7 @@
                   <button
                     type="button"
                     class="btn btn-sm {{ $ticketValide ? 'btn-secondary' : 'btn-outline-success' }}"
-                    title="{{ $ticketValide ? 'Ticket déjà validé' : 'Valider le ticket' }}"
+                    title="{{ $ticketValide ? 'Ticket déjà validé' : ($estCamionPgf ? 'Valider avec fiche de sortie' : 'Valider le ticket') }}"
                     data-bs-toggle="modal"
                     data-bs-target="#modalValiderTicket{{ $loop->index }}"
                     @if($ticketValide) disabled @endif
@@ -412,11 +412,13 @@
 @foreach($tickets as $index => $t)
   @php
     $ticketValideModal = ($t['conformite'] ?? '') === 'valide';
+    $estCamionPgf = (bool) ($t['est_camion_pgf'] ?? false);
+    $fichesPourTicket = collect($t['fiches_correspondantes'] ?? []);
     $nomProduitModal = $t['nom_produit'] ?? '-';
   @endphp
   @if(!$ticketValideModal)
   <div class="modal fade" id="modalValiderTicket{{ $index }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog {{ $estCamionPgf ? 'modal-xl modal-dialog-scrollable' : '' }}">
       <div class="modal-content">
         <div class="modal-header bg-success text-white">
           <h5 class="modal-title text-white">
@@ -430,22 +432,77 @@
           <div class="modal-body">
             <div class="alert alert-light border mb-3">
               <div class="row g-2">
-                <div class="col-md-4"><strong>Ticket :</strong> {{ $t['numero_ticket'] ?? '-' }}</div>
-                <div class="col-md-4"><strong>Véhicule :</strong> {{ $t['matricule_vehicule'] ?? '-' }}</div>
-                <div class="col-md-4"><strong>Agent :</strong> {{ $t['nom_agent'] ?? '-' }}</div>
-                <div class="col-md-4"><strong>Usine :</strong> {{ $t['nom_usine'] ?? '-' }}</div>
-                <div class="col-md-4"><strong>Produit :</strong> {{ $nomProduitModal }}</div>
-                <div class="col-md-4"><strong>Poids :</strong> {{ number_format((float)($t['poids'] ?? 0), 0, ',', ' ') }} kg</div>
+                <div class="col-md-3"><strong>Ticket :</strong> {{ $t['numero_ticket'] ?? '-' }}</div>
+                <div class="col-md-3"><strong>Véhicule :</strong> {{ $t['matricule_vehicule'] ?? '-' }}</div>
+                <div class="col-md-3"><strong>Agent :</strong> {{ $t['nom_agent'] ?? '-' }}</div>
+                <div class="col-md-3"><strong>Pont :</strong> {{ $t['nom_pont'] ?? '-' }}</div>
+                <div class="col-md-3"><strong>Usine :</strong> {{ $t['nom_usine'] ?? '-' }}</div>
+                <div class="col-md-3"><strong>Produit :</strong> {{ $nomProduitModal }}</div>
+                <div class="col-md-3"><strong>Poids :</strong> {{ number_format((float)($t['poids'] ?? 0), 0, ',', ' ') }} kg</div>
               </div>
             </div>
-            <div class="alert alert-info mb-0">
-              <i class="bx bx-check-circle me-1"></i>
-              Le ticket sera validé directement. Le produit est déterminé automatiquement selon l'usine.
-            </div>
+
+            @if($estCamionPgf)
+              <p class="text-muted small mb-3">
+                <i class="bx bx-info-circle me-1"></i>Camion PGF — sélectionnez une fiche de sortie non déchargée (véhicule, agent, pont et usine identiques au ticket).
+              </p>
+              <h6 class="mb-3">Fiches de sortie non déchargées</h6>
+
+              @if($fichesPourTicket->isEmpty())
+                <div class="alert alert-warning mb-0">
+                  Aucune fiche de sortie ne correspond à ce ticket.
+                </div>
+              @else
+                <div class="table-responsive">
+                  <table class="table table-hover align-middle mb-0">
+                    <thead>
+                      <tr>
+                        <th style="width: 40px;"></th>
+                        <th>N° Fiche</th>
+                        <th>Date chargement</th>
+                        <th>Véhicule</th>
+                        <th>Agent</th>
+                        <th>Pont</th>
+                        <th>Usine</th>
+                        <th>Poids parc</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @foreach($fichesPourTicket as $fiche)
+                        <tr>
+                          <td>
+                            <input
+                              type="radio"
+                              name="fiche_id"
+                              value="{{ $fiche->id }}"
+                              class="form-check-input"
+                              required
+                              {{ $loop->first ? 'checked' : '' }}
+                            />
+                          </td>
+                          <td>{{ $fiche->numero_fiche ?? ('#' . $fiche->id) }}</td>
+                          <td>{{ $fiche->date_chargement ? $fiche->date_chargement->format('d-m-Y') : '-' }}</td>
+                          <td>{{ $fiche->matricule_vehicule ?? '-' }}</td>
+                          <td>{{ $fiche->nom_agent ?? '-' }}</td>
+                          <td>{{ $fiche->nom_pont ?? '-' }}</td>
+                          <td>{{ $fiche->usine ?? '-' }}</td>
+                          <td>{{ $fiche->poids_pont ? number_format((float) $fiche->poids_pont, 0, ',', ' ') . ' kg' : '-' }}</td>
+                        </tr>
+                      @endforeach
+                    </tbody>
+                  </table>
+                </div>
+              @endif
+            @else
+              <div class="alert alert-info mb-0">
+                <i class="bx bx-check-circle me-1"></i>
+                Ce camion n'est pas PGF. Le ticket sera validé directement (produit déterminé selon l'usine).
+              </div>
+            @endif
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-            <button type="submit" class="btn btn-success">
+            <button type="submit" class="btn btn-success" @if($estCamionPgf && $fichesPourTicket->isEmpty()) disabled @endif>
               <i class="bx bx-check me-1"></i>Valider
             </button>
           </div>

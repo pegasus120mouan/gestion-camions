@@ -322,13 +322,25 @@ class TicketController extends Controller
         unset($ticket);
 
         $vehiculesPgfLookup = $this->vehiculesPgfLookup();
+        $fichesNonDechargees = $this->fichesNonDechargeesPourChef($request);
         foreach ($ticketsArray as &$ticket) {
             $ticket['est_camion_pgf'] = $this->vehiculeEstCamionPgf(
                 (int) ($ticket['vehicule_id'] ?? 0),
                 (string) ($ticket['matricule_vehicule'] ?? ''),
                 $vehiculesPgfLookup
             );
-            $ticket['fiches_correspondantes'] = [];
+
+            if ($ticket['est_camion_pgf']) {
+                $nomUsineTicket = trim((string) ($ticket['nom_usine'] ?? ''));
+                if ($nomUsineTicket === '' || $nomUsineTicket === '-') {
+                    $ticket['nom_usine'] = $usinesById[$ticket['id_usine'] ?? 0] ?? '';
+                }
+                $ticket['fiches_correspondantes'] = $this->ficheTicketCorrespondance
+                    ->filtrer($fichesNonDechargees, $this->ficheTicketCorrespondance->ticketDepuisApi($ticket))
+                    ->all();
+            } else {
+                $ticket['fiches_correspondantes'] = [];
+            }
         }
         unset($ticket);
 
@@ -815,8 +827,9 @@ class TicketController extends Controller
             ->with('success', $message);
     }
 
-    public function valider(Request $request, int $id)
+    public function valider(Request $request, int $id, FicheSortieDechargementService $dechargementService)
     {
+        $chefAgentIds = $this->mesAgentsService->chefAgentIds($request);
         $apiTicket = $this->mesTicketsService->findTicketById($id, $request);
 
         if (!$apiTicket) {
@@ -824,8 +837,20 @@ class TicketController extends Controller
                 ->with('error', 'Ticket introuvable pour votre équipe.');
         }
 
-        $validated = $request->validate([
+        $estCamionPgf = $this->vehiculeEstCamionPgf(
+            (int) ($apiTicket['vehicule_id'] ?? 0),
+            (string) ($apiTicket['matricule_vehicule'] ?? '')
+        );
+
+        $rules = [
             'parc_id' => ['nullable', 'integer', 'exists:parcs,id'],
+        ];
+        if ($estCamionPgf) {
+            $rules['fiche_id'] = ['required', 'integer', 'exists:fiches_sortie,id'];
+        }
+
+        $validated = $request->validate($rules, [
+            'fiche_id.required' => 'Sélectionnez une fiche de sortie pour ce camion PGF.',
         ]);
 
         if (! $request->boolean('confirm_validation')) {
@@ -851,6 +876,28 @@ class TicketController extends Controller
             }
         }
 
+        $fiche = null;
+        if ($estCamionPgf) {
+            $fiche = FicheSortie::query()
+                ->whereNull('date_dechargement')
+                ->whereIn('id_agent', $chefAgentIds ?: [-1])
+                ->find($validated['fiche_id']);
+
+            if (!$fiche) {
+                return redirect()->route('tickets.index')
+                    ->with('error', 'Fiche de sortie introuvable ou déjà déchargée.');
+            }
+
+            $raison = $this->ficheTicketCorrespondance->raisonNonCorrespondance(
+                $this->ficheTicketCorrespondance->ticketDepuisApi($apiTicket),
+                $fiche
+            );
+            if ($raison !== null) {
+                return redirect()->route('tickets.index')
+                    ->with('error', $raison);
+            }
+        }
+
         if ($existing && (int) $existing->id_ticket !== $id) {
             $ticketApiId = Ticket::query()->find($id);
             if ($ticketApiId) {
@@ -867,15 +914,20 @@ class TicketController extends Controller
         $dateTicket = $apiTicket['date_ticket'] ?? now()->format('Y-m-d');
         $poidsTicket = (float) ($apiTicket['poids'] ?? 0);
         $idUsine = (int) ($apiTicket['id_usine'] ?? 0) ?: null;
-        $nomUsine = trim((string) ($apiTicket['nom_usine'] ?? ''));
+        $nomUsine = trim((string) ($apiTicket['nom_usine'] ?? $fiche?->usine ?? ''));
         if ($nomUsine === '' && $idUsine) {
             $nomUsine = trim((string) (\App\Models\Usine::query()->where('id_usine', $idUsine)->value('nom_usine') ?? ''));
         }
 
         $produitInfo = app(UsinesParProduitService::class)->produitPourUsine($idUsine, $nomUsine !== '' ? $nomUsine : null);
-        $produitId = $produitInfo ? (int) $produitInfo['produit_id'] : null;
+        $produitId = $fiche?->produit_id
+            ? (int) $fiche->produit_id
+            : ($produitInfo ? (int) $produitInfo['produit_id'] : null);
 
         $idAgentApi = (int) ($apiTicket['id_agent'] ?? 0);
+        if ($idAgentApi <= 0 && $fiche) {
+            $idAgentApi = (int) $fiche->id_agent;
+        }
         if ($idAgentApi <= 0) {
             return redirect()->route('tickets.index')
                 ->with('error', 'Impossible de valider : agent introuvable sur ce ticket.');
@@ -911,7 +963,7 @@ class TicketController extends Controller
         $ticket->montant_paie = $montantPaie ?? $apiTicket['montant_paie'] ?? null;
 
         try {
-            DB::transaction(function () use ($ticket, $id, $apiTicket, $numeroTicket) {
+            DB::transaction(function () use ($ticket, $dechargementService, $fiche, $apiTicket, $dateTicket, $poidsTicket, $id, $validated, $numeroTicket) {
                 $ticket->save();
 
                 TicketValidation::updateOrCreate(
@@ -922,6 +974,18 @@ class TicketController extends Controller
                         'validated_by' => Auth::id(),
                     ]
                 );
+
+                if ($fiche) {
+                    $dechargementService->decharger(
+                        $fiche,
+                        (string) ($apiTicket['numero_ticket'] ?? ''),
+                        $dateTicket,
+                        $poidsTicket,
+                        $id,
+                        isset($apiTicket['nom_usine']) ? (string) $apiTicket['nom_usine'] : null,
+                        isset($validated['parc_id']) ? (int) $validated['parc_id'] : null,
+                    );
+                }
             });
         } catch (UniqueConstraintViolationException) {
             return redirect()->route('tickets.index')
@@ -937,23 +1001,52 @@ class TicketController extends Controller
                 ->with('error', 'Le ticket a été validé mais est introuvable en base (id ' . $id . '). Contactez l\'administrateur.');
         }
 
-        $ficheAgent = app(MontantAgentFicheService::class)->assurerFichePourTicketAgent($ticket, $produitInfo);
+        $ficheTransporteur = $fiche;
+        if ($estCamionPgf && $ficheTransporteur) {
+            $ficheTransporteur->refresh();
+            app(TicketTransporteurFicheService::class)->synchroniserDonneesTicketSurFiche($ficheTransporteur);
+        } else {
+            app(MontantAgentFicheService::class)->assurerFichePourTicketAgent($ticket, $produitInfo);
+            $ficheTransporteur = FicheSortie::query()
+                ->where('id_ticket', $ticket->id_ticket)
+                ->orderByDesc('id')
+                ->first();
+        }
 
         $transporteurLie = app(TicketTransporteurFicheService::class)->synchroniserTicketTransporteur(
             $ticket,
-            $ficheAgent,
+            $ficheTransporteur,
             [
                 'nom_usine' => $nomUsine !== '' ? $nomUsine : null,
                 'produit_id' => $produitId,
-                'nom_produit' => $produitInfo['nom'] ?? '',
+                'nom_produit' => $ficheTransporteur?->nom_produit ?? ($produitInfo['nom'] ?? ''),
                 'id_agent' => $idAgentApi,
-                'nom_agent' => trim((string) ($apiTicket['nom_agent'] ?? '')),
-                'numero_agent' => '',
+                'nom_agent' => $ficheTransporteur?->nom_agent ?? trim((string) ($apiTicket['nom_agent'] ?? '')),
+                'numero_agent' => $ficheTransporteur?->numero_agent ?? '',
             ]
         );
 
         Cache::forget('agent_tickets_sync:' . $idAgentApi);
         Cache::forget('montant_agent_index:' . $idAgentApi . ':' . md5(json_encode(['id_agent' => $idAgentApi])));
+
+        if ($fiche) {
+            $fiche->refresh();
+            $stockMsg = $dechargementService->pontEstGerable((int) $fiche->id_pont)
+                ? ' Le stock du parc a été déduit.'
+                : '';
+
+            $message = 'Ticket « ' . ($apiTicket['numero_ticket'] ?? $id) . ' » validé et associé à la fiche '
+                . ($fiche->numero_fiche ?? $fiche->id) . '.';
+            if ($produitInfo && ! $fiche->produit_id) {
+                $message .= ' Produit : ' . $produitInfo['nom'] . '.';
+            }
+            if ($transporteurLie) {
+                $message .= ' Transmis au transporteur ' . $transporteurLie->code . '.';
+            }
+
+            return redirect()->route('tickets.index')
+                ->with('success', $message . $stockMsg);
+        }
 
         $message = 'Ticket « ' . ($apiTicket['numero_ticket'] ?? $id) . ' » validé avec succès.';
         if ($produitInfo) {
