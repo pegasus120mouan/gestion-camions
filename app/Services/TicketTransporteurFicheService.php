@@ -401,7 +401,7 @@ class TicketTransporteurFicheService
             return Ticket::query()
                 ->where('matricule_vehicule', $fiche->matricule_vehicule)
                 ->whereDate('date_ticket', $fiche->date_chargement)
-                ->where('conformite', 'valide')
+                ->whereHas('validation')
                 ->orderByDesc('id_ticket')
                 ->first();
         }

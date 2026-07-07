@@ -14,6 +14,7 @@ use App\Models\PontEtat;
 use App\Models\Produit;
 use App\Models\Stock;
 use App\Models\Ticket;
+use App\Models\TicketValidation;
 use App\Services\ChefEquipeContext;
 use App\Services\FicheSortieDechargementService;
 use App\Services\FicheSortieNumeroService;
@@ -155,6 +156,14 @@ class TicketController extends Controller
         $localTicketsById = $localTickets->keyBy('id_ticket');
         $localTicketsByNumero = $localTickets->keyBy('numero_ticket');
 
+        $validatedTicketIds = $ticketIds !== []
+            ? TicketValidation::query()
+                ->whereIn('id_ticket', $ticketIds)
+                ->pluck('id_ticket')
+                ->flip()
+                ->all()
+            : [];
+
         $particulierAgentIds = $localTickets->pluck('particulier_agent_id')->filter()->unique()->values();
         $prixParticuliers = $particulierAgentIds->isNotEmpty()
             ? ParticulierAgentPrix::whereIn('particulier_agent_id', $particulierAgentIds)->get()
@@ -191,7 +200,7 @@ class TicketController extends Controller
                 'montant_paie' => $ticket['montant_paie'] ?? $localPourDonnees?->montant_paie,
                 'statut_ticket' => $ticket['statut_ticket'] ?? $localPourDonnees?->statut_ticket,
                 'created_at' => $ticket['created_at'] ?? ($localPourDonnees?->created_at?->format('Y-m-d H:i:s')),
-                'conformite' => $local?->conformite,
+                'conformite' => isset($validatedTicketIds[$idTicket]) ? 'valide' : null,
             ];
         }
 
@@ -510,9 +519,20 @@ class TicketController extends Controller
         return null;
     }
 
-    private function ticketEstDejaValide(?Ticket $ticket): bool
+    private function ticketEstDejaValide(?Ticket $ticket, int $idTicket = 0, string $numeroTicket = ''): bool
     {
-        return $ticket !== null && $ticket->estValide();
+        if ($idTicket > 0 && TicketValidation::where('id_ticket', $idTicket)->exists()) {
+            return true;
+        }
+
+        if ($ticket !== null && $ticket->estValide()) {
+            return true;
+        }
+
+        $numeroTicket = trim($numeroTicket);
+
+        return $numeroTicket !== ''
+            && TicketValidation::where('numero_ticket', $numeroTicket)->exists();
     }
 
     /**
@@ -798,18 +818,22 @@ class TicketController extends Controller
             'fiche_id.required' => 'Sélectionnez une fiche de sortie pour ce camion PGF.',
         ]);
 
+        if (! $request->boolean('confirm_validation')) {
+            return redirect()->route('tickets.index')
+                ->with('error', 'Validation refusée : action non confirmée.');
+        }
+
         $numeroTicket = trim((string) ($apiTicket['numero_ticket'] ?? ''));
 
         $existing = $this->findTicketLocal($id, $numeroTicket);
-        if ($this->ticketEstDejaValide($existing)) {
+        if ($this->ticketEstDejaValide($existing, $id, $numeroTicket)) {
             return redirect()->route('tickets.index')
                 ->with('error', 'Ce ticket est déjà validé.');
         }
 
         if (!$existing && $numeroTicket !== '') {
-            $dejaValideParNumero = Ticket::query()
+            $dejaValideParNumero = TicketValidation::query()
                 ->where('numero_ticket', $numeroTicket)
-                ->where('conformite', 'valide')
                 ->exists();
             if ($dejaValideParNumero) {
                 return redirect()->route('tickets.index')
@@ -866,8 +890,7 @@ class TicketController extends Controller
             'id_usine' => (int) ($apiTicket['id_usine'] ?? 0) ?: null,
             'id_agent' => $idAgentApi,
             'statut_ticket' => $apiTicket['statut_ticket'] ?? 'non soldé',
-            'id_utilisateur' => $ticket->id_utilisateur ?? 1,
-            'conformite' => 'valide',
+            'id_utilisateur' => $ticket->id_utilisateur ?? Auth::id() ?? 1,
             'poids_unipalm' => $apiTicket['poids'] ?? null,
             'date_confirmation_unipalm' => now(),
         ]);
@@ -889,8 +912,17 @@ class TicketController extends Controller
         $ticket->montant_paie = $montantPaie ?? $apiTicket['montant_paie'] ?? null;
 
         try {
-            DB::transaction(function () use ($ticket, $dechargementService, $fiche, $apiTicket, $dateTicket, $poidsTicket, $id, $validated) {
+            DB::transaction(function () use ($ticket, $dechargementService, $fiche, $apiTicket, $dateTicket, $poidsTicket, $id, $validated, $numeroTicket) {
                 $ticket->save();
+
+                TicketValidation::updateOrCreate(
+                    ['id_ticket' => $id],
+                    [
+                        'numero_ticket' => $numeroTicket !== '' ? $numeroTicket : (string) ($apiTicket['numero_ticket'] ?? $id),
+                        'validated_at' => now(),
+                        'validated_by' => Auth::id(),
+                    ]
+                );
 
                 if ($fiche) {
                     $dechargementService->decharger(
@@ -1205,6 +1237,8 @@ class TicketController extends Controller
 
         // Supprimer la fiche de sortie liée → restitue automatiquement le poids au stock du parc
         FicheSortie::where('id_ticket', $ticket->id_ticket)->delete();
+
+        TicketValidation::where('id_ticket', $ticket->id_ticket)->delete();
 
         $ticket->delete();
 

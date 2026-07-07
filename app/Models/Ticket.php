@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Ticket extends Model
 {
@@ -49,6 +50,11 @@ class Ticket extends Model
         return $this->hasOne(FicheSortie::class, 'id_ticket', 'id_ticket');
     }
 
+    public function validation(): HasOne
+    {
+        return $this->hasOne(TicketValidation::class, 'id_ticket', 'id_ticket');
+    }
+
     public function particulierAgent()
     {
         return $this->belongsTo(ParticulierAgent::class, 'particulier_agent_id');
@@ -56,11 +62,15 @@ class Ticket extends Model
 
     public function estValide(): bool
     {
-        return $this->conformite === 'valide';
+        if ($this->relationLoaded('validation')) {
+            return $this->validation !== null;
+        }
+
+        return $this->validation()->exists();
     }
 
     public function scopeValide($query)
     {
-        return $query->where('conformite', 'valide');
+        return $query->whereHas('validation');
     }
 }

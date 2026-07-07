@@ -425,6 +425,7 @@
         </div>
         <form method="POST" action="{{ route('tickets.valider', $t['id_ticket']) }}">
           @csrf
+          <input type="hidden" name="confirm_validation" value="1" />
           <div class="modal-body">
             <div class="alert alert-light border mb-3">
               <div class="row g-2">
