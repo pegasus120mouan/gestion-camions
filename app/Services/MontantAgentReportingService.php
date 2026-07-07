@@ -51,7 +51,7 @@ class MontantAgentReportingService
         $idAgent = ! empty($filtres['id_agent']) ? (int) $filtres['id_agent'] : 0;
 
         $query = Ticket::query()
-            ->whereIn('conformite', ['valide', 'conforme'])
+            ->where('conformite', 'valide')
             ->where(function (Builder $agentQuery) use ($idAgent) {
                 if ($idAgent > 0) {
                     $agentQuery->where('id_agent', $idAgent)
@@ -131,7 +131,7 @@ class MontantAgentReportingService
         }
 
         $locals = Ticket::query()
-            ->whereIn('conformite', ['valide', 'conforme'])
+            ->where('conformite', 'valide')
             ->where(function (Builder $q) use ($idAgent) {
                 $q->whereNull('id_agent')
                     ->orWhere('id_agent', 0)

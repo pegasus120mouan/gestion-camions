@@ -115,7 +115,7 @@ class TicketTransporteurFicheService
                 $updates['date_chargement'] = $dateTicket;
             }
             $dateDechargement = $fiche->date_dechargement?->format('Y-m-d');
-            if ($dateDechargement !== $dateTicket) {
+            if ($ticket->estValide() && $dateDechargement !== $dateTicket) {
                 $updates['date_dechargement'] = $dateTicket;
             }
         }
@@ -274,7 +274,7 @@ class TicketTransporteurFicheService
         $count = 0;
 
         $ticketsValides = Ticket::query()
-            ->whereIn('conformite', ['valide', 'conforme'])
+            ->valide()
             ->where(function ($query) use ($matricules, $vehiculeIds) {
                 if ($matricules !== []) {
                     $query->whereIn('matricule_vehicule', $matricules);
@@ -401,7 +401,7 @@ class TicketTransporteurFicheService
             return Ticket::query()
                 ->where('matricule_vehicule', $fiche->matricule_vehicule)
                 ->whereDate('date_ticket', $fiche->date_chargement)
-                ->whereIn('conformite', ['valide', 'conforme'])
+                ->where('conformite', 'valide')
                 ->orderByDesc('id_ticket')
                 ->first();
         }
@@ -427,7 +427,7 @@ class TicketTransporteurFicheService
             $data['poids_pont'] = $poids;
         }
 
-        if ($ticket->date_ticket) {
+        if ($ticket->estValide() && $ticket->date_ticket) {
             $data['date_dechargement'] = $ticket->date_ticket->format('Y-m-d');
         }
 

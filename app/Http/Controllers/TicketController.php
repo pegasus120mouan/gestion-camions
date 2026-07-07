@@ -165,9 +165,10 @@ class TicketController extends Controller
             $idTicket = (int) ($ticket['id_ticket'] ?? 0);
             $numeroTicket = trim((string) ($ticket['numero_ticket'] ?? ''));
             $local = $localTicketsById->get($idTicket);
-            if (!$local && $numeroTicket !== '') {
-                $local = $localTicketsByNumero->get($numeroTicket);
-            }
+            $localParNumero = (!$local && $numeroTicket !== '')
+                ? $localTicketsByNumero->get($numeroTicket)
+                : null;
+            $localPourDonnees = $local ?? $localParNumero;
 
             $ticketsArray[] = [
                 'id_ticket' => $idTicket,
@@ -181,15 +182,15 @@ class TicketController extends Controller
                 'id_pont' => (int) ($ticket['id_pont'] ?? 0),
                 'nom_pont' => (string) ($ticket['nom_pont'] ?? ''),
                 'id_agent' => (int) ($ticket['id_agent'] ?? 0),
-                'nom_agent' => $this->resolveNomAgentPourAffichage($ticket, $local, $agentsById),
-                'nom_groupe' => $local?->particulierAgent?->groupe?->nom_groupe ?? '-',
-                'particulier_agent_id' => $local?->particulier_agent_id,
-                'prix_unitaire' => $ticket['prix_unitaire'] ?? $local?->prix_unitaire,
+                'nom_agent' => $this->resolveNomAgentPourAffichage($ticket, $localPourDonnees, $agentsById),
+                'nom_groupe' => $localPourDonnees?->particulierAgent?->groupe?->nom_groupe ?? '-',
+                'particulier_agent_id' => $localPourDonnees?->particulier_agent_id,
+                'prix_unitaire' => $ticket['prix_unitaire'] ?? $localPourDonnees?->prix_unitaire,
                 'prix_unitaire_agent' => null,
                 'montant_calcule' => null,
-                'montant_paie' => $ticket['montant_paie'] ?? $local?->montant_paie,
-                'statut_ticket' => $ticket['statut_ticket'] ?? $local?->statut_ticket,
-                'created_at' => $ticket['created_at'] ?? ($local?->created_at?->format('Y-m-d H:i:s')),
+                'montant_paie' => $ticket['montant_paie'] ?? $localPourDonnees?->montant_paie,
+                'statut_ticket' => $ticket['statut_ticket'] ?? $localPourDonnees?->statut_ticket,
+                'created_at' => $ticket['created_at'] ?? ($localPourDonnees?->created_at?->format('Y-m-d H:i:s')),
                 'conformite' => $local?->conformite,
             ];
         }
@@ -511,8 +512,7 @@ class TicketController extends Controller
 
     private function ticketEstDejaValide(?Ticket $ticket): bool
     {
-        return $ticket !== null
-            && in_array($ticket->conformite, ['valide', 'conforme'], true);
+        return $ticket !== null && $ticket->estValide();
     }
 
     /**
@@ -744,7 +744,6 @@ class TicketController extends Controller
                     'id_ticket'          => $ticket->id_ticket,
                     'numero_ticket'      => $ticket->numero_ticket,
                     'date_chargement'    => $ticket->date_ticket,
-                    'date_dechargement'  => $ticket->date_ticket,
                     'poids_pont'         => $ticket->poids ?? 0,
                 ]);
             }
@@ -810,7 +809,7 @@ class TicketController extends Controller
         if (!$existing && $numeroTicket !== '') {
             $dejaValideParNumero = Ticket::query()
                 ->where('numero_ticket', $numeroTicket)
-                ->whereIn('conformite', ['valide', 'conforme'])
+                ->where('conformite', 'valide')
                 ->exists();
             if ($dejaValideParNumero) {
                 return redirect()->route('tickets.index')
@@ -1031,20 +1030,22 @@ class TicketController extends Controller
 
         if ($ticketTrouve) {
             $ticket->update([
-                'conformite' => 'conforme',
                 'poids_unipalm' => $ticketTrouve['poids'] ?? null,
                 'date_confirmation_unipalm' => now(),
             ]);
             return redirect()->route('tickets.index')
-                ->with('success', 'Ticket confirmé avec Unipalm ! Correspondance trouvée: N°' . ($ticketTrouve['numero_ticket'] ?? '') . ', Poids: ' . number_format((float)($ticketTrouve['poids'] ?? 0), 0, ',', ' ') . ' kg');
-        } else {
-            $ticket->update([
-                'conformite' => 'non conforme',
-                'date_confirmation_unipalm' => now(),
-            ]);
-            return redirect()->route('tickets.index')
-                ->with('error', 'Aucun ticket correspondant trouvé dans Unipalm. Vérifiez les données (Date, N°Ticket, Usine, Poids).');
+                ->with('success', 'Correspondance Unipalm trouvée (N°' . ($ticketTrouve['numero_ticket'] ?? '') . ', poids: '
+                    . number_format((float) ($ticketTrouve['poids'] ?? 0), 0, ',', ' ') . ' kg). '
+                    . 'Le ticket n\'est pas validé : utilisez le bouton Valider pour confirmer.');
         }
+
+        $ticket->update([
+            'poids_unipalm' => null,
+            'date_confirmation_unipalm' => now(),
+        ]);
+
+        return redirect()->route('tickets.index')
+            ->with('error', 'Aucun ticket correspondant trouvé dans Unipalm. Vérifiez les données (Date, N°Ticket, Usine, Poids).');
     }
 
     public function exportBordereauPdf(int $id)

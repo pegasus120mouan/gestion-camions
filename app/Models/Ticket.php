@@ -53,4 +53,14 @@ class Ticket extends Model
     {
         return $this->belongsTo(ParticulierAgent::class, 'particulier_agent_id');
     }
+
+    public function estValide(): bool
+    {
+        return $this->conformite === 'valide';
+    }
+
+    public function scopeValide($query)
+    {
+        return $query->where('conformite', 'valide');
+    }
 }

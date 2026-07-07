@@ -249,7 +249,7 @@ class MontantAgentController extends Controller
         $ticket = Ticket::query()
             ->where('id_ticket', $id_ticket)
             ->where('id_agent', $id_agent)
-            ->whereIn('conformite', ['valide', 'conforme'])
+            ->where('conformite', 'valide')
             ->firstOrFail();
 
         if ($ticket->bordereau_agent_id) {

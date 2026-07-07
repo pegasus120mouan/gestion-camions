@@ -130,7 +130,7 @@
                     <i class="bx bx-printer"></i>
                   </a>
                   @php
-                    $ticketValide = in_array($t['conformite'] ?? '', ['valide', 'conforme'], true);
+                    $ticketValide = ($t['conformite'] ?? '') === 'valide';
                     $estCamionPgf = (bool) ($t['est_camion_pgf'] ?? false);
                   @endphp
                   <button
@@ -409,7 +409,7 @@
 <!-- Modals validation ticket + fiche de sortie -->
 @foreach($tickets as $index => $t)
   @php
-    $ticketValideModal = in_array($t['conformite'] ?? '', ['valide', 'conforme'], true);
+    $ticketValideModal = ($t['conformite'] ?? '') === 'valide';
     $estCamionPgf = (bool) ($t['est_camion_pgf'] ?? false);
     $fichesPourTicket = collect($t['fiches_correspondantes'] ?? []);
   @endphp

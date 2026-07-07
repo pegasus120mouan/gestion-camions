@@ -191,7 +191,7 @@ class MontantAgentFicheService
             'id_agent' => (int) ($ticket->id_agent ?? 0) ?: null,
             'usine' => $usine,
             'date_chargement' => $date,
-            'date_dechargement' => $date,
+            'date_dechargement' => $ticket->estValide() ? $date : null,
             'poids_pont' => $ticket->poids,
             'id_pont' => 0,
             'nom_pont' => 'Usine',
