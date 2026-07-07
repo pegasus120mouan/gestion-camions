@@ -542,18 +542,20 @@ class MontantAgentReportingService
                 }
             }
 
+            $ficheLiee = null;
             $aFiche = false;
             if ($fiche && $this->montantAgentFiche->ficheCorrespondAuTicket($fiche, $ticket)) {
                 $this->montantAgentFiche->reconcilierFicheAvecTicket($fiche, $ticket);
-                $aFiche = true;
-            } else {
-                $fiche = null;
+                if ($this->montantAgentFiche->estFicheSortieReelle($fiche)) {
+                    $ficheLiee = $fiche;
+                    $aFiche = true;
+                }
             }
 
-            $nomUsine = $this->nomUsineEffectif($fiche, $ticket, $usinesById);
+            $nomUsine = $this->nomUsineEffectif($ficheLiee ?? $fiche, $ticket, $usinesById);
             $produitInfo = $this->produitDepuisUsine((int) ($ticket->id_usine ?? 0), $nomUsine);
-            $produitId = $fiche?->produit_id
-                ? (int) $fiche->produit_id
+            $produitId = ($ficheLiee ?? $fiche)?->produit_id
+                ? (int) ($ficheLiee ?? $fiche)->produit_id
                 : ($produitInfo['produit_id'] ?? $produitIdFiltre);
 
             if ($produitIdFiltre && (int) $produitId !== $produitIdFiltre) {
@@ -561,21 +563,22 @@ class MontantAgentReportingService
             }
 
             $poids = (float) ($ticket->poids ?? 0);
-            if ($poids <= 0 && $fiche) {
-                $poids = (float) ($fiche->poids_pont ?? 0);
+            $ficheDonnees = $ficheLiee ?? $fiche;
+            if ($poids <= 0 && $ficheDonnees) {
+                $poids = (float) ($ficheDonnees->poids_pont ?? 0);
             }
 
-            if ($fiche !== null) {
-                $this->appliquerUsineSurFiche($fiche, $nomUsine);
-                $this->appliquerProduitSurFiche($fiche, $produitInfo);
+            if ($ficheLiee !== null) {
+                $this->appliquerUsineSurFiche($ficheLiee, $nomUsine);
+                $this->appliquerProduitSurFiche($ficheLiee, $produitInfo);
             }
 
             $result[] = [
                 'ticket' => $ticket,
-                'fiche' => $fiche ?? $this->ficheVirtuelleDepuisTicket($ticket, $nomUsine, $produitId, $produitInfo['nom'] ?? null),
-                'a_fiche' => $fiche !== null,
-                'montant' => $this->montantLigneTicket($ticket, $fiche, $produitId, $usinesById),
-                'prix_unitaire' => $this->prixUnitaireLigneTicket($ticket, $fiche, $produitId, $usinesById),
+                'fiche' => $ficheLiee ?? $this->ficheVirtuelleDepuisTicket($ticket, $nomUsine, $produitId, $produitInfo['nom'] ?? null),
+                'a_fiche' => $aFiche,
+                'montant' => $this->montantLigneTicket($ticket, $ficheDonnees, $produitId, $usinesById),
+                'prix_unitaire' => $this->prixUnitaireLigneTicket($ticket, $ficheDonnees, $produitId, $usinesById),
                 'poids_effectif' => $poids,
             ];
         }

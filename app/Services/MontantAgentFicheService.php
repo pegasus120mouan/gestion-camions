@@ -173,6 +173,19 @@ class MontantAgentFicheService
         return $numero !== '' && $numeroFiche !== '' && strcasecmp($numero, $numeroFiche) === 0;
     }
 
+    /**
+     * Vraie fiche de sortie parc (FICH-…) — exclut les fiches techniques TKT- créées à la validation ticket.
+     */
+    public function estFicheSortieReelle(FicheSortie $fiche): bool
+    {
+        $numero = trim((string) ($fiche->numero_fiche ?? ''));
+        if ($numero === '' || $numero === '—') {
+            return false;
+        }
+
+        return ! str_starts_with(strtoupper($numero), 'TKT-');
+    }
+
     public function assurerFichePourTicketAgent(Ticket $ticket, ?array $produitInfo = null): FicheSortie
     {
         $existing = $this->fichePourTicket($ticket, false);
