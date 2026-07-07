@@ -10,6 +10,10 @@ class Ticket extends Model
     protected $table = 'tickets';
     protected $primaryKey = 'id_ticket';
 
+    public $incrementing = false;
+
+    protected $keyType = 'int';
+
     protected $fillable = [
         'id_usine',
         'date_ticket',
