@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\FicheSortie;
 use App\Models\Produit;
 use App\Models\Ticket;
+use App\Models\TicketValidation;
 use App\Models\Usine;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -49,13 +50,24 @@ class MontantAgentReportingService
     public function queryTicketsValidesAgent(array $filtres = []): Builder
     {
         $idAgent = ! empty($filtres['id_agent']) ? (int) $filtres['id_agent'] : 0;
+        $apiRefs = $idAgent > 0 ? $this->referencesApiTicketsAgent($idAgent) : ['ids' => [], 'numeros' => []];
 
         $query = Ticket::query()
-            ->whereHas('validation')
-            ->where(function (Builder $agentQuery) use ($idAgent) {
+            ->where(function (Builder $validatedQuery) {
+                $validatedQuery->whereHas('validation')
+                    ->orWhere('conformite', 'valide');
+            })
+            ->where(function (Builder $agentQuery) use ($idAgent, $apiRefs) {
                 if ($idAgent > 0) {
                     $agentQuery->where('id_agent', $idAgent)
                         ->orWhereHas('ficheSortie', fn (Builder $f) => $f->where('id_agent', $idAgent));
+
+                    if ($apiRefs['ids'] !== []) {
+                        $agentQuery->orWhereIn('id_ticket', $apiRefs['ids']);
+                    }
+                    if ($apiRefs['numeros'] !== []) {
+                        $agentQuery->orWhereIn('numero_ticket', $apiRefs['numeros']);
+                    }
                 } else {
                     $agentQuery->where('id_agent', '>', 0);
                 }
@@ -99,7 +111,7 @@ class MontantAgentReportingService
     }
 
     /**
-     * Rattache id_agent sur les tickets validés localement mais mal enregistrés (id_agent vide).
+     * Rattache id_agent et enregistrements de validation manquants pour les tickets de l'agent.
      */
     public function synchroniserTicketsAgent(int $idAgent, ?Request $request = null): int
     {
@@ -108,30 +120,47 @@ class MontantAgentReportingService
         }
 
         $request ??= request();
-        $apiTickets = app(MesTicketsService::class)->fetchAllTickets([], $request);
-
-        $idsApiAgent = [];
-        $numerosApiAgent = [];
-        foreach ($apiTickets as $apiTicket) {
-            if ((int) ($apiTicket['id_agent'] ?? 0) !== $idAgent) {
-                continue;
-            }
-            $idTicket = (int) ($apiTicket['id_ticket'] ?? 0);
-            if ($idTicket > 0) {
-                $idsApiAgent[$idTicket] = true;
-            }
-            $numero = trim((string) ($apiTicket['numero_ticket'] ?? ''));
-            if ($numero !== '') {
-                $numerosApiAgent[$numero] = true;
-            }
-        }
+        $apiRefs = $this->referencesApiTicketsAgent($idAgent, $request);
+        $idsApiAgent = array_flip($apiRefs['ids']);
+        $numerosApiAgent = array_flip($apiRefs['numeros']);
 
         if ($idsApiAgent === [] && $numerosApiAgent === []) {
             return 0;
         }
 
+        $count = 0;
+
+        $legacyValides = Ticket::query()
+            ->where('conformite', 'valide')
+            ->whereDoesntHave('validation')
+            ->where(function (Builder $q) use ($idsApiAgent, $numerosApiAgent) {
+                if ($idsApiAgent !== []) {
+                    $q->whereIn('id_ticket', array_keys($idsApiAgent));
+                }
+                if ($numerosApiAgent !== []) {
+                    $method = $idsApiAgent !== [] ? 'orWhereIn' : 'whereIn';
+                    $q->{$method}('numero_ticket', array_keys($numerosApiAgent));
+                }
+            })
+            ->get();
+
+        foreach ($legacyValides as $ticket) {
+            TicketValidation::updateOrCreate(
+                ['id_ticket' => $ticket->id_ticket],
+                [
+                    'numero_ticket' => trim((string) ($ticket->numero_ticket ?? '')),
+                    'validated_at' => $ticket->updated_at ?? now(),
+                    'validated_by' => $ticket->id_utilisateur,
+                ]
+            );
+            $count++;
+        }
+
         $locals = Ticket::query()
-            ->whereHas('validation')
+            ->where(function (Builder $validatedQuery) {
+                $validatedQuery->whereHas('validation')
+                    ->orWhere('conformite', 'valide');
+            })
             ->where(function (Builder $q) use ($idAgent) {
                 $q->whereNull('id_agent')
                     ->orWhere('id_agent', 0)
@@ -148,13 +177,43 @@ class MontantAgentReportingService
             })
             ->get();
 
-        $count = 0;
         foreach ($locals as $ticket) {
             $ticket->update(['id_agent' => $idAgent]);
             $count++;
         }
 
         return $count;
+    }
+
+    /**
+     * @return array{ids: list<int>, numeros: list<string>}
+     */
+    private function referencesApiTicketsAgent(int $idAgent, ?Request $request = null): array
+    {
+        $request ??= request();
+        $ids = [];
+        $numeros = [];
+
+        foreach (app(MesTicketsService::class)->fetchAllTickets([], $request) as $apiTicket) {
+            if ((int) ($apiTicket['id_agent'] ?? 0) !== $idAgent) {
+                continue;
+            }
+
+            $idTicket = (int) ($apiTicket['id_ticket'] ?? 0);
+            if ($idTicket > 0) {
+                $ids[] = $idTicket;
+            }
+
+            $numero = trim((string) ($apiTicket['numero_ticket'] ?? ''));
+            if ($numero !== '') {
+                $numeros[] = $numero;
+            }
+        }
+
+        return [
+            'ids' => array_values(array_unique($ids)),
+            'numeros' => array_values(array_unique($numeros)),
+        ];
     }
 
     /**
