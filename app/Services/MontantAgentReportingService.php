@@ -187,6 +187,11 @@ class MontantAgentReportingService
             throw new \InvalidArgumentException('Ticket API sans identifiant.');
         }
 
+        $prixFromApi = $apiTicket['prix_unitaire'] ?? null;
+        $prixUnitaire = ($prixFromApi !== null && $prixFromApi !== '')
+            ? (float) $prixFromApi
+            : null;
+
         $attrs = [
             'numero_ticket' => (string) ($apiTicket['numero_ticket'] ?? ''),
             'date_ticket' => $apiTicket['date_ticket'] ?? now()->format('Y-m-d'),
@@ -196,18 +201,28 @@ class MontantAgentReportingService
             'id_usine' => (int) ($apiTicket['id_usine'] ?? 0) ?: null,
             'id_agent' => $idAgent,
             'statut_ticket' => $apiTicket['statut_ticket'] ?? 'non soldé',
-            'prix_unitaire' => $apiTicket['prix_unitaire'] ?? null,
-            'montant_paie' => $apiTicket['montant_paie'] ?? null,
         ];
+
+        if ($prixUnitaire !== null) {
+            $attrs['prix_unitaire'] = $prixUnitaire;
+        }
+
+        if (array_key_exists('montant_paie', $apiTicket) && $apiTicket['montant_paie'] !== null) {
+            $attrs['montant_paie'] = $apiTicket['montant_paie'];
+        }
 
         $ticket = Ticket::query()->find($idTicket);
         if ($ticket) {
+            if (! isset($attrs['prix_unitaire'])) {
+                unset($attrs['prix_unitaire']);
+            }
             $ticket->fill($attrs);
             $ticket->save();
 
             return $ticket->fresh();
         }
 
+        $attrs['prix_unitaire'] = $attrs['prix_unitaire'] ?? 0;
         $ticket = new Ticket($attrs);
         $ticket->id_ticket = $idTicket;
         $ticket->id_utilisateur = Auth::id() ?? 1;
