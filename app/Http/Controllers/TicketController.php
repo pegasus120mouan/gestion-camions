@@ -525,6 +525,23 @@ class TicketController extends Controller
         return null;
     }
 
+    private function realignerIdTicketLocal(int $ancienId, int $nouvelId): void
+    {
+        if ($ancienId === $nouvelId || $ancienId <= 0 || $nouvelId <= 0) {
+            return;
+        }
+
+        if (Ticket::query()->where('id_ticket', $nouvelId)->exists()) {
+            return;
+        }
+
+        DB::transaction(function () use ($ancienId, $nouvelId) {
+            FicheSortie::query()->where('id_ticket', $ancienId)->update(['id_ticket' => $nouvelId]);
+            TicketValidation::query()->where('id_ticket', $ancienId)->update(['id_ticket' => $nouvelId]);
+            Ticket::query()->where('id_ticket', $ancienId)->update(['id_ticket' => $nouvelId]);
+        });
+    }
+
     private function ticketEstDejaValide(?Ticket $ticket, int $idTicket = 0, string $numeroTicket = ''): bool
     {
         if ($idTicket > 0 && TicketValidation::where('id_ticket', $idTicket)->exists()) {
@@ -798,9 +815,8 @@ class TicketController extends Controller
             ->with('success', $message);
     }
 
-    public function valider(Request $request, int $id, FicheSortieDechargementService $dechargementService)
+    public function valider(Request $request, int $id)
     {
-        $chefAgentIds = $this->mesAgentsService->chefAgentIds($request);
         $apiTicket = $this->mesTicketsService->findTicketById($id, $request);
 
         if (!$apiTicket) {
@@ -835,10 +851,18 @@ class TicketController extends Controller
             }
         }
 
-        $ticket = $existing ?? new Ticket(['id_ticket' => $id]);
-        if ($existing && (int) $existing->id_ticket !== $id && !Ticket::where('id_ticket', $id)->exists()) {
-            $ticket->id_ticket = $id;
+        if ($existing && (int) $existing->id_ticket !== $id) {
+            $ticketApiId = Ticket::query()->find($id);
+            if ($ticketApiId) {
+                $existing = $ticketApiId;
+            } else {
+                $this->realignerIdTicketLocal((int) $existing->id_ticket, $id);
+                $existing = Ticket::query()->find($id);
+            }
         }
+
+        $ticket = $existing ?? new Ticket();
+        $ticket->id_ticket = $id;
 
         $dateTicket = $apiTicket['date_ticket'] ?? now()->format('Y-m-d');
         $poidsTicket = (float) ($apiTicket['poids'] ?? 0);
@@ -907,7 +931,12 @@ class TicketController extends Controller
                 ->with('error', $e->getMessage());
         }
 
-        $ticket = $ticket->fresh();
+        $ticket = Ticket::query()->find($id) ?? $this->findTicketLocal($id, $numeroTicket);
+        if (! $ticket) {
+            return redirect()->route('tickets.index')
+                ->with('error', 'Le ticket a été validé mais est introuvable en base (id ' . $id . '). Contactez l\'administrateur.');
+        }
+
         app(MontantAgentFicheService::class)->assurerFichePourTicketAgent($ticket, $produitInfo);
 
         $transporteurLie = app(TicketTransporteurFicheService::class)->synchroniserTicketTransporteur(
