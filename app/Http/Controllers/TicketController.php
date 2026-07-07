@@ -30,6 +30,7 @@ use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
@@ -83,50 +84,52 @@ class TicketController extends Controller
             $externalError = $result['error'];
         }
 
-        // Récupérer les usines depuis l'API pour les noms
+        // Usines : base locale d'abord, complément API mis en cache 5 min
         $timeout = 10;
-        $usinesApi = [];
+        $usinesById = \App\Models\Usine::query()
+            ->pluck('nom_usine', 'id_usine')
+            ->all();
 
         try {
             $usinesUrl = (string) config('services.external_auth.mes_usines_url', 'https://api.objetombrepegasus.online/api/camions/mes_usines.php');
-            $pageU = 1;
-            $hasMoreU = true;
-            while ($hasMoreU) {
-                $usinesResponse = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->get($usinesUrl, ['page' => $pageU]);
-                if ($usinesResponse->successful()) {
-                    $pageUsines = $usinesResponse->json('usines') ?? [];
-                    if (empty($pageUsines)) {
-                        $hasMoreU = false;
-                    } else {
-                        $usinesApi = array_merge($usinesApi, $pageUsines);
-                        $paginationU = $usinesResponse->json('pagination');
-                        $currentPageU = $paginationU['current_page'] ?? $pageU;
-                        $lastPageU = $paginationU['last_page'] ?? 1;
-                        if ($currentPageU >= $lastPageU) {
-                            $hasMoreU = false;
-                        } else {
-                            $pageU++;
-                        }
+            $usinesApi = Cache::remember('mes_usines_api', 300, function () use ($usinesUrl, $timeout) {
+                $all = [];
+                $pageU = 1;
+                $hasMoreU = true;
+
+                while ($hasMoreU && $pageU <= 20) {
+                    $usinesResponse = Http::acceptJson()
+                        ->withoutVerifying()
+                        ->timeout($timeout)
+                        ->get($usinesUrl, ['page' => $pageU]);
+
+                    if (! $usinesResponse->successful()) {
+                        break;
                     }
-                } else {
-                    $hasMoreU = false;
+
+                    $pageUsines = $usinesResponse->json('usines') ?? [];
+                    if ($pageUsines === []) {
+                        break;
+                    }
+
+                    $all = array_merge($all, $pageUsines);
+                    $paginationU = $usinesResponse->json('pagination');
+                    $currentPageU = (int) ($paginationU['current_page'] ?? $pageU);
+                    $lastPageU = (int) ($paginationU['last_page'] ?? 1);
+                    $hasMoreU = $currentPageU < $lastPageU;
+                    $pageU++;
+                }
+
+                return $all;
+            });
+
+            foreach ($usinesApi as $u) {
+                $idUsine = (int) ($u['id_usine'] ?? 0);
+                if ($idUsine > 0 && ! isset($usinesById[$idUsine])) {
+                    $usinesById[$idUsine] = (string) ($u['nom_usine'] ?? '');
                 }
             }
         } catch (\Throwable $e) {}
-
-        // Indexer par ID (API d'abord, puis usines locales en complément)
-        $usinesById = [];
-        foreach ($usinesApi as $u) {
-            $usinesById[$u['id_usine'] ?? 0] = $u['nom_usine'] ?? '';
-        }
-        foreach (\App\Models\Usine::all() as $ul) {
-            if (!isset($usinesById[$ul->id_usine])) {
-                $usinesById[$ul->id_usine] = $ul->nom_usine;
-            }
-        }
         $agentsById = [];
         foreach ($agentsApi as $a) {
             $agentsById[$a['id_agent'] ?? 0] = $a['nom_complet'] ?? '';

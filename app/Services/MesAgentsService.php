@@ -81,10 +81,20 @@ class MesAgentsService
 
     private ?array $cachedChefAgentIds = null;
 
+    /** @var array<string, list<array<string, mixed>>> */
+    private array $cachedAllAgents = [];
+
+    /** @var array<int, array<string, mixed>|null> */
+    private array $cachedAgentsById = [];
+
     public function findAgentById(int $idAgent): ?array
     {
         if ($idAgent <= 0) {
             return null;
+        }
+
+        if (array_key_exists($idAgent, $this->cachedAgentsById)) {
+            return $this->cachedAgentsById[$idAgent];
         }
 
         $connection = $this->databaseResolver->connection();
@@ -110,27 +120,17 @@ class MesAgentsService
                     [$idAgent]
                 );
 
-                return $row ? $this->normalizeAgentRow((array) $row) : null;
+                $agent = $row ? $this->normalizeAgentRow((array) $row) : null;
+
+                return $this->cachedAgentsById[$idAgent] = $agent;
             } catch (\Throwable $e) {
-                return null;
+                return $this->cachedAgentsById[$idAgent] = null;
             }
         }
 
-        return $this->findAgentByIdFromApiSafe($idAgent);
-    }
+        $agent = $this->findAgentByIdFromCacheOrApi($idAgent);
 
-    private function findAgentByIdFromApiSafe(int $idAgent): ?array
-    {
-        try {
-            $request = request();
-            if (! $request->hasSession()) {
-                return null;
-            }
-
-            return $this->findAgentByIdFromApi($idAgent, $request);
-        } catch (\Throwable $e) {
-            return null;
-        }
+        return $this->cachedAgentsById[$idAgent] = $agent;
     }
 
     /**
@@ -138,6 +138,11 @@ class MesAgentsService
      */
     public function fetchAllAgents(array $params = [], ?Request $request = null): array
     {
+        $cacheKey = $this->agentsCacheKey($params, $request);
+        if (isset($this->cachedAllAgents[$cacheKey])) {
+            return $this->cachedAllAgents[$cacheKey];
+        }
+
         $all = [];
         $page = 1;
 
@@ -162,7 +167,14 @@ class MesAgentsService
             $page++;
         } while ($page <= 50);
 
-        return $all;
+        foreach ($all as $agent) {
+            $id = (int) ($agent['id_agent'] ?? 0);
+            if ($id > 0) {
+                $this->cachedAgentsById[$id] = $agent;
+            }
+        }
+
+        return $this->cachedAllAgents[$cacheKey] = $all;
     }
 
     /**
@@ -351,46 +363,31 @@ class MesAgentsService
         ];
     }
 
-    private function findAgentByIdFromApi(int $idAgent, ?Request $request = null): ?array
+    private function findAgentByIdFromCacheOrApi(int $idAgent, ?Request $request = null): ?array
     {
         $request ??= request();
-        $url = (string) config('services.external_auth.mes_agents_url', '');
-        if ($url === '') {
-            return null;
-        }
 
-        $chefParams = $this->chefContext->apiQueryParams($request);
-        $timeout = (int) config('services.external_auth.timeout', 10);
-        $page = 1;
-
-        try {
-            while ($page <= 50) {
-                $response = Http::acceptJson()
-                    ->withoutVerifying()
-                    ->timeout($timeout)
-                    ->get($url, array_merge($chefParams, ['page' => $page]));
-
-                if (!$response->successful()) {
-                    break;
-                }
-
-                $agents = $response->json('agents') ?? [];
-                foreach ($agents as $agent) {
-                    if ((int) ($agent['id_agent'] ?? 0) === $idAgent) {
-                        return $agent;
-                    }
-                }
-
-                $pagination = $response->json('pagination') ?? [];
-                if ($page >= (int) ($pagination['last_page'] ?? 1)) {
-                    break;
-                }
-                $page++;
+        foreach ($this->fetchAllAgents([], $request) as $agent) {
+            if ((int) ($agent['id_agent'] ?? 0) === $idAgent) {
+                return $agent;
             }
-        } catch (\Throwable $e) {
         }
 
         return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     */
+    private function agentsCacheKey(array $params, ?Request $request): string
+    {
+        $request ??= request();
+        $chefParams = $this->chefContext->apiQueryParams($request);
+
+        return md5(json_encode([
+            'params' => $params,
+            'chef' => $chefParams,
+        ]));
     }
 
     /**

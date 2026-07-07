@@ -122,15 +122,19 @@ class TicketTransporteurFicheService
 
         if ((int) ($ticket->id_agent ?? 0) > 0) {
             $updates['id_agent'] = (int) $ticket->id_agent;
-            $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
-            if ($agent) {
-                $nomAgent = trim((string) ($agent['nom_complet'] ?? ''));
-                if ($nomAgent !== '' && trim((string) ($fiche->nom_agent ?? '')) !== $nomAgent) {
-                    $updates['nom_agent'] = $nomAgent;
-                }
-                $numeroAgent = trim((string) ($agent['numero_agent'] ?? ''));
-                if ($numeroAgent !== '' && trim((string) ($fiche->numero_agent ?? '')) !== $numeroAgent) {
-                    $updates['numero_agent'] = $numeroAgent;
+            $nomAgentFiche = trim((string) ($fiche->nom_agent ?? ''));
+            $numeroAgentFiche = trim((string) ($fiche->numero_agent ?? ''));
+            if ($nomAgentFiche === '' || $numeroAgentFiche === '') {
+                $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
+                if ($agent) {
+                    $nomAgent = trim((string) ($agent['nom_complet'] ?? ''));
+                    if ($nomAgent !== '' && $nomAgentFiche !== $nomAgent) {
+                        $updates['nom_agent'] = $nomAgent;
+                    }
+                    $numeroAgent = trim((string) ($agent['numero_agent'] ?? ''));
+                    if ($numeroAgent !== '' && $numeroAgentFiche !== $numeroAgent) {
+                        $updates['numero_agent'] = $numeroAgent;
+                    }
                 }
             }
         }

@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Schema;
 
 class MesTicketsService
 {
+    /** @var array<string, list<array<string, mixed>>> */
+    private array $cachedAllTickets = [];
+
     public function __construct(
         private CamionsDatabaseResolver $databaseResolver,
         private ChefEquipeContext $chefContext,
@@ -48,11 +51,17 @@ class MesTicketsService
         return $this->fetchFromExternalApi($token, $idChef, $page, $perPage);
     }
 
+
     /**
      * @return list<array<string, mixed>>
      */
     public function fetchAllTickets(array $params = [], ?Request $request = null): array
     {
+        $cacheKey = $this->ticketsCacheKey($params, $request);
+        if (isset($this->cachedAllTickets[$cacheKey])) {
+            return $this->cachedAllTickets[$cacheKey];
+        }
+
         $all = [];
         $page = 1;
 
@@ -77,7 +86,78 @@ class MesTicketsService
             $page++;
         } while ($page <= 100);
 
-        return $all;
+        return $this->cachedAllTickets[$cacheKey] = $all;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function fetchTicketsForAgent(int $idAgent, ?Request $request = null): array
+    {
+        if ($idAgent <= 0) {
+            return [];
+        }
+
+        $connection = $this->databaseResolver->connection();
+        if ($connection !== null) {
+            try {
+                $rows = DB::connection($connection)->select(
+                    'SELECT
+                        t.id_ticket,
+                        t.id_usine,
+                        t.date_ticket,
+                        t.id_agent,
+                        t.numero_ticket,
+                        t.vehicule_id,
+                        t.id_pont,
+                        t.poids,
+                        t.prix_unitaire,
+                        t.montant_paie,
+                        t.montant_payer,
+                        t.montant_reste,
+                        t.statut_ticket,
+                        t.created_at,
+                        v.matricule_vehicule,
+                        a.nom AS agent_nom,
+                        a.prenom AS agent_prenom,
+                        u.nom_usine,
+                        pb.nom_pont
+                    FROM tickets t
+                    INNER JOIN agents a ON a.id_agent = t.id_agent
+                    LEFT JOIN vehicules v ON v.vehicules_id = t.vehicule_id
+                    LEFT JOIN usines u ON u.id_usine = t.id_usine
+                    LEFT JOIN pont_bascule pb ON pb.id_pont = t.id_pont
+                    WHERE t.id_agent = ?
+                      AND a.date_suppression IS NULL
+                    ORDER BY t.id_ticket DESC',
+                    [$idAgent]
+                );
+
+                return $this->enrichTicketsWithPontData(
+                    array_map(fn ($row) => $this->normalizeTicketRow((array) $row), $rows)
+                );
+            } catch (\Throwable $e) {
+            }
+        }
+
+        return array_values(array_filter(
+            $this->fetchAllTickets([], $request),
+            static fn (array $ticket): bool => (int) ($ticket['id_agent'] ?? 0) === $idAgent
+        ));
+    }
+
+    /**
+     * @param  array<string, mixed>  $params
+     */
+    private function ticketsCacheKey(array $params, ?Request $request): string
+    {
+        $request ??= request();
+        $chefParams = $this->chefContext->apiQueryParams($request);
+
+        return md5(json_encode([
+            'params' => $params,
+            'chef' => $chefParams,
+        ]));
     }
 
   /**

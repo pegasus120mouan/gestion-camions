@@ -1,16 +1,8 @@
 @php
-    $chefAgentIds = app(\App\Services\MesAgentsService::class)->chefAgentIds();
-    $ficheQuery = \App\Models\FicheSortie::query();
-
-    if ($chefAgentIds !== []) {
-        $ficheQuery->whereIn('id_agent', $chefAgentIds);
-    } else {
-        $ficheQuery->whereRaw('1 = 0');
-    }
-
-    $totalFiches = (clone $ficheQuery)->count();
-    $fichesEnAttente = (clone $ficheQuery)->whereNull('date_dechargement')->count();
-    $fichesDechargees = (clone $ficheQuery)->whereNotNull('date_dechargement')->count();
+    $fichesSortieStats = app(\App\Services\FichesSortieStatsService::class)->stats();
+    $totalFiches = $fichesSortieStats['total'];
+    $fichesEnAttente = $fichesSortieStats['en_attente'];
+    $fichesDechargees = $fichesSortieStats['dechargees'];
 @endphp
 
 <div class="row mb-4">

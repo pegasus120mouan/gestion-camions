@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
@@ -121,6 +122,11 @@ class MontantAgentReportingService
             return 0;
         }
 
+        $cacheKey = 'agent_tickets_sync:' . $idAgent;
+        if (Cache::has($cacheKey)) {
+            return 0;
+        }
+
         $request ??= request();
         $apiTickets = $this->apiTicketsPourAgent($idAgent, $request);
 
@@ -172,6 +178,8 @@ class MontantAgentReportingService
 
             $count++;
         }
+
+        Cache::put($cacheKey, true, now()->addMinutes(10));
 
         return $count;
     }
@@ -265,7 +273,7 @@ class MontantAgentReportingService
         $request ??= request();
 
         return array_values(array_filter(
-            app(MesTicketsService::class)->fetchAllTickets([], $request),
+            app(MesTicketsService::class)->fetchTicketsForAgent($idAgent, $request),
             static fn (array $ticket): bool => (int) ($ticket['id_agent'] ?? 0) === $idAgent
         ));
     }

@@ -41,7 +41,9 @@ class MontantTransporteurController extends Controller
         $vehicules = $matricules;
 
         $ticketFicheService = app(TicketTransporteurFicheService::class);
-        $ticketFicheService->reconcilierFichesPourTransporteur($transporteur);
+        if ($request->boolean('sync')) {
+            $ticketFicheService->reconcilierFichesPourTransporteur($transporteur);
+        }
 
         $fichesQuery = FicheSortie::query()
             ->where('transporteur_id', $transporteur->id);
@@ -60,9 +62,7 @@ class MontantTransporteurController extends Controller
 
         $fichesSortie = $fichesQuery->orderBy('date_chargement', 'desc')->get();
 
-        $fichesSortie = $fichesSortie->map(function (FicheSortie $fiche) use ($ticketFicheService) {
-            return $ticketFicheService->synchroniserDonneesTicketSurFiche($fiche);
-        })->filter(function (FicheSortie $fiche) use ($transporteur) {
+        $fichesSortie = $fichesSortie->filter(function (FicheSortie $fiche) use ($transporteur) {
             return (int) $fiche->transporteur_id === (int) $transporteur->id;
         })->values();
 
