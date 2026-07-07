@@ -58,6 +58,7 @@
   </head>
 
   <body>
+    @include('partials.page_loading')
     <!-- Layout wrapper -->
     <div class="layout-wrapper layout-content-navbar">
       <div class="layout-container">
