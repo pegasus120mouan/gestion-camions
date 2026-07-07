@@ -198,9 +198,10 @@ class TicketTransporteurFicheService
     {
         $poids = (float) ($ticket->poids ?? 0);
         $date = $ticket->date_ticket?->format('Y-m-d') ?? now()->format('Y-m-d');
+        $numeroFiche = $this->numeroFicheDepuisTicket($ticket);
 
-        return FicheSortie::create(array_merge([
-            'numero_fiche' => 'TKT-' . preg_replace('/[^A-Za-z0-9\-_]/', '', (string) $ticket->numero_ticket),
+        $donnees = array_merge([
+            'numero_fiche' => $numeroFiche,
             'vehicule_id' => (int) ($ticket->vehicule_id ?? 0),
             'matricule_vehicule' => (string) $ticket->matricule_vehicule,
             'transporteur_id' => $transporteur->id,
@@ -216,7 +217,26 @@ class TicketTransporteurFicheService
             'date_chargement' => $date,
             'poids_pont' => $poids > 0 ? $poids : null,
             'prix_unitaire_transport' => null,
-        ], $this->donneesTicketPourFiche($ticket)));
+        ], $this->donneesTicketPourFiche($ticket));
+
+        $existante = FicheSortie::query()
+            ->where('id_ticket', $ticket->id_ticket)
+            ->orderByDesc('id')
+            ->first();
+
+        if (! $existante && $numeroFiche !== '') {
+            $existante = FicheSortie::query()
+                ->where('numero_fiche', $numeroFiche)
+                ->first();
+        }
+
+        if ($existante) {
+            $existante->update($donnees);
+
+            return $existante->fresh();
+        }
+
+        return FicheSortie::create($donnees);
     }
 
     /**
@@ -235,6 +255,20 @@ class TicketTransporteurFicheService
             return null;
         }
 
+        if (! $fiche) {
+            $numeroFiche = $this->numeroFicheDepuisTicket($ticket);
+            $fiche = FicheSortie::query()
+                ->where('id_ticket', $ticket->id_ticket)
+                ->orderByDesc('id')
+                ->first();
+
+            if (! $fiche && $numeroFiche !== '') {
+                $fiche = FicheSortie::query()
+                    ->where('numero_fiche', $numeroFiche)
+                    ->first();
+            }
+        }
+
         if ($fiche) {
             $this->lierFicheAuTransporteur($fiche, $transporteur, $ticket);
 
@@ -246,6 +280,13 @@ class TicketTransporteurFicheService
         }
 
         return $transporteur;
+    }
+
+    private function numeroFicheDepuisTicket(Ticket $ticket): string
+    {
+        $numero = trim((string) ($ticket->numero_ticket ?? ''));
+
+        return 'TKT-' . preg_replace('/[^A-Za-z0-9\-_]/', '', $numero !== '' ? $numero : (string) $ticket->id_ticket);
     }
 
     /**

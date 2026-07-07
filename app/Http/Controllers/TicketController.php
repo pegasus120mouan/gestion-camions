@@ -937,11 +937,11 @@ class TicketController extends Controller
                 ->with('error', 'Le ticket a été validé mais est introuvable en base (id ' . $id . '). Contactez l\'administrateur.');
         }
 
-        app(MontantAgentFicheService::class)->assurerFichePourTicketAgent($ticket, $produitInfo);
+        $ficheAgent = app(MontantAgentFicheService::class)->assurerFichePourTicketAgent($ticket, $produitInfo);
 
         $transporteurLie = app(TicketTransporteurFicheService::class)->synchroniserTicketTransporteur(
             $ticket,
-            null,
+            $ficheAgent,
             [
                 'nom_usine' => $nomUsine !== '' ? $nomUsine : null,
                 'produit_id' => $produitId,
