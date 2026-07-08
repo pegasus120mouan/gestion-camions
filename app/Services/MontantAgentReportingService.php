@@ -507,10 +507,6 @@ class MontantAgentReportingService
         $result = [];
 
         foreach ($tickets as $ticket) {
-            if ($ticket->bordereau_agent_id) {
-                continue;
-            }
-
             $fiche = $fichesByTicketId->get($ticket->id_ticket);
             if (! $fiche) {
                 $numero = trim((string) ($ticket->numero_ticket ?? ''));

@@ -69,7 +69,7 @@
             @if(!empty($filtresActifs))
               <small class="text-muted">Total agent : {{ number_format($montantDuGlobal, 0, ',', ' ') }} FCFA</small>
             @else
-              <small class="text-muted">Tickets validés (avec ou sans fiche PGF)</small>
+              <small class="text-muted">Tickets validés, y compris ceux déjà sur bordereau</small>
             @endif
           </div>
         </div>
