@@ -67,7 +67,7 @@ class MontantAgentController extends Controller
                 'montant_du' => $montantDu,
                 'montant_du_global' => $montantDuGlobal,
                 'montant_paye' => $montantPaye,
-                'reste_a_payer' => $montantDuGlobal - $montantPaye,
+                'reste_a_payer' => $this->resteAPayerAgent($idAgent, $montantDuGlobal),
             ];
         }
 
@@ -184,7 +184,9 @@ class MontantAgentController extends Controller
             ->orderBy('id', 'desc')
             ->get();
         $montantPaye = $this->montantPayeAgent($id_agent);
-        $resteAPayer = $montantDuGlobal - $montantPaye;
+        $montantPayeBordereaux = $this->montantPayeBordereauxAgent($id_agent);
+        $montantAvances = $this->montantAvancesAgent($id_agent);
+        $resteAPayer = $this->resteAPayerAgent($id_agent, $montantDuGlobal);
 
         $fichesAvecMontant = $this->reporting->fichesAvecMontant($filtres);
         $groupesProduitUsine = $this->reporting->grouperParProduitEtUsine($fichesAvecMontant);
@@ -212,6 +214,8 @@ class MontantAgentController extends Controller
             'montantDu' => $montantDu,
             'montantDuGlobal' => $montantDuGlobal,
             'montantPaye' => $montantPaye,
+            'montantPayeBordereaux' => $montantPayeBordereaux,
+            'montantAvances' => $montantAvances,
             'resteAPayer' => $resteAPayer,
             'filtres' => $filtres,
             'filtresActifs' => $this->reporting->filtresActifs($filtres),
@@ -229,12 +233,28 @@ class MontantAgentController extends Controller
         return $this->mesAgentsService->findAgentById($id_agent);
     }
 
+    private function montantPayeBordereauxAgent(int $idAgent): int
+    {
+        return (int) round((float) BordereauAgent::where('id_agent', $idAgent)->sum('montant_paye'));
+    }
+
+    private function montantAvancesAgent(int $idAgent): int
+    {
+        return (int) round((float) PaiementAgent::where('id_agent', $idAgent)->whereNull('id_bordereau')->sum('montant'));
+    }
+
     private function montantPayeAgent(int $idAgent): int
     {
-        $viaBordereaux = (int) round((float) BordereauAgent::where('id_agent', $idAgent)->sum('montant_paye'));
-        $avances = (int) round((float) PaiementAgent::where('id_agent', $idAgent)->whereNull('id_bordereau')->sum('montant'));
+        return $this->montantPayeBordereauxAgent($idAgent) + $this->montantAvancesAgent($idAgent);
+    }
 
-        return $viaBordereaux + $avances;
+    /**
+     * Reste dû : dette tickets/bordereaux moins paiements bordereaux uniquement.
+     * Les avances sont un financement distinct (utilisé pour régler les bordereaux).
+     */
+    private function resteAPayerAgent(int $idAgent, int $montantDuGlobal): int
+    {
+        return max(0, $montantDuGlobal - $this->montantPayeBordereauxAgent($idAgent));
     }
 
     public function updateProduitTicket(Request $request, int $id_agent, int $id_ticket)

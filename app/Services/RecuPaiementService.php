@@ -76,7 +76,7 @@ class RecuPaiementService
         $montantPayeBordereaux = (int) round((float) BordereauAgent::where('id_agent', $idAgent)->sum('montant_paye'));
         $montantAvances = (int) round((float) PaiementAgent::where('id_agent', $idAgent)->whereNull('id_bordereau')->sum('montant'));
         $montantPayeTotal = $montantPayeBordereaux + $montantAvances;
-        $soldeCompte = $montantDuGlobal - $montantPayeTotal;
+        $soldeCompte = max(0, $montantDuGlobal - $montantPayeBordereaux);
 
         if ($estAvance) {
             $montantTotal = $montantDuGlobal;

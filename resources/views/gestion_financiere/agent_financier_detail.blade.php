@@ -79,7 +79,7 @@
           <div class="card-body">
             <h6 class="card-title" style="color: #0f5132;">Montant payé</h6>
             <h3 class="mb-0" style="color: #0f5132;">{{ number_format($montantPaye, 0, ',', ' ') }} FCFA</h3>
-            <small class="text-muted">Paiements bordereaux + avances</small>
+            <small class="text-muted">Paiements bordereaux ({{ number_format($montantPayeBordereaux ?? $montantPaye, 0, ',', ' ') }}) + avances ({{ number_format($montantAvances ?? 0, 0, ',', ' ') }})</small>
           </div>
         </div>
       </div>
@@ -88,7 +88,7 @@
           <div class="card-body">
             <h6 class="card-title" style="color: #664d03;">Reste à payer</h6>
             <h3 class="mb-0" style="color: #664d03;">{{ number_format($resteAPayer, 0, ',', ' ') }} FCFA</h3>
-            <small class="text-muted">Basé sur le total dû de l’agent</small>
+            <small class="text-muted">Dette après règlement des bordereaux (avances = financement)</small>
           </div>
         </div>
       </div>
