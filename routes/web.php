@@ -273,6 +273,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/planteurs/{id}', [PlanteurController::class, 'destroy'])->name('planteurs.destroy');
 
     Route::get('/financements', [FinancementController::class, 'index'])->name('financements.index');
+    Route::get('/financements/agents/{id_agent}', [FinancementController::class, 'show'])->name('financements.show');
+    Route::post('/financements', [FinancementController::class, 'store'])->name('financements.store');
 
     Route::get('/usines', [UsineController::class, 'index'])->name('usines.index');
 

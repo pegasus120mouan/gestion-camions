@@ -8,6 +8,7 @@ use App\Models\PaiementAgent;
 use App\Models\Produit;
 use App\Models\Ticket;
 use App\Services\BordereauAgentService;
+use App\Services\FinancementService;
 use App\Services\MesAgentsService;
 use App\Services\MontantAgentFicheService;
 use App\Services\MontantAgentReportingService;
@@ -22,6 +23,7 @@ class MontantAgentController extends Controller
         private MontantAgentFicheService $montantAgentFiche,
         private BordereauAgentService $bordereauAgent,
         private MesAgentsService $mesAgentsService,
+        private FinancementService $financementService,
     ) {}
 
     public function index(Request $request)
@@ -187,6 +189,8 @@ class MontantAgentController extends Controller
         $montantPayeBordereaux = $this->montantPayeBordereauxAgent($id_agent);
         $montantAvances = $this->montantAvancesAgent($id_agent);
         $resteAPayer = $this->resteAPayerAgent($id_agent, $montantDuGlobal);
+        $statsFinancement = $this->financementService->statsForAgent($id_agent);
+        $montantFinancement = (int) round($statsFinancement['solde_financement'] ?? 0);
 
         $fichesAvecMontant = $this->reporting->fichesAvecMontant($filtres);
         $groupesProduitUsine = $this->reporting->grouperParProduitEtUsine($fichesAvecMontant);
@@ -217,6 +221,7 @@ class MontantAgentController extends Controller
             'montantPayeTotal' => $montantPaye,
             'montantPayeBordereaux' => $montantPayeBordereaux,
             'montantAvances' => $montantAvances,
+            'montantFinancement' => $montantFinancement,
             'resteAPayer' => $resteAPayer,
             'filtres' => $filtres,
             'filtresActifs' => $this->reporting->filtresActifs($filtres),
@@ -328,6 +333,9 @@ class MontantAgentController extends Controller
         ]);
 
         app(\App\Services\RecuPaiementService::class)->assignerNumero($paiement);
+        $paiement->refresh();
+
+        $this->financementService->enregistrerFinancementDepuisAvance($paiement);
 
         return redirect()
             ->route('gestionfinanciere.agent.show', ['id_agent' => $id_agent])
@@ -359,6 +367,28 @@ class MontantAgentController extends Controller
             'commentaire' => ['nullable', 'string', 'max:500'],
         ]);
 
+        $soldeFinancement = $this->financementService->soldeFinancementAgent($id_agent);
+        $resteBordereau = (int) round($bordereau->reste_a_payer);
+
+        if ($soldeFinancement > 0) {
+            $plafond = $resteBordereau > 0
+                ? min($resteBordereau, $soldeFinancement)
+                : $soldeFinancement;
+
+            if ((int) $validated['montant'] > $plafond) {
+                return back()->withErrors([
+                    'montant' => 'Le paiement ne peut pas dépasser le financement disponible ('
+                        . number_format($plafond, 0, ',', ' ')
+                        . ' FCFA max : financement '
+                        . number_format($soldeFinancement, 0, ',', ' ')
+                        . ($resteBordereau > 0 && $resteBordereau < $soldeFinancement
+                            ? ', reste bordereau ' . number_format($resteBordereau, 0, ',', ' ')
+                            : '')
+                        . ').',
+                ])->withInput();
+            }
+        }
+
         PaiementAgent::create([
             'id_agent' => $id_agent,
             'id_bordereau' => $bordereau->id,
@@ -383,7 +413,18 @@ class MontantAgentController extends Controller
             'montant_paye' => (float) $bordereau->montant_paye + $validated['montant'],
         ]);
 
-        return back()->with('success', 'Paiement de ' . number_format($validated['montant'], 0, ',', ' ') . ' FCFA enregistré pour le bordereau ' . $bordereau->numero . '.');
+        $deduitFinancement = $paiement
+            ? $this->financementService->deduireFinancementPourPaiementBordereau($paiement, $bordereau)
+            : 0;
+
+        $message = 'Paiement de ' . number_format($validated['montant'], 0, ',', ' ')
+            . ' FCFA enregistré pour le bordereau ' . $bordereau->numero . '.';
+        if ($deduitFinancement > 0) {
+            $message .= ' ' . number_format($deduitFinancement, 0, ',', ' ')
+                . ' FCFA déduit du financement.';
+        }
+
+        return back()->with('success', $message);
     }
 
     public function fichesEligiblesBordereau(Request $request, int $id_agent)

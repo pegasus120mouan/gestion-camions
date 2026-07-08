@@ -55,6 +55,19 @@
       'showAvanceButton' => true,
     ])
 
+    <div class="row mb-3">
+      <div class="col-12">
+        <div class="d-flex justify-content-center">
+          <a href="{{ route('financements.show', $idAgent) }}"
+             class="badge rounded-pill text-decoration-none px-4 py-3 d-inline-flex align-items-center gap-2"
+             style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); font-size: 1rem; font-weight: 600;">
+            <i class="bx bx-wallet text-white"></i>
+            <span class="text-white">Montant financement : {{ number_format($montantFinancement ?? 0, 0, ',', ' ') }} FCFA</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
     <div class="row mb-4">
       <div class="col-md-4">
         <div class="card" style="background-color: #f8d7da; border-left: 4px solid #dc3545;">
@@ -452,10 +465,14 @@
           <div class="alert alert-info">
             <strong>Reste à payer :</strong> <span id="paiementBordereauReste">0</span> FCFA
           </div>
+          <div class="alert alert-warning mb-2 d-none" id="paiementFinancementAlert">
+            <strong>Financement disponible :</strong> <span id="paiementFinancementMontant">0</span> FCFA
+            <br><small id="paiementFinancementHint">Le paiement est plafonné au financement disponible.</small>
+          </div>
           <div class="mb-3">
             <label class="form-label">Montant (FCFA)</label>
             <input type="text" name="montant" id="paiementBordereauMontant" class="form-control montant-input-bordereau" required placeholder="Ex: 4 685 000" inputmode="numeric" autocomplete="off" />
-            <small class="text-muted">Vous pouvez saisir un montant supérieur au reste du bordereau.</small>
+            <small class="text-muted" id="paiementBordereauMontantHint">Montant maximum selon le reste du bordereau et le financement.</small>
           </div>
           <div class="mb-3">
             <label class="form-label">Date de paiement</label>
@@ -703,6 +720,7 @@
   });
 
   var urlPaiementBordereauBase = @json(url('/gestion-financiere/agent-financier/' . $idAgent . '/bordereaux'));
+  var montantFinancementAgent = {{ (int) ($montantFinancement ?? 0) }};
   var formPaiementBordereau = document.getElementById('formPaiementBordereau');
   var inputMontantBordereau = document.getElementById('paiementBordereauMontant');
 
@@ -718,9 +736,15 @@
   }
 
   if (formPaiementBordereau) {
-    formPaiementBordereau.addEventListener('submit', function() {
+    formPaiementBordereau.addEventListener('submit', function(e) {
       if (inputMontantBordereau) {
         inputMontantBordereau.value = inputMontantBordereau.value.replace(/\s/g, '');
+        var montantSaisi = parseInt(inputMontantBordereau.value || '0', 10);
+        var plafond = parseInt(inputMontantBordereau.getAttribute('data-plafond') || '0', 10);
+        if (montantFinancementAgent > 0 && plafond > 0 && montantSaisi > plafond) {
+          e.preventDefault();
+          alert('Le montant ne peut pas dépasser ' + formatNombre(plafond) + ' FCFA (financement disponible).');
+        }
       }
     });
   }
@@ -730,11 +754,35 @@
       var id = btn.getAttribute('data-bordereau-id');
       var numero = btn.getAttribute('data-bordereau-numero');
       var reste = parseInt(btn.getAttribute('data-bordereau-reste') || '0', 10);
+      var plafond = reste > 0 ? reste : 0;
+      var alertFinancement = document.getElementById('paiementFinancementAlert');
+      var hintMontant = document.getElementById('paiementBordereauMontantHint');
+
+      if (montantFinancementAgent > 0) {
+        plafond = reste > 0 ? Math.min(reste, montantFinancementAgent) : montantFinancementAgent;
+        if (alertFinancement) {
+          alertFinancement.classList.remove('d-none');
+          document.getElementById('paiementFinancementMontant').textContent = formatNombre(montantFinancementAgent);
+        }
+        if (hintMontant) {
+          hintMontant.textContent = 'Maximum : ' + formatNombre(plafond) + ' FCFA (plafonné par le financement).';
+        }
+      } else {
+        if (alertFinancement) {
+          alertFinancement.classList.add('d-none');
+        }
+        if (hintMontant) {
+          hintMontant.textContent = reste > 0
+            ? 'Maximum conseillé : ' + formatNombre(reste) + ' FCFA (reste du bordereau).'
+            : 'Saisissez le montant du paiement.';
+        }
+      }
 
       formPaiementBordereau.action = urlPaiementBordereauBase + '/' + id + '/paiement';
       document.getElementById('paiementBordereauNumero').textContent = numero || '—';
       document.getElementById('paiementBordereauReste').textContent = formatNombre(reste);
-      inputMontantBordereau.value = reste > 0 ? formatMontantSaisie(String(reste)) : '';
+      inputMontantBordereau.setAttribute('data-plafond', String(plafond));
+      inputMontantBordereau.value = plafond > 0 ? formatMontantSaisie(String(plafond)) : '';
     });
   });
 
