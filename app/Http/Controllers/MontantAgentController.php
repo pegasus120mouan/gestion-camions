@@ -55,7 +55,6 @@ class MontantAgentController extends Controller
             $montantDu = $this->reporting->filtresActifs($filtres)
                 ? (int) round($this->reporting->calculerMontantDuAgentPourIndex($idAgent, $filtres))
                 : $montantDuGlobal;
-            $montantPaye = $this->montantPayeAgent($idAgent);
             $filtresActifs = $this->reporting->filtresActifs($filtres);
 
             if ($filtresActifs && $montantDu === 0) {
@@ -66,7 +65,8 @@ class MontantAgentController extends Controller
                 'agent' => $agent,
                 'montant_du' => $montantDu,
                 'montant_du_global' => $montantDuGlobal,
-                'montant_paye' => $montantPaye,
+                'montant_paye' => $this->montantPayeBordereauxAgent($idAgent),
+                'montant_avances' => $this->montantAvancesAgent($idAgent),
                 'reste_a_payer' => $this->resteAPayerAgent($idAgent, $montantDuGlobal),
             ];
         }
@@ -213,7 +213,8 @@ class MontantAgentController extends Controller
             'paiements' => $paiements,
             'montantDu' => $montantDu,
             'montantDuGlobal' => $montantDuGlobal,
-            'montantPaye' => $montantPaye,
+            'montantPaye' => $montantPayeBordereaux,
+            'montantPayeTotal' => $montantPaye,
             'montantPayeBordereaux' => $montantPayeBordereaux,
             'montantAvances' => $montantAvances,
             'resteAPayer' => $resteAPayer,

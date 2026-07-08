@@ -78,8 +78,13 @@
         <div class="card" style="background-color: #d1e7dd; border-left: 4px solid #198754;">
           <div class="card-body">
             <h6 class="card-title" style="color: #0f5132;">Montant payé</h6>
-            <h3 class="mb-0" style="color: #0f5132;">{{ number_format($montantPaye, 0, ',', ' ') }} FCFA</h3>
-            <small class="text-muted">Paiements bordereaux ({{ number_format($montantPayeBordereaux ?? $montantPaye, 0, ',', ' ') }}) + avances ({{ number_format($montantAvances ?? 0, 0, ',', ' ') }})</small>
+            <h3 class="mb-0" style="color: #0f5132;">{{ number_format($montantPayeBordereaux, 0, ',', ' ') }} FCFA</h3>
+            <small class="text-muted">
+              Paiements enregistrés sur les bordereaux
+              @if(($montantAvances ?? 0) > 0)
+                · Avances (financement) : {{ number_format($montantAvances, 0, ',', ' ') }} FCFA
+              @endif
+            </small>
           </div>
         </div>
       </div>
@@ -88,7 +93,7 @@
           <div class="card-body">
             <h6 class="card-title" style="color: #664d03;">Reste à payer</h6>
             <h3 class="mb-0" style="color: #664d03;">{{ number_format($resteAPayer, 0, ',', ' ') }} FCFA</h3>
-            <small class="text-muted">Dette après règlement des bordereaux (avances = financement)</small>
+            <small class="text-muted">Montant dû − montant payé (bordereaux)</small>
           </div>
         </div>
       </div>
@@ -368,7 +373,7 @@
                 <tfoot>
                   <tr class="table-success">
                     <td colspan="3"><strong>Total</strong></td>
-                    <td class="text-end"><strong>{{ number_format($montantPaye, 0, ',', ' ') }} FCFA</strong></td>
+                    <td class="text-end"><strong>{{ number_format($montantPayeTotal ?? $montantPaye, 0, ',', ' ') }} FCFA</strong></td>
                     <td></td>
                   </tr>
                 </tfoot>
