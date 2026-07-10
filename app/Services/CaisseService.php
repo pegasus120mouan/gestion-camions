@@ -23,19 +23,27 @@ class CaisseService
     }
 
     /**
-     * @return array{solde_caisse: float, total_approvisionnements: int, total_montant_appro: float}
+     * @return array{solde_caisse: float, total_mouvements: int, total_approvisionnements: int, total_paiements: int, total_montant_appro: float, total_montant_paiements: float}
      */
     public function stats(): array
     {
-        $appro = CaisseMouvement::query()
-            ->where('type', CaisseMouvement::TYPE_APPROVISIONNEMENT)
-            ->selectRaw('COUNT(*) as total, COALESCE(SUM(montant), 0) as total_montant')
+        $row = CaisseMouvement::query()
+            ->selectRaw("
+                COUNT(*) as total,
+                COALESCE(SUM(CASE WHEN type = 'approvisionnement' THEN 1 ELSE 0 END), 0) as total_appro,
+                COALESCE(SUM(CASE WHEN type = 'paiement' THEN 1 ELSE 0 END), 0) as total_paiements,
+                COALESCE(SUM(CASE WHEN type = 'approvisionnement' THEN montant ELSE 0 END), 0) as montant_appro,
+                COALESCE(SUM(CASE WHEN type = 'paiement' THEN montant ELSE 0 END), 0) as montant_paiements
+            ")
             ->first();
 
         return [
             'solde_caisse' => $this->getSolde(),
-            'total_approvisionnements' => (int) ($appro->total ?? 0),
-            'total_montant_appro' => (float) ($appro->total_montant ?? 0),
+            'total_mouvements' => (int) ($row->total ?? 0),
+            'total_approvisionnements' => (int) ($row->total_appro ?? 0),
+            'total_paiements' => (int) ($row->total_paiements ?? 0),
+            'total_montant_appro' => (float) ($row->montant_appro ?? 0),
+            'total_montant_paiements' => (float) ($row->montant_paiements ?? 0),
         ];
     }
 
@@ -89,15 +97,21 @@ class CaisseService
     }
 
     /**
-     * @param  array{origine?: string, search?: string, date_debut?: string|null, date_fin?: string|null}  $filters
+     * @param  array{type?: string, origine?: string, search?: string, date_debut?: string|null, date_fin?: string|null}  $filters
      */
-    public function paginatedApprovisionnements(array $filters, int $perPage = 20): LengthAwarePaginator
+    public function paginatedMouvements(array $filters, int $perPage = 20): LengthAwarePaginator
     {
         $query = CaisseMouvement::query()
             ->with('user')
-            ->where('type', CaisseMouvement::TYPE_APPROVISIONNEMENT)
             ->orderByDesc('date_mouvement')
             ->orderByDesc('id');
+
+        $type = $filters['type'] ?? 'all';
+        if ($type === 'approvisionnement') {
+            $query->where('type', CaisseMouvement::TYPE_APPROVISIONNEMENT);
+        } elseif ($type === 'paiement') {
+            $query->where('type', CaisseMouvement::TYPE_PAIEMENT);
+        }
 
         $origine = $filters['origine'] ?? 'all';
         if ($origine === 'manuel') {
@@ -105,13 +119,19 @@ class CaisseService
                 $q->whereNull('source')
                     ->orWhere(function ($inner) {
                         $inner->where('source', 'not like', 'Usine:%')
-                            ->where('source', 'not like', 'Banque:%');
+                            ->where('source', 'not like', 'Banque:%')
+                            ->where('source', '!=', 'Local');
                     });
             });
         } elseif ($origine === 'banque') {
             $query->where('source', 'like', 'Banque:%');
         } elseif ($origine === 'usine') {
             $query->where('source', 'like', 'Usine:%');
+        } elseif ($origine === 'local') {
+            $query->where(function ($q) {
+                $q->where('source', 'Local')
+                    ->orWhere('type', CaisseMouvement::TYPE_PAIEMENT);
+            });
         }
 
         $search = trim((string) ($filters['search'] ?? ''));

@@ -32,25 +32,55 @@
       </div>
     </div>
 
-    <div class="card mb-3">
-      <div class="card-body py-3">
-        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#caisseApproModal">
-          <i class="bx bx-plus-circle me-1"></i>Approvisionnement caisse
-        </button>
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body py-3">
+            <div class="text-muted small">Entrées (approvisionnements)</div>
+            <div class="fw-bold text-success">{{ number_format((float) $stats['total_montant_appro'], 0, ',', ' ') }} FCFA</div>
+            <div class="small text-muted">{{ $stats['total_approvisionnements'] }} opération(s)</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body py-3">
+            <div class="text-muted small">Sorties (paiements)</div>
+            <div class="fw-bold text-danger">{{ number_format((float) $stats['total_montant_paiements'], 0, ',', ' ') }} FCFA</div>
+            <div class="small text-muted">{{ $stats['total_paiements'] }} opération(s)</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body py-3 d-flex align-items-center">
+            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#caisseApproModal">
+              <i class="bx bx-plus-circle me-1"></i>Approvisionnement caisse
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <span><i class="bx bx-history me-1"></i>Historique des approvisionnements</span>
-        <span class="text-muted">{{ $approvisionnements->total() }} opération(s)</span>
+        <span><i class="bx bx-history me-1"></i>Historique des mouvements</span>
+        <span class="text-muted">{{ $mouvements->total() }} opération(s)</span>
       </div>
       <div class="card-body">
         <form method="GET" action="{{ route('caisse.index') }}" class="row g-2 mb-3">
-          <div class="col-md-3">
+          <div class="col-md-2">
+            <select name="type" class="form-select form-select-sm">
+              <option value="all" @selected($filters['type'] === 'all')>Tous les types</option>
+              <option value="approvisionnement" @selected($filters['type'] === 'approvisionnement')>Approvisionnements</option>
+              <option value="paiement" @selected($filters['type'] === 'paiement')>Paiements / sorties</option>
+            </select>
+          </div>
+          <div class="col-md-2">
             <select name="origine" class="form-select form-select-sm">
               <option value="all" @selected($filters['origine'] === 'all')>Toutes les origines</option>
               <option value="manuel" @selected($filters['origine'] === 'manuel')>Manuels</option>
+              <option value="local" @selected($filters['origine'] === 'local')>Caisse locale / paiements</option>
               <option value="banque" @selected($filters['origine'] === 'banque')>Depuis banques</option>
               <option value="usine" @selected($filters['origine'] === 'usine')>Paiements usines</option>
             </select>
@@ -61,13 +91,13 @@
           <div class="col-md-2">
             <input type="date" name="date_fin" class="form-control form-control-sm" value="{{ $filters['date_fin'] }}">
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <input type="text" name="search" class="form-control form-control-sm" placeholder="Rechercher..."
               value="{{ $filters['search'] }}">
           </div>
           <div class="col-md-2 d-flex gap-2">
             <button type="submit" class="btn btn-outline-primary btn-sm w-100"><i class="bx bx-search"></i></button>
-            @if($filters['origine'] !== 'all' || $filters['search'] !== '' || $filters['date_debut'] || $filters['date_fin'])
+            @if($filters['type'] !== 'all' || $filters['origine'] !== 'all' || $filters['search'] !== '' || $filters['date_debut'] || $filters['date_fin'])
               <a href="{{ route('caisse.index') }}" class="btn btn-outline-secondary btn-sm">
                 <i class="bx bx-x"></i>
               </a>
@@ -80,6 +110,7 @@
             <thead>
               <tr>
                 <th>Date</th>
+                <th>Type</th>
                 <th class="text-end">Montant</th>
                 <th>Origine</th>
                 <th>Motif</th>
@@ -88,39 +119,50 @@
               </tr>
             </thead>
             <tbody>
-              @forelse($approvisionnements as $appro)
+              @forelse($mouvements as $mvt)
                 @php
-                  $source = (string) ($appro->source ?? '');
+                  $isAppro = $mvt->type === 'approvisionnement';
+                  $source = (string) ($mvt->source ?? '');
                   $isUsine = str_starts_with($source, 'Usine:');
                   $isBanque = str_starts_with($source, 'Banque:');
+                  $isLocal = $source === 'Local' || ! $isAppro;
                   $labelSource = $isUsine
                     ? trim(substr($source, strlen('Usine:')))
                     : ($isBanque ? trim(substr($source, strlen('Banque:'))) : $source);
-                  $userName = trim(($appro->user->name ?? '').' '.($appro->user->prenom ?? ''));
+                  $userName = trim(($mvt->user->name ?? '').' '.($mvt->user->prenom ?? ''));
                 @endphp
                 <tr>
-                  <td>{{ $appro->date_mouvement?->format('d/m/Y H:i') ?? '—' }}</td>
-                  <td class="text-end fw-semibold text-success">
-                    {{ number_format((float) $appro->montant, 0, ',', ' ') }} FCFA
+                  <td>{{ $mvt->date_mouvement?->format('d/m/Y H:i') ?? '—' }}</td>
+                  <td>
+                    @if($isAppro)
+                      <span class="badge bg-label-success">Entrée</span>
+                    @else
+                      <span class="badge bg-label-danger">Sortie</span>
+                    @endif
+                  </td>
+                  <td class="text-end fw-semibold {{ $isAppro ? 'text-success' : 'text-danger' }}">
+                    {{ $isAppro ? '+' : '-' }}{{ number_format((float) $mvt->montant, 0, ',', ' ') }} FCFA
                   </td>
                   <td>
                     @if($isUsine)
                       <span class="badge bg-info">Usine</span>
                     @elseif($isBanque)
                       <span class="badge bg-warning text-dark">Banque</span>
+                    @elseif($isLocal && ! $isAppro)
+                      <span class="badge bg-danger">Paiement</span>
                     @else
                       <span class="badge bg-secondary">Manuel</span>
                     @endif
                     {{ $labelSource !== '' ? $labelSource : '—' }}
                   </td>
-                  <td>{{ $appro->motifs ?: '—' }}</td>
-                  <td class="text-end">{{ number_format((float) $appro->solde_apres, 0, ',', ' ') }} FCFA</td>
+                  <td>{{ $mvt->motifs ?: '—' }}</td>
+                  <td class="text-end">{{ number_format((float) $mvt->solde_apres, 0, ',', ' ') }} FCFA</td>
                   <td>{{ $userName !== '' ? $userName : '—' }}</td>
                 </tr>
               @empty
                 <tr>
-                  <td colspan="6" class="text-center text-muted py-4">
-                    Aucun approvisionnement enregistré.
+                  <td colspan="7" class="text-center text-muted py-4">
+                    Aucun mouvement enregistré.
                   </td>
                 </tr>
               @endforelse
@@ -128,9 +170,9 @@
           </table>
         </div>
 
-        @if($approvisionnements->hasPages())
+        @if($mouvements->hasPages())
           <div class="d-flex justify-content-center mt-3">
-            {{ $approvisionnements->links() }}
+            {{ $mouvements->links() }}
           </div>
         @endif
       </div>

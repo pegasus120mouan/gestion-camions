@@ -20,6 +20,7 @@ class CaisseController extends Controller
     public function index(Request $request): View
     {
         $filters = [
+            'type' => (string) $request->query('type', 'all'),
             'origine' => (string) $request->query('origine', 'all'),
             'search' => trim((string) $request->query('search', '')),
             'date_debut' => $request->query('date_debut'),
@@ -28,7 +29,7 @@ class CaisseController extends Controller
 
         return view('caisse.index', [
             'stats' => $this->caisseService->stats(),
-            'approvisionnements' => $this->caisseService->paginatedApprovisionnements($filters),
+            'mouvements' => $this->caisseService->paginatedMouvements($filters),
             'filters' => $filters,
         ]);
     }
