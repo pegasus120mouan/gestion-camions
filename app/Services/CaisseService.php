@@ -56,6 +56,38 @@ class CaisseService
         });
     }
 
+    public function debiter(
+        float $montant,
+        string $motifs,
+        ?User $user = null,
+        ?string $source = null,
+    ): CaisseMouvement {
+        if ($montant <= 0) {
+            throw new \InvalidArgumentException('Le montant à débiter doit être supérieur à 0.');
+        }
+
+        return DB::transaction(function () use ($montant, $motifs, $user, $source) {
+            $solde = $this->getSolde();
+            if ($montant > $solde) {
+                throw new \InvalidArgumentException(
+                    'Solde de la caisse locale insuffisant. Disponible : '
+                    .number_format($solde, 0, ',', ' ')
+                    .' FCFA.'
+                );
+            }
+
+            return CaisseMouvement::create([
+                'type' => CaisseMouvement::TYPE_PAIEMENT,
+                'montant' => $montant,
+                'source' => $source ?: 'Local',
+                'motifs' => $motifs,
+                'solde_apres' => $solde - $montant,
+                'user_id' => $user?->id,
+                'date_mouvement' => now(),
+            ]);
+        });
+    }
+
     /**
      * @param  array{origine?: string, search?: string, date_debut?: string|null, date_fin?: string|null}  $filters
      */

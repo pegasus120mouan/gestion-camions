@@ -467,12 +467,16 @@
           </div>
           <div class="alert alert-warning mb-2 d-none" id="paiementFinancementAlert">
             <strong>Financement disponible :</strong> <span id="paiementFinancementMontant">0</span> FCFA
-            <br><small id="paiementFinancementHint">Le paiement est plafonné au financement disponible.</small>
+            <br><small id="paiementFinancementHint">Le paiement sera déduit du financement de l’agent.</small>
+          </div>
+          <div class="alert alert-success mb-2 d-none" id="paiementCaisseLocaleAlert">
+            <strong>Caisse locale :</strong> <span id="paiementCaisseLocaleMontant">{{ number_format((int) ($soldeCaisseLocale ?? 0), 0, ',', ' ') }}</span> FCFA
+            <br><small>Pas de financement agent — le paiement sera débité de la caisse locale.</small>
           </div>
           <div class="mb-3">
             <label class="form-label">Montant (FCFA)</label>
             <input type="text" name="montant" id="paiementBordereauMontant" class="form-control montant-input-bordereau" required placeholder="Ex: 4 685 000" inputmode="numeric" autocomplete="off" />
-            <small class="text-muted" id="paiementBordereauMontantHint">Montant maximum selon le reste du bordereau et le financement.</small>
+            <small class="text-muted" id="paiementBordereauMontantHint">Montant maximum selon le reste et la source.</small>
           </div>
           <div class="mb-3">
             <label class="form-label">Date de paiement</label>
@@ -721,14 +725,43 @@
 
   var urlPaiementBordereauBase = @json(url('/gestion-financiere/agent-financier/' . $idAgent . '/bordereaux'));
   var montantFinancementAgent = {{ (int) ($montantFinancement ?? 0) }};
+  var soldeCaisseLocale = {{ (int) ($soldeCaisseLocale ?? 0) }};
   var formPaiementBordereau = document.getElementById('formPaiementBordereau');
   var inputMontantBordereau = document.getElementById('paiementBordereauMontant');
+  var hintMontant = document.getElementById('paiementBordereauMontantHint');
+  var alertFinancement = document.getElementById('paiementFinancementAlert');
+  var alertCaisse = document.getElementById('paiementCaisseLocaleAlert');
+  var resteCourant = 0;
 
-  function plafondPaiementBordereau(reste) {
+  function calculerPlafondAuto() {
     if (montantFinancementAgent > 0) {
-      return reste > 0 ? Math.min(reste, montantFinancementAgent) : montantFinancementAgent;
+      return resteCourant > 0 ? Math.min(resteCourant, montantFinancementAgent) : montantFinancementAgent;
     }
-    return reste > 0 ? reste : 0;
+    return resteCourant > 0
+      ? Math.min(resteCourant, Math.max(0, soldeCaisseLocale))
+      : Math.max(0, soldeCaisseLocale);
+  }
+
+  function appliquerPlafondSelonSource() {
+    var plafond = calculerPlafondAuto();
+    if (!inputMontantBordereau) return;
+    inputMontantBordereau.setAttribute('data-plafond', String(plafond));
+    if (montantFinancementAgent > 0) {
+      if (alertFinancement) {
+        alertFinancement.classList.remove('d-none');
+        document.getElementById('paiementFinancementMontant').textContent = formatNombre(montantFinancementAgent);
+      }
+      if (alertCaisse) alertCaisse.classList.add('d-none');
+      if (hintMontant) hintMontant.textContent = 'Maximum : ' + formatNombre(plafond) + ' FCFA (plafonné par le financement).';
+    } else {
+      if (alertFinancement) alertFinancement.classList.add('d-none');
+      if (alertCaisse) {
+        alertCaisse.classList.remove('d-none');
+        document.getElementById('paiementCaisseLocaleMontant').textContent = formatNombre(soldeCaisseLocale);
+      }
+      if (hintMontant) hintMontant.textContent = 'Maximum : ' + formatNombre(plafond) + ' FCFA (plafonné par la caisse locale).';
+    }
+    inputMontantBordereau.value = plafond > 0 ? formatMontantSaisie(String(plafond)) : '';
   }
 
   function appliquerPlafondMontantBordereau() {
@@ -763,10 +796,7 @@
       var montantSaisi = parseInt(String(inputMontantBordereau.value || '').replace(/\D/g, '') || '0', 10);
       if (plafond > 0 && montantSaisi > plafond) {
         e.preventDefault();
-        var motif = montantFinancementAgent > 0
-          ? ' (plafonné par le financement de ' + formatNombre(montantFinancementAgent) + ' FCFA)'
-          : ' (reste du bordereau)';
-        alert('Le montant ne peut pas dépasser ' + formatNombre(plafond) + ' FCFA' + motif + '.');
+        alert('Le montant ne peut pas dépasser ' + formatNombre(plafond) + ' FCFA.');
         inputMontantBordereau.value = formatMontantSaisie(String(plafond));
         return;
       }
@@ -778,35 +808,12 @@
     btn.addEventListener('click', function() {
       var id = btn.getAttribute('data-bordereau-id');
       var numero = btn.getAttribute('data-bordereau-numero');
-      var reste = parseInt(btn.getAttribute('data-bordereau-reste') || '0', 10);
-      var plafond = plafondPaiementBordereau(reste);
-      var alertFinancement = document.getElementById('paiementFinancementAlert');
-      var hintMontant = document.getElementById('paiementBordereauMontantHint');
-
-      if (montantFinancementAgent > 0) {
-        if (alertFinancement) {
-          alertFinancement.classList.remove('d-none');
-          document.getElementById('paiementFinancementMontant').textContent = formatNombre(montantFinancementAgent);
-        }
-        if (hintMontant) {
-          hintMontant.textContent = 'Maximum : ' + formatNombre(plafond) + ' FCFA (plafonné par le financement).';
-        }
-      } else {
-        if (alertFinancement) {
-          alertFinancement.classList.add('d-none');
-        }
-        if (hintMontant) {
-          hintMontant.textContent = reste > 0
-            ? 'Maximum : ' + formatNombre(reste) + ' FCFA (reste du bordereau).'
-            : 'Saisissez le montant du paiement.';
-        }
-      }
+      resteCourant = parseInt(btn.getAttribute('data-bordereau-reste') || '0', 10);
 
       formPaiementBordereau.action = urlPaiementBordereauBase + '/' + id + '/paiement';
       document.getElementById('paiementBordereauNumero').textContent = numero || '—';
-      document.getElementById('paiementBordereauReste').textContent = formatNombre(reste);
-      inputMontantBordereau.setAttribute('data-plafond', String(plafond));
-      inputMontantBordereau.value = plafond > 0 ? formatMontantSaisie(String(plafond)) : '';
+      document.getElementById('paiementBordereauReste').textContent = formatNombre(resteCourant);
+      appliquerPlafondSelonSource();
     });
   });
 

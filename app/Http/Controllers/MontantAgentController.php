@@ -7,14 +7,20 @@ use App\Models\FicheSortie;
 use App\Models\PaiementAgent;
 use App\Models\Produit;
 use App\Models\Ticket;
+use App\Models\User;
 use App\Services\BordereauAgentService;
+use App\Services\CaisseService;
+use App\Services\ChefEquipeSession;
 use App\Services\FinancementService;
 use App\Services\MesAgentsService;
 use App\Services\MontantAgentFicheService;
 use App\Services\MontantAgentReportingService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class MontantAgentController extends Controller
 {
@@ -24,6 +30,7 @@ class MontantAgentController extends Controller
         private BordereauAgentService $bordereauAgent,
         private MesAgentsService $mesAgentsService,
         private FinancementService $financementService,
+        private CaisseService $caisseService,
     ) {}
 
     public function index(Request $request)
@@ -191,6 +198,7 @@ class MontantAgentController extends Controller
         $resteAPayer = $this->resteAPayerAgent($id_agent, $montantDuGlobal);
         $statsFinancement = $this->financementService->statsForAgent($id_agent);
         $montantFinancement = (int) round($statsFinancement['solde_financement'] ?? 0);
+        $soldeCaisseLocale = (int) round($this->caisseService->getSolde());
 
         $fichesAvecMontant = $this->reporting->fichesAvecMontant($filtres);
         $groupesProduitUsine = $this->reporting->grouperParProduitEtUsine($fichesAvecMontant);
@@ -222,6 +230,7 @@ class MontantAgentController extends Controller
             'montantPayeBordereaux' => $montantPayeBordereaux,
             'montantAvances' => $montantAvances,
             'montantFinancement' => $montantFinancement,
+            'soldeCaisseLocale' => $soldeCaisseLocale,
             'resteAPayer' => $resteAPayer,
             'filtres' => $filtres,
             'filtresActifs' => $this->reporting->filtresActifs($filtres),
@@ -373,28 +382,26 @@ class MontantAgentController extends Controller
 
         $montant = (int) $validated['montant'];
         $soldeFinancement = $this->financementService->soldeFinancementAgent($id_agent);
+        $soldeCaisseLocale = (int) round($this->caisseService->getSolde());
         $resteBordereau = (int) round($bordereau->reste_a_payer);
 
-        // Plafond absolu : on ne peut jamais payer plus que le financement disponible,
-        // ni plus que le reste du bordereau.
-        if ($soldeFinancement > 0) {
+        // Priorité : financement agent s'il existe, sinon caisse locale (Gestion de caisse).
+        $source = $soldeFinancement > 0 ? 'financement' : 'local';
+
+        if ($source === 'financement') {
             $plafond = $resteBordereau > 0
                 ? min($resteBordereau, $soldeFinancement)
                 : $soldeFinancement;
         } else {
-            $plafond = $resteBordereau > 0 ? $resteBordereau : 0;
+            $plafond = $resteBordereau > 0
+                ? min($resteBordereau, max(0, $soldeCaisseLocale))
+                : max(0, $soldeCaisseLocale);
         }
 
-        if ($plafond > 0 && $montant > $plafond) {
-            $message = $soldeFinancement > 0
-                ? 'Le paiement ne peut pas dépasser le financement disponible ('
-                    . number_format($soldeFinancement, 0, ',', ' ')
-                    . ' FCFA). Maximum autorisé : '
-                    . number_format($plafond, 0, ',', ' ')
-                    . ' FCFA.'
-                : 'Le paiement ne peut pas dépasser le reste du bordereau ('
-                    . number_format($plafond, 0, ',', ' ')
-                    . ' FCFA).';
+        if ($plafond <= 0) {
+            $message = $source === 'local'
+                ? 'Solde de la caisse locale insuffisant pour effectuer ce paiement.'
+                : 'Financement insuffisant pour effectuer ce paiement.';
 
             return back()
                 ->withErrors(['montant' => $message])
@@ -402,42 +409,129 @@ class MontantAgentController extends Controller
                 ->withInput();
         }
 
-        PaiementAgent::create([
-            'id_agent' => $id_agent,
-            'id_bordereau' => $bordereau->id,
-            'montant' => $montant,
-            'date_paiement' => $validated['date_paiement'],
-            'mode_paiement' => $validated['mode_paiement'] ?? null,
-            'reference' => $validated['reference'] ?? null,
-            'commentaire' => $validated['commentaire'] ?? null,
-        ]);
+        if ($montant > $plafond) {
+            $message = $source === 'financement'
+                ? 'Le paiement ne peut pas dépasser le financement disponible ('
+                    . number_format($soldeFinancement, 0, ',', ' ')
+                    . ' FCFA). Maximum autorisé : '
+                    . number_format($plafond, 0, ',', ' ')
+                    . ' FCFA.'
+                : 'Le paiement ne peut pas dépasser le solde de la caisse locale ('
+                    . number_format($soldeCaisseLocale, 0, ',', ' ')
+                    . ' FCFA). Maximum autorisé : '
+                    . number_format($plafond, 0, ',', ' ')
+                    . ' FCFA.';
 
-        $paiement = PaiementAgent::query()
-            ->where('id_agent', $id_agent)
-            ->where('id_bordereau', $bordereau->id)
-            ->orderByDesc('id')
-            ->first();
-
-        if ($paiement) {
-            app(\App\Services\RecuPaiementService::class)->assignerNumero($paiement);
+            return back()
+                ->withErrors(['montant' => $message])
+                ->with('error', $message)
+                ->withInput();
         }
 
-        $bordereau->update([
-            'montant_paye' => (float) $bordereau->montant_paye + $montant,
-        ]);
+        $user = $this->resolveOptionalUser($request);
 
-        $deduitFinancement = $paiement
-            ? $this->financementService->deduireFinancementPourPaiementBordereau($paiement, $bordereau)
-            : 0;
+        try {
+            DB::transaction(function () use ($validated, $montant, $source, $id_agent, $bordereau, $user) {
+                $paiement = PaiementAgent::create([
+                    'id_agent' => $id_agent,
+                    'id_bordereau' => $bordereau->id,
+                    'montant' => $montant,
+                    'date_paiement' => $validated['date_paiement'],
+                    'mode_paiement' => $validated['mode_paiement']
+                        ?: ($source === 'local' ? 'Caisse locale' : 'Financement'),
+                    'caisse' => $source,
+                    'reference' => $validated['reference'] ?? null,
+                    'commentaire' => $validated['commentaire'] ?? null,
+                ]);
 
-        $message = 'Paiement de ' . number_format($montant, 0, ',', ' ')
-            . ' FCFA enregistré pour le bordereau ' . $bordereau->numero . '.';
-        if ($deduitFinancement > 0) {
-            $message .= ' ' . number_format($deduitFinancement, 0, ',', ' ')
-                . ' FCFA déduit du financement.';
+                app(\App\Services\RecuPaiementService::class)->assignerNumero($paiement);
+
+                $bordereau->update([
+                    'montant_paye' => (float) $bordereau->montant_paye + $montant,
+                ]);
+
+                if ($source === 'financement') {
+                    $this->financementService->deduireFinancementPourPaiementBordereau($paiement, $bordereau);
+                } else {
+                    $this->caisseService->debiter(
+                        $montant,
+                        'Paiement bordereau '.$bordereau->numero,
+                        $user,
+                        'Local',
+                    );
+                }
+            });
+        } catch (\InvalidArgumentException $e) {
+            return back()
+                ->withErrors(['montant' => $e->getMessage()])
+                ->with('error', $e->getMessage())
+                ->withInput();
         }
+
+        $message = 'Paiement de '.number_format($montant, 0, ',', ' ')
+            .' FCFA enregistré pour le bordereau '.$bordereau->numero.'.';
+        $message .= $source === 'financement'
+            ? ' Déduit du financement agent.'
+            : ' Débité de la caisse locale.';
 
         return back()->with('success', $message);
+    }
+
+    private function resolveOptionalUser(Request $request): ?User
+    {
+        $user = $request->user();
+        if ($user instanceof User) {
+            return $user;
+        }
+
+        try {
+            $chef = app(ChefEquipeSession::class)->chef($request);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (! $chef) {
+            return null;
+        }
+
+        $idChef = (int) ($chef['id_chef'] ?? 0);
+        $login = trim((string) ($chef['login'] ?? ''));
+
+        $userQuery = User::query();
+        if ($idChef > 0) {
+            $userQuery->where('id_chef', $idChef);
+        }
+        if ($login !== '') {
+            $userQuery->when(
+                $idChef > 0,
+                fn ($q) => $q->orWhere('login', $login),
+                fn ($q) => $q->where('login', $login),
+            );
+        }
+
+        $existing = $userQuery->first();
+        if ($existing) {
+            return $existing;
+        }
+
+        if ($idChef <= 0 && $login === '') {
+            return null;
+        }
+
+        $loginToUse = $login !== '' ? $login : 'chef-'.$idChef;
+        if (User::query()->where('login', $loginToUse)->exists()) {
+            $loginToUse = 'chef-'.$idChef.'-'.Str::lower(Str::random(4));
+        }
+
+        return User::create([
+            'name' => (string) ($chef['nom'] ?? 'Chef'),
+            'prenom' => $chef['prenoms'] ?? null,
+            'login' => $loginToUse,
+            'id_chef' => $idChef > 0 ? $idChef : null,
+            'chef_equipe_token' => (string) ($chef['token'] ?? ''),
+            'password' => Hash::make(Str::random(32)),
+            'role' => 'agent',
+        ]);
     }
 
     public function fichesEligiblesBordereau(Request $request, int $id_agent)

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BordereauAgent;
+use App\Services\CaisseService;
 use App\Services\FinancementService;
 use App\Services\MesAgentsService;
 use Illuminate\Http\Request;
@@ -12,6 +13,7 @@ class EffectuerPaiementController extends Controller
     public function __construct(
         private readonly MesAgentsService $mesAgentsService,
         private readonly FinancementService $financementService,
+        private readonly CaisseService $caisseService,
     ) {}
 
     public function index(Request $request)
@@ -84,6 +86,7 @@ class EffectuerPaiementController extends Controller
             'filters' => $filters,
             'financements' => $financements,
             'stats' => $stats,
+            'soldeCaisseLocale' => (int) round($this->caisseService->getSolde()),
         ]);
     }
 }
