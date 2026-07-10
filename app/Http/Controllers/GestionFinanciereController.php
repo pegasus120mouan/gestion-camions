@@ -6,6 +6,7 @@ use App\Models\DemandeSortie;
 use App\Models\MouvementSolde;
 use App\Models\User;
 use App\Services\ChefEquipeSession;
+use App\Services\HistoriqueTransactionsService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -13,24 +14,39 @@ use Illuminate\Support\Str;
 
 class GestionFinanciereController extends Controller
 {
-    public function index(Request $request, ChefEquipeSession $chefSession)
+    public function __construct(
+        private readonly HistoriqueTransactionsService $historiqueTransactions,
+    ) {}
+
+    public function index(Request $request)
     {
-        $user = $this->resolveUser($request, $chefSession);
+        $filters = [
+            'q' => trim((string) $request->query('q', '')),
+            'type' => trim((string) $request->query('type', '')),
+            'date_debut' => trim((string) $request->query('date_debut', '')),
+            'date_fin' => trim((string) $request->query('date_fin', '')),
+        ];
 
-        $mouvements = MouvementSolde::query()
-            ->where('user_id', $user->id)
-            ->latest()
-            ->paginate(20)
-            ->withQueryString();
+        $all = $this->historiqueTransactions->allTransactions($request);
+        $totalMontant = (float) $all->sum('montant');
 
-        $solde = (float) MouvementSolde::query()
-            ->where('user_id', $user->id)
-            ->selectRaw("SUM(CASE WHEN type = 'deposit' THEN montant ELSE -montant END) as solde")
-            ->value('solde');
+        $page = max(1, (int) $request->query('page', 1));
+        $perPage = 20;
+        $transactions = new \Illuminate\Pagination\LengthAwarePaginator(
+            $all->sortByDesc(fn ($row) => sprintf('%s-%010d', $row->date_sort, $row->id_sort))
+                ->values()
+                ->slice(($page - 1) * $perPage, $perPage)
+                ->values(),
+            $all->count(),
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()],
+        );
 
         return view('gestionfinanciere.index', [
-            'mouvements' => $mouvements,
-            'solde' => $solde,
+            'transactions' => $transactions,
+            'filters' => $filters,
+            'totalMontant' => $totalMontant,
         ]);
     }
 
@@ -39,13 +55,13 @@ class GestionFinanciereController extends Controller
         $user = $this->resolveUser($request, $chefSession);
 
         $rawMontant = (string) $request->input('montant', '');
-        $normalizedMontant = str_replace([' ', "\u{00A0}"], '', $rawMontant);
-        $normalizedMontant = str_replace(',', '.', $normalizedMontant);
+        $normalizedMontant = preg_replace('/\s+/u', '', $rawMontant);
+        $normalizedMontant = str_replace([',', '.'], '', (string) $normalizedMontant);
         $request->merge(['montant' => $normalizedMontant]);
 
         $validated = $request->validate([
             'type' => ['required', 'in:deposit,withdraw'],
-            'montant' => ['required', 'numeric', 'min:0.01'],
+            'montant' => ['required', 'integer', 'min:1'],
             'note' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -56,7 +72,11 @@ class GestionFinanciereController extends Controller
             'note' => $validated['note'] ?? null,
         ]);
 
-        return redirect()->route('gestionfinanciere.index');
+        $label = $validated['type'] === 'deposit' ? 'Dépôt' : 'Retrait';
+
+        return redirect()
+            ->route('gestionfinanciere.index')
+            ->with('success', $label.' de '.number_format((int) $validated['montant'], 0, ',', ' ').' FCFA enregistré.');
     }
 
     public function destroy(Request $request, MouvementSolde $mouvement, ChefEquipeSession $chefSession)
@@ -67,7 +87,9 @@ class GestionFinanciereController extends Controller
 
         $mouvement->delete();
 
-        return redirect()->route('gestionfinanciere.index');
+        return redirect()
+            ->route('gestionfinanciere.index')
+            ->with('success', 'Transaction supprimée.');
     }
 
     public function sorties(Request $request)
