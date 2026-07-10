@@ -39,9 +39,9 @@
       </div>
     @endif
 
-    @if(session('error'))
+    @if(session('error') || $errors->any())
       <div class="alert alert-danger alert-dismissible fade show" role="alert">
-        {{ session('error') }}
+        {{ session('error') ?? $errors->first() }}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
       </div>
     @endif
@@ -724,28 +724,53 @@
   var formPaiementBordereau = document.getElementById('formPaiementBordereau');
   var inputMontantBordereau = document.getElementById('paiementBordereauMontant');
 
+  function plafondPaiementBordereau(reste) {
+    if (montantFinancementAgent > 0) {
+      return reste > 0 ? Math.min(reste, montantFinancementAgent) : montantFinancementAgent;
+    }
+    return reste > 0 ? reste : 0;
+  }
+
+  function appliquerPlafondMontantBordereau() {
+    if (!inputMontantBordereau) return;
+    var plafond = parseInt(inputMontantBordereau.getAttribute('data-plafond') || '0', 10);
+    var digits = String(inputMontantBordereau.value || '').replace(/\D/g, '');
+    if (!digits) return;
+    var montant = parseInt(digits, 10);
+    if (plafond > 0 && montant > plafond) {
+      inputMontantBordereau.value = formatMontantSaisie(String(plafond));
+    }
+  }
+
   if (inputMontantBordereau) {
     inputMontantBordereau.addEventListener('input', function() {
       var cursorPos = this.selectionStart;
       var oldLength = this.value.length;
       this.value = formatMontantSaisie(this.value);
+      appliquerPlafondMontantBordereau();
       var newLength = this.value.length;
       cursorPos = cursorPos + (newLength - oldLength);
-      this.setSelectionRange(cursorPos, cursorPos);
+      if (cursorPos >= 0) {
+        this.setSelectionRange(Math.min(cursorPos, newLength), Math.min(cursorPos, newLength));
+      }
     });
   }
 
   if (formPaiementBordereau) {
     formPaiementBordereau.addEventListener('submit', function(e) {
-      if (inputMontantBordereau) {
-        inputMontantBordereau.value = inputMontantBordereau.value.replace(/\s/g, '');
-        var montantSaisi = parseInt(inputMontantBordereau.value || '0', 10);
-        var plafond = parseInt(inputMontantBordereau.getAttribute('data-plafond') || '0', 10);
-        if (montantFinancementAgent > 0 && plafond > 0 && montantSaisi > plafond) {
-          e.preventDefault();
-          alert('Le montant ne peut pas dépasser ' + formatNombre(plafond) + ' FCFA (financement disponible).');
-        }
+      if (!inputMontantBordereau) return;
+      var plafond = parseInt(inputMontantBordereau.getAttribute('data-plafond') || '0', 10);
+      var montantSaisi = parseInt(String(inputMontantBordereau.value || '').replace(/\D/g, '') || '0', 10);
+      if (plafond > 0 && montantSaisi > plafond) {
+        e.preventDefault();
+        var motif = montantFinancementAgent > 0
+          ? ' (plafonné par le financement de ' + formatNombre(montantFinancementAgent) + ' FCFA)'
+          : ' (reste du bordereau)';
+        alert('Le montant ne peut pas dépasser ' + formatNombre(plafond) + ' FCFA' + motif + '.');
+        inputMontantBordereau.value = formatMontantSaisie(String(plafond));
+        return;
       }
+      inputMontantBordereau.value = String(montantSaisi || '');
     });
   }
 
@@ -754,12 +779,11 @@
       var id = btn.getAttribute('data-bordereau-id');
       var numero = btn.getAttribute('data-bordereau-numero');
       var reste = parseInt(btn.getAttribute('data-bordereau-reste') || '0', 10);
-      var plafond = reste > 0 ? reste : 0;
+      var plafond = plafondPaiementBordereau(reste);
       var alertFinancement = document.getElementById('paiementFinancementAlert');
       var hintMontant = document.getElementById('paiementBordereauMontantHint');
 
       if (montantFinancementAgent > 0) {
-        plafond = reste > 0 ? Math.min(reste, montantFinancementAgent) : montantFinancementAgent;
         if (alertFinancement) {
           alertFinancement.classList.remove('d-none');
           document.getElementById('paiementFinancementMontant').textContent = formatNombre(montantFinancementAgent);
@@ -773,7 +797,7 @@
         }
         if (hintMontant) {
           hintMontant.textContent = reste > 0
-            ? 'Maximum conseillé : ' + formatNombre(reste) + ' FCFA (reste du bordereau).'
+            ? 'Maximum : ' + formatNombre(reste) + ' FCFA (reste du bordereau).'
             : 'Saisissez le montant du paiement.';
         }
       }

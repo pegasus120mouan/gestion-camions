@@ -359,6 +359,10 @@ class MontantAgentController extends Controller
 
         $bordereau = BordereauAgent::where('id_agent', $id_agent)->findOrFail($id);
 
+        $request->merge([
+            'montant' => preg_replace('/\s+/u', '', (string) $request->input('montant', '')),
+        ]);
+
         $validated = $request->validate([
             'montant' => ['required', 'integer', 'min:1'],
             'date_paiement' => ['required', 'date'],
@@ -367,32 +371,41 @@ class MontantAgentController extends Controller
             'commentaire' => ['nullable', 'string', 'max:500'],
         ]);
 
+        $montant = (int) $validated['montant'];
         $soldeFinancement = $this->financementService->soldeFinancementAgent($id_agent);
         $resteBordereau = (int) round($bordereau->reste_a_payer);
 
+        // Plafond absolu : on ne peut jamais payer plus que le financement disponible,
+        // ni plus que le reste du bordereau.
         if ($soldeFinancement > 0) {
             $plafond = $resteBordereau > 0
                 ? min($resteBordereau, $soldeFinancement)
                 : $soldeFinancement;
+        } else {
+            $plafond = $resteBordereau > 0 ? $resteBordereau : 0;
+        }
 
-            if ((int) $validated['montant'] > $plafond) {
-                return back()->withErrors([
-                    'montant' => 'Le paiement ne peut pas dépasser le financement disponible ('
-                        . number_format($plafond, 0, ',', ' ')
-                        . ' FCFA max : financement '
-                        . number_format($soldeFinancement, 0, ',', ' ')
-                        . ($resteBordereau > 0 && $resteBordereau < $soldeFinancement
-                            ? ', reste bordereau ' . number_format($resteBordereau, 0, ',', ' ')
-                            : '')
-                        . ').',
-                ])->withInput();
-            }
+        if ($plafond > 0 && $montant > $plafond) {
+            $message = $soldeFinancement > 0
+                ? 'Le paiement ne peut pas dépasser le financement disponible ('
+                    . number_format($soldeFinancement, 0, ',', ' ')
+                    . ' FCFA). Maximum autorisé : '
+                    . number_format($plafond, 0, ',', ' ')
+                    . ' FCFA.'
+                : 'Le paiement ne peut pas dépasser le reste du bordereau ('
+                    . number_format($plafond, 0, ',', ' ')
+                    . ' FCFA).';
+
+            return back()
+                ->withErrors(['montant' => $message])
+                ->with('error', $message)
+                ->withInput();
         }
 
         PaiementAgent::create([
             'id_agent' => $id_agent,
             'id_bordereau' => $bordereau->id,
-            'montant' => $validated['montant'],
+            'montant' => $montant,
             'date_paiement' => $validated['date_paiement'],
             'mode_paiement' => $validated['mode_paiement'] ?? null,
             'reference' => $validated['reference'] ?? null,
@@ -410,14 +423,14 @@ class MontantAgentController extends Controller
         }
 
         $bordereau->update([
-            'montant_paye' => (float) $bordereau->montant_paye + $validated['montant'],
+            'montant_paye' => (float) $bordereau->montant_paye + $montant,
         ]);
 
         $deduitFinancement = $paiement
             ? $this->financementService->deduireFinancementPourPaiementBordereau($paiement, $bordereau)
             : 0;
 
-        $message = 'Paiement de ' . number_format($validated['montant'], 0, ',', ' ')
+        $message = 'Paiement de ' . number_format($montant, 0, ',', ' ')
             . ' FCFA enregistré pour le bordereau ' . $bordereau->numero . '.';
         if ($deduitFinancement > 0) {
             $message .= ' ' . number_format($deduitFinancement, 0, ',', ' ')

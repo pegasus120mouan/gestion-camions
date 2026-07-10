@@ -376,7 +376,7 @@ class FinancementService
         }
 
         $montantPaye = (int) round((float) $paiement->montant);
-        $aDeduire = $montantPaye;
+        $aDeduire = min($montantPaye, $solde);
         if ($aDeduire <= 0) {
             return 0;
         }

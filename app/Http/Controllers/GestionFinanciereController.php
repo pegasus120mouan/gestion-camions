@@ -4,14 +4,18 @@ namespace App\Http\Controllers;
 
 use App\Models\DemandeSortie;
 use App\Models\MouvementSolde;
+use App\Models\User;
+use App\Services\ChefEquipeSession;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class GestionFinanciereController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, ChefEquipeSession $chefSession)
     {
-        $user = $request->user();
+        $user = $this->resolveUser($request, $chefSession);
 
         $mouvements = MouvementSolde::query()
             ->where('user_id', $user->id)
@@ -30,9 +34,9 @@ class GestionFinanciereController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, ChefEquipeSession $chefSession)
     {
-        $user = $request->user();
+        $user = $this->resolveUser($request, $chefSession);
 
         $rawMontant = (string) $request->input('montant', '');
         $normalizedMontant = str_replace([' ', "\u{00A0}"], '', $rawMontant);
@@ -55,9 +59,9 @@ class GestionFinanciereController extends Controller
         return redirect()->route('gestionfinanciere.index');
     }
 
-    public function destroy(Request $request, MouvementSolde $mouvement)
+    public function destroy(Request $request, MouvementSolde $mouvement, ChefEquipeSession $chefSession)
     {
-        $user = $request->user();
+        $user = $this->resolveUser($request, $chefSession);
 
         abort_if($mouvement->user_id !== $user->id, 403);
 
@@ -107,5 +111,52 @@ class GestionFinanciereController extends Controller
         ]);
 
         return redirect()->route('gestionfinanciere.sorties');
+    }
+
+    private function resolveUser(Request $request, ChefEquipeSession $chefSession): User
+    {
+        $user = $request->user();
+        if ($user instanceof User) {
+            return $user;
+        }
+
+        $chef = $chefSession->chef($request);
+        abort_unless($chef, 403, 'Session chef d\'équipe introuvable.');
+
+        $idChef = (int) ($chef['id_chef'] ?? 0);
+        $login = trim((string) ($chef['login'] ?? ''));
+        abort_unless($idChef > 0 || $login !== '', 403, 'Identifiant chef d\'équipe invalide.');
+
+        $userQuery = User::query();
+        if ($idChef > 0) {
+            $userQuery->where('id_chef', $idChef);
+        }
+        if ($login !== '') {
+            $userQuery->when(
+                $idChef > 0,
+                fn ($query) => $query->orWhere('login', $login),
+                fn ($query) => $query->where('login', $login),
+            );
+        }
+        $user = $userQuery->first();
+
+        if ($user) {
+            return $user;
+        }
+
+        $loginToUse = $login !== '' ? $login : 'chef-' . $idChef;
+        if (User::query()->where('login', $loginToUse)->exists()) {
+            $loginToUse = 'chef-' . $idChef . '-' . Str::lower(Str::random(4));
+        }
+
+        return User::create([
+            'name' => (string) ($chef['nom'] ?? 'Chef'),
+            'prenom' => $chef['prenoms'] ?? null,
+            'login' => $loginToUse,
+            'id_chef' => $idChef > 0 ? $idChef : null,
+            'chef_equipe_token' => (string) ($chef['token'] ?? ''),
+            'password' => Hash::make(Str::random(32)),
+            'role' => 'agent',
+        ]);
     }
 }
