@@ -37,7 +37,9 @@ use App\Http\Controllers\BilanVehiculeController;
 use App\Http\Controllers\PisteurController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\ApprovisionnementController;
+use App\Http\Controllers\CaisseController;
 use App\Http\Controllers\SoldeChefEquipeController;
+use App\Http\Controllers\EffectuerPaiementController;
 use App\Http\Controllers\ParticulierController;
 use App\Http\Controllers\ParticulierPrixController;
 use App\Services\ChefEquipeContext;
@@ -185,6 +187,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/solde-chef-equipe', [SoldeChefEquipeController::class, 'index'])->name('solde_chef_equipe.index');
     Route::post('/solde-chef-equipe/token', [SoldeChefEquipeController::class, 'updateToken'])->name('solde_chef_equipe.token');
     Route::get('/api/solde-chef-equipe', [SoldeChefEquipeController::class, 'show'])->name('api.solde_chef_equipe');
+
+    Route::get('/effectuer-paiement', [EffectuerPaiementController::class, 'index'])->name('effectuer_paiement.index');
+
+    Route::get('/caisse', [CaisseController::class, 'index'])->name('caisse.index');
+    Route::post('/caisse/approvisionnement', [CaisseController::class, 'storeApprovisionnement'])->name('caisse.approvisionnement.store');
     Route::get('/api/mes-agents', [AgentController::class, 'apiIndex'])->name('api.mes_agents');
 
     Route::get('/utilisateurs/admins', [UtilisateurController::class, 'admins'])->name('utilisateurs.admins');

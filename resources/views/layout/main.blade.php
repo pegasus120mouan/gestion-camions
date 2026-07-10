@@ -291,6 +291,12 @@
                 <div class="text-truncate" data-i18n="User interface">Gestion financière</div>
               </a>
               <ul class="menu-sub">
+              <li class="menu-item {{ request()->routeIs('effectuer_paiement.*') ? 'active' : '' }}">
+                  <a href="{{ route('effectuer_paiement.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Effectuer un paiement</div>
+                  </a>
+                </li>
+
                 <li class="menu-item {{ request()->routeIs('solde_chef_equipe.*') ? 'active' : '' }}">
                   <a href="{{ route('solde_chef_equipe.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Accordion">Token chef d'équipe</div>
@@ -649,6 +655,13 @@
                   </a>
                 </li>
               </ul>
+            </li>
+
+            <li class="menu-item {{ request()->routeIs('caisse.*') ? 'active' : '' }}">
+              <a href="{{ route('caisse.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-wallet" style="color: #28c76f;"></i>
+                <div class="text-truncate" data-i18n="Usines">Gestion de caisse</div>
+              </a>
             </li>
 
 

@@ -36,7 +36,7 @@ class AppServiceProvider extends ServiceProvider
             $chefSession = app(\App\Services\ChefEquipeSession::class);
             $authChef = $chefSession->chef();
 
-            $showSoldeChefBanner = request()->routeIs('gestionfinanciere.*', 'solde_chef_equipe.*');
+            $showSoldeChefBanner = request()->routeIs('gestionfinanciere.*', 'solde_chef_equipe.*', 'effectuer_paiement.*');
             $soldeChef = null;
             $soldeChefToken = '';
 
