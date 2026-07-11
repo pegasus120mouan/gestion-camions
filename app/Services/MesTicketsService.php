@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\TicketValidation;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
@@ -592,6 +594,104 @@ class MesTicketsService
 
             return true;
         }));
+    }
+
+    /**
+     * Tickets non encore validés (sans ligne dans ticket_validations).
+     *
+     * @param  list<array<string, mixed>>  $tickets
+     * @return list<array<string, mixed>>
+     */
+    public function filterTicketsNonValides(array $tickets): array
+    {
+        $ids = array_values(array_filter(array_map(
+            static fn (array $t) => (int) ($t['id_ticket'] ?? 0),
+            $tickets
+        )));
+
+        if ($ids === []) {
+            return [];
+        }
+
+        $validated = TicketValidation::query()
+            ->whereIn('id_ticket', $ids)
+            ->pluck('id_ticket')
+            ->flip()
+            ->all();
+
+        return array_values(array_filter(
+            $tickets,
+            static fn (array $t) => ! isset($validated[(int) ($t['id_ticket'] ?? 0)])
+        ));
+    }
+
+    public function countTicketsEnAttente(?Request $request = null): int
+    {
+        $request ??= request();
+        $cacheKey = 'tickets_en_attente_count:'.$this->ticketsCacheKey([], $request);
+
+        return (int) Cache::remember($cacheKey, 120, function () use ($request) {
+            $chefParams = $this->chefContext->apiQueryParams($request);
+            $token = trim((string) ($chefParams['token'] ?? ''));
+            $idChef = (int) ($chefParams['id_chef'] ?? 0);
+
+            if ($token === '' && $idChef <= 0) {
+                return 0;
+            }
+
+            $connection = $this->databaseResolver->connection();
+            if ($connection !== null && ! $this->databaseResolver->usesApi()) {
+                return $this->countEnAttenteFromDatabase($token, $idChef, $connection);
+            }
+
+            $all = $this->fetchAllTickets([], $request);
+
+            return count($this->filterTicketsNonValides($all));
+        });
+    }
+
+    private function countEnAttenteFromDatabase(string $token, int $idChef, string $connection): int
+    {
+        $bindings = [];
+        $where = ['a.date_suppression IS NULL'];
+
+        if ($token !== '') {
+            $where[] = 'ce.token = ?';
+            $bindings[] = $token;
+        } else {
+            $where[] = 'a.id_chef = ?';
+            $bindings[] = $idChef;
+        }
+
+        $whereSql = implode(' AND ', $where);
+
+        $rows = DB::connection($connection)->select(
+            "SELECT t.id_ticket
+            FROM tickets t
+            INNER JOIN agents a ON a.id_agent = t.id_agent
+            INNER JOIN chef_equipe ce ON ce.id_chef = a.id_chef
+            WHERE {$whereSql}",
+            $bindings
+        );
+
+        $ids = array_map(static fn ($row) => (int) $row->id_ticket, $rows);
+        if ($ids === []) {
+            return 0;
+        }
+
+        $validated = TicketValidation::query()
+            ->whereIn('id_ticket', $ids)
+            ->pluck('id_ticket')
+            ->flip()
+            ->all();
+
+        return count(array_filter($ids, static fn (int $id) => ! isset($validated[$id])));
+    }
+
+    public function forgetEnAttenteCountCache(?Request $request = null): void
+    {
+        $request ??= request();
+        Cache::forget('tickets_en_attente_count:'.$this->ticketsCacheKey([], $request));
     }
 
     /**

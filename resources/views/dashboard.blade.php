@@ -252,9 +252,11 @@
                               </div>
                             </div>
                           </div>
-                          <p class="mb-1">Nombre de tickets</p>
-                          <h4 class="card-title mb-3">{{ $nombreTickets ?? 0 }}</h4>
-                          <small class="text-muted fw-medium">Tickets enregistres</small>
+                          <p class="mb-1">Tickets en attente</p>
+                          <h4 class="card-title mb-3 text-danger">{{ $nombreTicketsEnAttente ?? 0 }}</h4>
+                          <small class="text-muted fw-medium">
+                            <a href="{{ route('tickets.index', ['statut' => 'en_attente']) }}" class="text-danger">Non validés</a>
+                          </small>
                         </div>
                       </div>
                     </div>

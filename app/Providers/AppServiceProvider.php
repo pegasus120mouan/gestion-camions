@@ -33,6 +33,14 @@ class AppServiceProvider extends ServiceProvider
                 ->whereDate('pese_le', Carbon::today())
                 ->count();
 
+            $ticketsEnAttenteCount = 0;
+            try {
+                $ticketsEnAttenteCount = app(\App\Services\MesTicketsService::class)
+                    ->countTicketsEnAttente(request());
+            } catch (\Throwable) {
+                $ticketsEnAttenteCount = 0;
+            }
+
             $chefSession = app(\App\Services\ChefEquipeSession::class);
             $authChef = $chefSession->chef();
 
@@ -51,6 +59,7 @@ class AppServiceProvider extends ServiceProvider
 
             $view->with([
                 'peseesTodayCount' => $peseesTodayCount,
+                'ticketsEnAttenteCount' => $ticketsEnAttenteCount,
                 'showSoldeChefBanner' => $showSoldeChefBanner,
                 'soldeChef' => $soldeChef,
                 'soldeChefToken' => $soldeChefToken,

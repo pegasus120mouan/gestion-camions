@@ -50,6 +50,7 @@ class TicketController extends Controller
         $vehicule = trim((string) $request->query('vehicule', ''));
         $usine = trim((string) $request->query('usine', ''));
         $agent = trim((string) $request->query('agent', ''));
+        $enAttenteOnly = $request->query('statut') === 'en_attente';
         $page = max(1, (int) $request->query('page', 1));
         $perPage = 20;
         $hasFilters = $vehicule !== '' || $usine !== '' || $agent !== '';
@@ -58,9 +59,12 @@ class TicketController extends Controller
         $externalError = null;
         $filteredTickets = null;
 
-        if ($hasFilters) {
+        if ($hasFilters || $enAttenteOnly) {
             $allTickets = $this->mesTicketsService->fetchAllTickets([], $request);
             $filteredTickets = $this->mesTicketsService->filterTickets($allTickets, $vehicule, $usine, $agent);
+            if ($enAttenteOnly) {
+                $filteredTickets = $this->mesTicketsService->filterTicketsNonValides($filteredTickets);
+            }
             $total = count($filteredTickets);
             $lastPage = max(1, (int) ceil($total / $perPage));
             $page = min($page, $lastPage);
@@ -502,6 +506,7 @@ class TicketController extends Controller
             'usinesParProduit' => $usinesParProduit,
             'parcsParPontProduit' => $parcsParPontProduit,
             'external_error' => $externalError,
+            'enAttenteOnly' => $enAttenteOnly,
         ]);
     }
 
@@ -1028,6 +1033,7 @@ class TicketController extends Controller
 
         Cache::forget('agent_tickets_sync:' . $idAgentApi);
         Cache::forget('montant_agent_index:' . $idAgentApi . ':' . md5(json_encode(['id_agent' => $idAgentApi])));
+        $this->mesTicketsService->forgetEnAttenteCountCache($request);
 
         if ($fiche) {
             $fiche->refresh();

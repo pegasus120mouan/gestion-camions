@@ -15,7 +15,7 @@
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h4 class="mb-0">Mes Tickets</h4>
+      <h4 class="mb-0">{{ !empty($enAttenteOnly) ? 'Mes tickets en attente' : 'Mes Tickets' }}</h4>
       <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAddTicket">
         <i class="bx bx-plus me-1"></i>Ajouter un ticket
       </button>
@@ -49,6 +49,9 @@
     <div class="card mb-4">
       <div class="card-body">
         <form method="GET" action="{{ route('tickets.index') }}" class="row g-3">
+          @if(!empty($enAttenteOnly))
+            <input type="hidden" name="statut" value="en_attente" />
+          @endif
           <div class="col-md-3">
             <label class="form-label">Vehicule</label>
             <input type="text" name="vehicule" id="vehicule_input" class="form-control" placeholder="Matricule..." value="{{ request('vehicule') }}" list="vehicules_list" autocomplete="off" />
@@ -68,7 +71,7 @@
           </div>
           <div class="col-md-3 d-flex align-items-end gap-2">
             <button type="submit" class="btn btn-primary">Rechercher</button>
-            <a href="{{ route('tickets.index') }}" class="btn btn-outline-secondary">Reinitialiser</a>
+            <a href="{{ route('tickets.index', !empty($enAttenteOnly) ? ['statut' => 'en_attente'] : []) }}" class="btn btn-outline-secondary">Reinitialiser</a>
           </div>
         </form>
       </div>
@@ -173,13 +176,13 @@
           @endphp
 
           <li class="page-item {{ $currentPage <= 1 ? 'disabled' : '' }}">
-            <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent']), ['page' => $currentPage - 1])) }}">Precedent</a>
+            <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent', 'statut']), ['page' => $currentPage - 1])) }}">Precedent</a>
           </li>
 
           @for($i = 1; $i <= $lastPage; $i++)
             @if($i == 1 || $i == $lastPage || abs($i - $currentPage) <= 2)
               <li class="page-item {{ $i == $currentPage ? 'active' : '' }}">
-                <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent']), ['page' => $i])) }}">{{ $i }}</a>
+                <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent', 'statut']), ['page' => $i])) }}">{{ $i }}</a>
               </li>
             @elseif($i == 2 && $currentPage > 4)
               <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -189,7 +192,7 @@
           @endfor
 
           <li class="page-item {{ $currentPage >= $lastPage ? 'disabled' : '' }}">
-            <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent']), ['page' => $currentPage + 1])) }}">Suivant</a>
+            <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent', 'statut']), ['page' => $currentPage + 1])) }}">Suivant</a>
           </li>
         </ul>
         <p class="text-center text-muted">Page {{ $currentPage }} sur {{ $lastPage }} ({{ $total }} tickets)</p>

@@ -166,12 +166,21 @@ Route::middleware('auth')->group(function () {
             }
         }
 
+        $nombreTicketsEnAttente = 0;
+        try {
+            $nombreTicketsEnAttente = app(\App\Services\MesTicketsService::class)
+                ->countTicketsEnAttente(request());
+        } catch (\Throwable $e) {
+            $nombreTicketsEnAttente = 0;
+        }
+
         return view('dashboard', [
             'soldeChef' => $soldeChef,
             'soldeChefError' => $soldeChefError,
             'nombreCamions' => $nombreCamions,
             'totalDepenses' => $totalDepenses,
             'nombreTickets' => $nombreTickets,
+            'nombreTicketsEnAttente' => $nombreTicketsEnAttente,
             'stocksParPont' => $stocksParPont,
             'totalStockEntrees' => $totalStockEntrees,
             'totalStockSorties' => $totalStockSorties,

@@ -197,12 +197,21 @@
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-map" style="color: #00cfe8;"></i>
                 <div class="text-truncate" data-i18n="Weighbridges">Tickets</div>
+                @if(($ticketsEnAttenteCount ?? 0) > 0)
+                  <div class="badge rounded-pill bg-danger ms-auto">{{ $ticketsEnAttenteCount }}</div>
+                @endif
               </a>
 
               <ul class="menu-sub">
                 <li class="menu-item">
                   <a href="{{ route('tickets.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('tickets.index', ['statut' => 'en_attente']) }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets en attente</div>
+                    <span class="badge rounded-pill bg-danger ms-auto">{{ $ticketsEnAttenteCount ?? 0 }}</span>
                   </a>
                 </li>
                 <li class="menu-item">
@@ -1067,17 +1076,15 @@
               <!-- /Search -->
 
               <ul class="navbar-nav flex-row align-items-center ms-md-auto">
-                <!-- Place this tag where you want the button to render. -->
                 <li class="nav-item lh-1 me-4">
                   <a
-                    class="github-button"
-                    href="https://github.com/themeselection/sneat-bootstrap-html-admin-template-free"
-                    data-icon="octicon-star"
-                    data-size="large"
-                    data-show-count="true"
-                    aria-label="Star themeselection/sneat-html-admin-template-free on GitHub"
-                    >Star</a
-                  >
+                    href="{{ route('tickets.index', ['statut' => 'en_attente']) }}"
+                    class="btn btn-sm btn-outline-secondary d-inline-flex align-items-center gap-2"
+                    title="Tickets en attente">
+                    <i class="bx bx-ticket"></i>
+                    <span>En attente</span>
+                    <span class="badge bg-danger rounded-pill">{{ $ticketsEnAttenteCount ?? 0 }}</span>
+                  </a>
                 </li>
 
                 <!-- User -->
