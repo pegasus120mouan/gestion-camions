@@ -161,7 +161,7 @@
                 <tbody>
                   @forelse ($financements as $financement)
                     <tr>
-                      <td>{{ $financement->Numero_financement }}</td>
+                      <td>{{ $financement->code_financement ?? $financement->Numero_financement }}</td>
                       <td>{{ $financement->nom_agent ?? '-' }}</td>
                       <td>{{ !empty($financement->date_financement) ? \Carbon\Carbon::parse($financement->date_financement)->format('d/m/Y') : '-' }}</td>
                       <td class="text-end {{ (float) $financement->montant > 0 ? 'text-success' : 'text-danger' }}">

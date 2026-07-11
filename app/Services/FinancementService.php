@@ -127,9 +127,12 @@ class FinancementService
 
         if (! empty($filters['search'])) {
             $term = '%' . $filters['search'] . '%';
-            $query->where(function ($sub) use ($term) {
+            $query->where(function ($sub) use ($term, $connection) {
                 $sub->where('Numero_financement', 'like', $term)
                     ->orWhere('motif', 'like', $term);
+                if ($this->hasColumn($connection, 'financement', 'code_financement')) {
+                    $sub->orWhere('code_financement', 'like', $term);
+                }
             });
         }
 
@@ -153,6 +156,7 @@ class FinancementService
 
             return (object) [
                 'Numero_financement' => $row->Numero_financement,
+                'code_financement' => $row->code_financement ?? null,
                 'id_agent' => $id,
                 'montant' => $row->montant,
                 'motif' => $row->motif,
@@ -220,9 +224,12 @@ class FinancementService
 
         if (! empty($filters['search'])) {
             $search = $filters['search'];
-            $query->where(function ($q) use ($search) {
+            $query->where(function ($q) use ($search, $connection) {
                 $q->where('Numero_financement', 'like', '%' . $search . '%')
                     ->orWhere('motif', 'like', '%' . $search . '%');
+                if ($this->hasColumn($connection, 'financement', 'code_financement')) {
+                    $q->orWhere('code_financement', 'like', '%' . $search . '%');
+                }
             });
         }
 
@@ -259,15 +266,68 @@ class FinancementService
             throw new \RuntimeException('Table financement indisponible.');
         }
 
-        $nextNumero = ((int) Financement::on($connection)->max('Numero_financement')) + 1;
+        return DB::connection($connection)->transaction(function () use ($connection, $agentId, $montant, $motif, $dateFinancement) {
+            Financement::on($connection)
+                ->orderByDesc('Numero_financement')
+                ->lockForUpdate()
+                ->first();
 
-        return Financement::on($connection)->create([
-            'Numero_financement' => $nextNumero,
-            'id_agent' => $agentId,
-            'montant' => $montant,
-            'motif' => $motif,
-            'date_financement' => $dateFinancement,
-        ]);
+            $nextNumero = ((int) Financement::on($connection)->max('Numero_financement')) + 1;
+            $payload = [
+                'Numero_financement' => $nextNumero,
+                'id_agent' => $agentId,
+                'montant' => $montant,
+                'motif' => $motif,
+                'date_financement' => $dateFinancement,
+            ];
+
+            if ($this->hasColumn($connection, 'financement', 'code_financement')) {
+                $payload['code_financement'] = $this->generateCodeFinancement($connection, $agentId);
+            }
+
+            return Financement::on($connection)->create($payload);
+        });
+    }
+
+    public function generateCodeFinancement(string $connection, int $agentId): string
+    {
+        $agent = $this->findAgent($agentId);
+        $initials = $this->agentInitials((string) ($agent['nom_complet'] ?? ''));
+        $prefix = 'FIN-'.$initials;
+
+        $existing = Financement::on($connection)
+            ->where('code_financement', 'like', $prefix.'-%')
+            ->pluck('code_financement');
+
+        $maxSeq = 0;
+        foreach ($existing as $code) {
+            if (preg_match('/-(\d{4})$/', (string) $code, $m)) {
+                $maxSeq = max($maxSeq, (int) $m[1]);
+            }
+        }
+
+        return $prefix.'-'.sprintf('%04d', $maxSeq + 1);
+    }
+
+    private function agentInitials(string $nomComplet): string
+    {
+        $parts = array_values(array_filter(preg_split('/\s+/u', trim($nomComplet)) ?: []));
+        $nom = $parts[0] ?? '';
+        $prenom = $parts[1] ?? '';
+
+        $letter = function (string $word): string {
+            if ($word === '') {
+                return '';
+            }
+            $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $word);
+            $src = is_string($ascii) && $ascii !== '' ? $ascii : $word;
+
+            return strtoupper(substr($src, 0, 1));
+        };
+
+        $initials = $letter($nom).$letter($prenom);
+
+        return $initials !== '' ? $initials : 'XX';
     }
 
     /**

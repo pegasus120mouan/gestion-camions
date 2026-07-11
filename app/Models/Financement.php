@@ -16,6 +16,7 @@ class Financement extends Model
 
     protected $fillable = [
         'Numero_financement',
+        'code_financement',
         'id_agent',
         'montant',
         'motif',
@@ -26,6 +27,11 @@ class Financement extends Model
         'date_financement' => 'datetime',
         'montant' => 'decimal:2',
     ];
+
+    public function getCodeAfficheAttribute(): string
+    {
+        return (string) ($this->code_financement ?: $this->Numero_financement);
+    }
 
     public function isAdvance(): bool
     {
