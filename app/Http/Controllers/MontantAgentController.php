@@ -192,6 +192,55 @@ class MontantAgentController extends Controller
             ->orderBy('date_paiement', 'desc')
             ->orderBy('id', 'desc')
             ->get();
+
+        $demandesAvanceEnAttente = \App\Models\DemandeAvance::query()
+            ->where('id_agent', $id_agent)
+            ->where('statut', \App\Models\DemandeAvance::STATUT_EN_ATTENTE)
+            ->orderByDesc('date_demande')
+            ->orderByDesc('id')
+            ->get();
+
+        $historiquePaiements = collect();
+        foreach ($demandesAvanceEnAttente as $demande) {
+            $historiquePaiements->push((object) [
+                'kind' => 'demande',
+                'date' => $demande->date_demande,
+                'date_sort' => optional($demande->date_demande)->format('Y-m-d') ?: '1970-01-01',
+                'id_sort' => (int) $demande->id,
+                'bordereau_label' => null,
+                'is_avance' => true,
+                'mode' => $demande->mode_paiement,
+                'montant' => (float) $demande->montant,
+                'statut' => 'en_attente',
+                'statut_label' => 'En attente de paiement',
+                'pdf_url' => null,
+                'compte_label' => 'Caisse Unipalm',
+            ]);
+        }
+        foreach ($paiements as $paiement) {
+            $isAvance = $paiement->id_bordereau === null;
+            $compte = (string) ($paiement->caisse ?? '');
+            $historiquePaiements->push((object) [
+                'kind' => 'paiement',
+                'date' => $paiement->date_paiement,
+                'date_sort' => optional($paiement->date_paiement)->format('Y-m-d') ?: '1970-01-01',
+                'id_sort' => (int) $paiement->id,
+                'is_avance' => $isAvance,
+                'bordereau_label' => $isAvance ? null : ($paiement->bordereau?->numero),
+                'mode' => $paiement->mode_paiement,
+                'montant' => (float) $paiement->montant,
+                'statut' => 'paye',
+                'statut_label' => 'Payé',
+                'pdf_url' => route('gestionfinanciere.recus.pdf', $paiement->id),
+                'compte_label' => $compte === 'api'
+                    ? 'Caisse Unipalm'
+                    : ($compte === 'local' ? 'Caisse locale' : null),
+            ]);
+        }
+        $historiquePaiements = $historiquePaiements
+            ->sortByDesc(fn ($row) => sprintf('%s-%010d', $row->date_sort, $row->id_sort))
+            ->values();
+
         $montantPaye = $this->montantPayeAgent($id_agent);
         $montantPayeBordereaux = $this->montantPayeBordereauxAgent($id_agent);
         $montantAvances = $this->montantAvancesAgent($id_agent);
@@ -223,6 +272,7 @@ class MontantAgentController extends Controller
             'groupesProduitUsine' => $groupesProduitUsine,
             'bordereaux' => $bordereaux,
             'paiements' => $paiements,
+            'historiquePaiements' => $historiquePaiements,
             'montantDu' => $montantDu,
             'montantDuGlobal' => $montantDuGlobal,
             'montantPaye' => $montantPayeBordereaux,
@@ -318,37 +368,129 @@ class MontantAgentController extends Controller
 
     public function storeAvance(Request $request, int $id_agent)
     {
-        if (!$this->findAgentById($id_agent)) {
+        $agent = $this->findAgentById($id_agent);
+        if (! $agent) {
             return redirect()->route('gestionfinanciere.montant_agent')
                 ->withErrors(['error' => 'Agent non trouvé.']);
         }
 
+        $request->merge([
+            'montant' => preg_replace('/\s+/u', '', (string) $request->input('montant', '')),
+        ]);
+
         $validated = $request->validate([
             'montant' => ['required', 'integer', 'min:1'],
             'date_paiement' => ['required', 'date'],
+            'compte' => ['required', 'in:local,api'],
             'mode_paiement' => ['nullable', 'string', 'max:50'],
             'reference' => ['nullable', 'string', 'max:100'],
             'commentaire' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $paiement = PaiementAgent::create([
-            'id_agent' => $id_agent,
-            'id_bordereau' => null,
-            'montant' => $validated['montant'],
-            'date_paiement' => $validated['date_paiement'],
-            'mode_paiement' => $validated['mode_paiement'] ?? 'Espèces',
-            'reference' => $validated['reference'] ?? null,
-            'commentaire' => $validated['commentaire'] ?? 'Avance',
-        ]);
+        $montant = (int) $validated['montant'];
+        $compte = $validated['compte'];
+        $nomComplet = trim((string) ($agent['nom_complet'] ?? ''));
+        if ($nomComplet === '') {
+            $nomComplet = trim(($agent['nom_agent'] ?? '').' '.($agent['prenom_agent'] ?? ''));
+        }
 
-        app(\App\Services\RecuPaiementService::class)->assignerNumero($paiement);
-        $paiement->refresh();
+        // Compte API : demande envoyée vers Unipalm (onglet Financement).
+        if ($compte === 'api') {
+            \App\Models\DemandeAvance::create([
+                'id_agent' => $id_agent,
+                'agent_nom' => $nomComplet !== '' ? $nomComplet : null,
+                'agent_numero' => $agent['numero_agent'] ?? null,
+                'montant' => $montant,
+                'date_demande' => $validated['date_paiement'],
+                'mode_paiement' => $validated['mode_paiement'] ?? 'Espèces',
+                'reference' => $validated['reference'] ?? null,
+                'commentaire' => $validated['commentaire'] ?? 'Avance',
+                'source' => \App\Models\DemandeAvance::SOURCE_API,
+                'statut' => \App\Models\DemandeAvance::STATUT_EN_ATTENTE,
+            ]);
 
-        $this->financementService->enregistrerFinancementDepuisAvance($paiement);
+            return redirect()
+                ->route('gestionfinanciere.agent.show', ['id_agent' => $id_agent])
+                ->with(
+                    'success',
+                    'Demande d\'avance de '.number_format($montant, 0, ',', ' ')
+                    .' FCFA envoyée vers la caisse Unipalm. Elle apparaîtra dans l\'onglet Financement pour paiement.'
+                );
+        }
+
+        // Compte local : débit immédiat de la caisse locale + enregistrement avance/financement.
+        $soldeCaisse = (int) round($this->caisseService->getSolde());
+        if ($montant > $soldeCaisse) {
+            $message = 'Solde de la caisse locale insuffisant. Disponible : '
+                .number_format($soldeCaisse, 0, ',', ' ').' FCFA.';
+
+            return back()
+                ->withErrors(['montant' => $message])
+                ->with('error', $message)
+                ->withInput();
+        }
+
+        $user = $this->resolveOptionalUser($request);
+
+        try {
+            $paiement = DB::transaction(function () use ($validated, $montant, $id_agent, $user, $nomComplet, $agent) {
+                $paiement = PaiementAgent::create([
+                    'id_agent' => $id_agent,
+                    'id_bordereau' => null,
+                    'montant' => $montant,
+                    'date_paiement' => $validated['date_paiement'],
+                    'mode_paiement' => $validated['mode_paiement'] ?? 'Espèces',
+                    'caisse' => 'local',
+                    'reference' => $validated['reference'] ?? null,
+                    'commentaire' => $validated['commentaire'] ?? 'Avance',
+                ]);
+
+                app(\App\Services\RecuPaiementService::class)->assignerNumero($paiement);
+                $paiement->refresh();
+
+                $this->caisseService->debiter(
+                    $montant,
+                    'Avance agent '.($nomComplet !== '' ? $nomComplet : '#'.$id_agent),
+                    $user,
+                    'Local',
+                );
+
+                $this->financementService->enregistrerFinancementDepuisAvance($paiement);
+
+                \App\Models\DemandeAvance::create([
+                    'id_agent' => $id_agent,
+                    'agent_nom' => $nomComplet !== '' ? $nomComplet : null,
+                    'agent_numero' => $agent['numero_agent'] ?? null,
+                    'montant' => $montant,
+                    'date_demande' => $validated['date_paiement'],
+                    'mode_paiement' => $validated['mode_paiement'] ?? 'Espèces',
+                    'reference' => $validated['reference'] ?? null,
+                    'commentaire' => $validated['commentaire'] ?? 'Avance',
+                    'source' => \App\Models\DemandeAvance::SOURCE_LOCAL,
+                    'statut' => \App\Models\DemandeAvance::STATUT_PAYEE,
+                    'paiement_agent_id' => $paiement->id,
+                    'payee_at' => now(),
+                    'payee_par' => $user
+                        ? trim(($user->name ?? '').' '.($user->prenom ?? ''))
+                        : 'Caisse locale',
+                ]);
+
+                return $paiement;
+            });
+        } catch (\InvalidArgumentException $e) {
+            return back()
+                ->withErrors(['montant' => $e->getMessage()])
+                ->with('error', $e->getMessage())
+                ->withInput();
+        }
 
         return redirect()
             ->route('gestionfinanciere.agent.show', ['id_agent' => $id_agent])
-            ->with('success', 'Avance de ' . number_format($validated['montant'], 0, ',', ' ') . ' FCFA enregistrée.')
+            ->with(
+                'success',
+                'Avance de '.number_format($montant, 0, ',', ' ')
+                .' FCFA enregistrée et débitée de la caisse locale.'
+            )
             ->with('recu_paiement_id', $paiement->id);
     }
 

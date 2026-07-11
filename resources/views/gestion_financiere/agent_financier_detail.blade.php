@@ -336,7 +336,7 @@
         <div class="card">
           <div class="card-header d-flex justify-content-between align-items-center" style="background-color: #d1e7dd; border-bottom: 1px solid #badbcc;">
             <div>
-              <h5 class="card-title mb-0" style="color: #0f5132;"><i class="bx bx-plus-circle me-2"></i>Paiements et avances ({{ $paiements->count() }})</h5>
+              <h5 class="card-title mb-0" style="color: #0f5132;"><i class="bx bx-plus-circle me-2"></i>Paiements et avances ({{ $historiquePaiements->count() }})</h5>
               <small class="text-muted">Paiements sur bordereaux ou avances directes</small>
             </div>
           </div>
@@ -347,45 +347,64 @@
                   <th>Date</th>
                   <th>Bordereau</th>
                   <th>Mode</th>
+                  <th>Statut</th>
                   <th class="text-end">Montant</th>
                   <th class="text-center">Reçu</th>
                 </tr>
               </thead>
               <tbody>
-                @forelse($paiements as $paiement)
+                @forelse($historiquePaiements as $ligne)
                   <tr>
-                    <td>{{ $paiement->date_paiement ? $paiement->date_paiement->format('d/m/Y') : '-' }}</td>
+                    <td>{{ $ligne->date ? $ligne->date->format('d/m/Y') : '-' }}</td>
                     <td>
-                      @if($paiement->bordereau)
-                        <span class="badge bg-label-primary">{{ $paiement->bordereau->numero }}</span>
-                      @else
+                      @if(!empty($ligne->is_avance))
                         <span class="badge bg-label-success">Avance</span>
+                        @if(!empty($ligne->compte_label))
+                          <div class="small text-muted mt-1">{{ $ligne->compte_label }}</div>
+                        @endif
+                      @elseif(!empty($ligne->bordereau_label))
+                        <span class="badge bg-label-primary">{{ $ligne->bordereau_label }}</span>
+                      @else
+                        —
                       @endif
                     </td>
                     <td>
-                      @if($paiement->mode_paiement)
-                        <span class="badge bg-info">{{ $paiement->mode_paiement }}</span>
+                      @if($ligne->mode)
+                        <span class="badge bg-info">{{ $ligne->mode }}</span>
                       @else
                         -
                       @endif
                     </td>
-                    <td class="text-end text-success">{{ number_format($paiement->montant, 0, ',', ' ') }} FCFA</td>
+                    <td>
+                      @if($ligne->statut === 'en_attente')
+                        <span class="badge bg-warning text-dark">En attente de paiement</span>
+                      @else
+                        <span class="badge bg-label-success">Payé</span>
+                      @endif
+                    </td>
+                    <td class="text-end {{ $ligne->statut === 'en_attente' ? 'text-warning' : 'text-success' }}">
+                      {{ number_format($ligne->montant, 0, ',', ' ') }} FCFA
+                    </td>
                     <td class="text-center">
-                      <a href="{{ route('gestionfinanciere.recus.pdf', $paiement->id) }}" target="_blank" class="btn btn-sm btn-outline-danger" title="Reçu PDF">
-                        <i class="bx bx-file"></i>
-                      </a>
+                      @if($ligne->pdf_url)
+                        <a href="{{ $ligne->pdf_url }}" target="_blank" class="btn btn-sm btn-outline-danger" title="Reçu PDF">
+                          <i class="bx bx-file"></i>
+                        </a>
+                      @else
+                        <span class="text-muted">—</span>
+                      @endif
                     </td>
                   </tr>
                 @empty
                   <tr>
-                    <td colspan="5" class="text-center text-muted py-4">Aucun paiement enregistré</td>
+                    <td colspan="6" class="text-center text-muted py-4">Aucun paiement enregistré</td>
                   </tr>
                 @endforelse
               </tbody>
-              @if($paiements->count() > 0)
+              @if($historiquePaiements->count() > 0)
                 <tfoot>
                   <tr class="table-success">
-                    <td colspan="3"><strong>Total</strong></td>
+                    <td colspan="4"><strong>Total payé</strong></td>
                     <td class="text-end"><strong>{{ number_format($montantPayeTotal ?? $montantPaye, 0, ',', ' ') }} FCFA</strong></td>
                     <td></td>
                   </tr>
@@ -415,6 +434,18 @@
           <div class="mb-3">
             <label class="form-label">Montant avance (FCFA) <span class="text-danger">*</span></label>
             <input type="text" name="montant" id="avanceAgentMontant" class="form-control" required placeholder="Ex: 1 000 000" inputmode="numeric" autocomplete="off" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Compte <span class="text-danger">*</span></label>
+            <select name="compte" id="avanceCompte" class="form-select" required>
+              <option value="local">
+                Local — caisse ({{ number_format((int) ($soldeCaisseLocale ?? 0), 0, ',', ' ') }} FCFA)
+              </option>
+              <option value="api">Caisse Unipalm</option>
+            </select>
+            <small class="text-muted" id="avanceCompteHint">
+              Local : débit immédiat de la caisse. Caisse Unipalm : demande envoyée pour paiement côté groupe.
+            </small>
           </div>
           <div class="mb-3">
             <label class="form-label">Date de paiement</label>
