@@ -138,7 +138,7 @@
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-layout" style="color: #7367f0;"></i>
-                <div class="text-truncate" data-i18n="Layouts">Chargement camions</div>
+                <div class="text-truncate" data-i18n="Layouts">Gestion Flotte PGF</div>
               </a>
 
               <ul class="menu-sub">
@@ -170,12 +170,12 @@
               </a>
 
               <ul class="menu-sub" style="list-style: none;">
-                <li class="menu-item" style="list-style: none;">
+              <!--  <li class="menu-item" style="list-style: none;">
                   <a href="{{ route('fiches_sortie.index') }}" class="menu-link">
                     <i class="bx bxs-file me-2"></i>
                     <div class="text-truncate" data-i18n="Weighbridges list">Liste des fiches</div>
                   </a>
-                </li>
+                </li>-->
                 <li class="menu-item" style="list-style: none;">
                   <a href="{{ route('fiches_sortie.dechargees') }}" class="menu-link">
                     <i class="bx bxs-check-circle me-2 text-success"></i>

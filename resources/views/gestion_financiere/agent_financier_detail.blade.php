@@ -434,6 +434,10 @@
           <div class="mb-3">
             <label class="form-label">Montant avance (FCFA) <span class="text-danger">*</span></label>
             <input type="text" name="montant" id="avanceAgentMontant" class="form-control" required placeholder="Ex: 1 000 000" inputmode="numeric" autocomplete="off" />
+            <small class="text-muted" id="avanceMontantHint">
+              Maximum caisse locale : {{ number_format((int) ($soldeCaisseLocale ?? 0), 0, ',', ' ') }} FCFA
+            </small>
+            <div class="text-danger small mt-1 d-none" id="avanceMontantError"></div>
           </div>
           <div class="mb-3">
             <label class="form-label">Compte <span class="text-danger">*</span></label>
@@ -851,11 +855,41 @@
   var inputAvanceMontant = document.getElementById('avanceAgentMontant');
   var btnSubmitAvance = document.getElementById('btnSubmitAvance');
   var formAvanceAgent = document.getElementById('formAvanceAgent');
+  var selectAvanceCompte = document.getElementById('avanceCompte');
+  var avanceMontantError = document.getElementById('avanceMontantError');
+  var avanceMontantHint = document.getElementById('avanceMontantHint');
+
+  function getAvanceMontantDigits() {
+    return parseInt(String(inputAvanceMontant && inputAvanceMontant.value || '').replace(/\D/g, '') || '0', 10);
+  }
 
   function syncAvanceSubmitButton() {
     if (!btnSubmitAvance || !inputAvanceMontant) return;
-    var digits = String(inputAvanceMontant.value || '').replace(/\D/g, '');
-    btnSubmitAvance.disabled = !digits || parseInt(digits, 10) < 1;
+
+    var montant = getAvanceMontantDigits();
+    var compte = selectAvanceCompte ? selectAvanceCompte.value : 'local';
+    var depassementLocal = compte === 'local' && montant > soldeCaisseLocale;
+
+    if (avanceMontantError) {
+      if (depassementLocal) {
+        avanceMontantError.textContent = 'Le montant ne peut pas dépasser le solde de la caisse locale ('
+          + formatNombre(soldeCaisseLocale) + ' FCFA).';
+        avanceMontantError.classList.remove('d-none');
+        inputAvanceMontant.classList.add('is-invalid');
+      } else {
+        avanceMontantError.textContent = '';
+        avanceMontantError.classList.add('d-none');
+        inputAvanceMontant.classList.remove('is-invalid');
+      }
+    }
+
+    if (avanceMontantHint) {
+      avanceMontantHint.textContent = compte === 'local'
+        ? 'Maximum caisse locale : ' + formatNombre(soldeCaisseLocale) + ' FCFA'
+        : 'Caisse Unipalm : pas de plafond local.';
+    }
+
+    btnSubmitAvance.disabled = !montant || montant < 1 || depassementLocal;
   }
 
   if (inputAvanceMontant) {
@@ -870,8 +904,21 @@
     });
   }
 
+  if (selectAvanceCompte) {
+    selectAvanceCompte.addEventListener('change', syncAvanceSubmitButton);
+  }
+
   if (formAvanceAgent) {
-    formAvanceAgent.addEventListener('submit', function() {
+    formAvanceAgent.addEventListener('submit', function(e) {
+      var montant = getAvanceMontantDigits();
+      var compte = selectAvanceCompte ? selectAvanceCompte.value : 'local';
+
+      if (compte === 'local' && montant > soldeCaisseLocale) {
+        e.preventDefault();
+        syncAvanceSubmitButton();
+        return;
+      }
+
       if (inputAvanceMontant) {
         inputAvanceMontant.value = inputAvanceMontant.value.replace(/\s/g, '');
       }
@@ -886,7 +933,14 @@
   if (modalAvanceAgent) {
     modalAvanceAgent.addEventListener('shown.bs.modal', syncAvanceSubmitButton);
     modalAvanceAgent.addEventListener('hidden.bs.modal', function() {
-      if (inputAvanceMontant) inputAvanceMontant.value = '';
+      if (inputAvanceMontant) {
+        inputAvanceMontant.value = '';
+        inputAvanceMontant.classList.remove('is-invalid');
+      }
+      if (avanceMontantError) {
+        avanceMontantError.textContent = '';
+        avanceMontantError.classList.add('d-none');
+      }
       if (btnSubmitAvance) {
         btnSubmitAvance.disabled = true;
         btnSubmitAvance.innerHTML = '<i class="bx bx-save me-1"></i>Enregistrer';
