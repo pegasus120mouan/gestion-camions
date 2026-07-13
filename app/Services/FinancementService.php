@@ -472,6 +472,21 @@ class FinancementService
     }
 
     /**
+     * @param  list<int>  $agentIds
+     * @return array<int, int>
+     */
+    public function soldesFinancementByAgentIds(array $agentIds): array
+    {
+        $stats = $this->financementStatsForAgentIds($agentIds, []);
+        $soldes = [];
+        foreach ($stats as $id => $row) {
+            $soldes[(int) $id] = (int) round($row['solde'] ?? 0);
+        }
+
+        return $soldes;
+    }
+
+    /**
      * @param  array<string, mixed>  $filters
      * @return list<array{id_agent: int, nom_complet: string, numero_agent: string|null}>
      */

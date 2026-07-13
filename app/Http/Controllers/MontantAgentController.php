@@ -54,6 +54,12 @@ class MontantAgentController extends Controller
             ]);
         }
 
+        $agentIds = array_values(array_filter(array_map(
+            static fn (array $agent): int => (int) ($agent['id_agent'] ?? 0),
+            $agents
+        )));
+        $soldesFinancement = $this->financementService->soldesFinancementByAgentIds($agentIds);
+
         foreach ($agents as $agent) {
             $idAgent = (int) ($agent['id_agent'] ?? 0);
             if ($idAgent <= 0) {
@@ -70,13 +76,20 @@ class MontantAgentController extends Controller
                 continue;
             }
 
+            $montantFinancement = (int) ($soldesFinancement[$idAgent] ?? 0);
+
             $data[] = [
                 'agent' => $agent,
                 'montant_du' => $montantDu,
                 'montant_du_global' => $montantDuGlobal,
                 'montant_paye' => $this->montantPayeBordereauxAgent($idAgent),
                 'montant_avances' => $this->montantAvancesAgent($idAgent),
-                'reste_a_payer' => $this->resteAPayerAgent($idAgent, $montantDuGlobal),
+                'montant_financement' => $montantFinancement,
+                'reste_a_payer' => $this->resteAPayerAgent(
+                    $idAgent,
+                    $montantDuGlobal,
+                    $montantFinancement
+                ),
             ];
         }
 
@@ -244,9 +257,9 @@ class MontantAgentController extends Controller
         $montantPaye = $this->montantPayeAgent($id_agent);
         $montantPayeBordereaux = $this->montantPayeBordereauxAgent($id_agent);
         $montantAvances = $this->montantAvancesAgent($id_agent);
-        $resteAPayer = $this->resteAPayerAgent($id_agent, $montantDuGlobal);
         $statsFinancement = $this->financementService->statsForAgent($id_agent);
         $montantFinancement = (int) round($statsFinancement['solde_financement'] ?? 0);
+        $resteAPayer = $this->resteAPayerAgent($id_agent, $montantDuGlobal, $montantFinancement);
         $soldeCaisseLocale = (int) round($this->caisseService->getSolde());
 
         $fichesAvecMontant = $this->reporting->fichesAvecMontant($filtres);
@@ -314,12 +327,16 @@ class MontantAgentController extends Controller
     }
 
     /**
-     * Reste dû : dette tickets/bordereaux moins paiements bordereaux uniquement.
-     * Les avances sont un financement distinct (utilisé pour régler les bordereaux).
+     * Reste dû : montant dû − paiements bordereaux − solde financement.
      */
-    private function resteAPayerAgent(int $idAgent, int $montantDuGlobal): int
+    private function resteAPayerAgent(int $idAgent, int $montantDuGlobal, ?int $montantFinancement = null): int
     {
-        return max(0, $montantDuGlobal - $this->montantPayeBordereauxAgent($idAgent));
+        $financement = $montantFinancement
+            ?? (int) round($this->financementService->soldeFinancementAgent($idAgent));
+
+        return $montantDuGlobal
+            - $this->montantPayeBordereauxAgent($idAgent)
+            - max(0, $financement);
     }
 
     public function updateProduitTicket(Request $request, int $id_agent, int $id_ticket)

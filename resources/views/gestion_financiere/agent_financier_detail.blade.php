@@ -106,7 +106,7 @@
           <div class="card-body">
             <h6 class="card-title" style="color: #664d03;">Reste à payer</h6>
             <h3 class="mb-0" style="color: #664d03;">{{ number_format($resteAPayer, 0, ',', ' ') }} FCFA</h3>
-            <small class="text-muted">Montant dû − montant payé (bordereaux)</small>
+            <small class="text-muted">Montant dû − montant payé (bordereaux) − financement</small>
           </div>
         </div>
       </div>
