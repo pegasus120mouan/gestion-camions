@@ -161,13 +161,24 @@ class AgentController extends Controller
         $page = max(1, (int) $request->query('page', 1));
         $search = trim((string) $request->query('search', ''));
         $idChef = (int) $request->query('id_chef', 0);
+        $sousGroupe = strtolower(trim((string) $request->query('sous_groupe', '')));
+        if (! in_array($sousGroupe, ['particulier', 'professionnel'], true)) {
+            $sousGroupe = '';
+        }
 
         $result = $this->mesAgentsService->listAgents([
             'token' => $token,
             'id_chef' => $idChef,
             'search' => $search,
+            'sous_groupe' => $sousGroupe,
             'page' => $page,
         ]);
+
+        $titre = match ($sousGroupe) {
+            'particulier' => 'Pisteurs particuliers',
+            'professionnel' => 'Pisteurs professionnels',
+            default => 'Liste des agents',
+        };
 
         return view('agents.index', [
             'agents' => $result['agents'],
@@ -176,6 +187,8 @@ class AgentController extends Controller
             'external_error' => $result['error'],
             'chefToken' => $token,
             'chefActif' => $chef,
+            'sousGroupe' => $sousGroupe,
+            'titre' => $titre,
         ]);
     }
 

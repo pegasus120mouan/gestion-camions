@@ -19,7 +19,7 @@ class MesAgentsService
     }
 
     /**
-     * @param  array{token?: string, id_chef?: int, search?: string, page?: int, per_page?: int}  $params
+     * @param  array{token?: string, id_chef?: int, search?: string, sous_groupe?: string, page?: int, per_page?: int}  $params
      * @return array{agents: list<array<string, mixed>>, pagination: array<string, int>|null, chefs: list<array<string, mixed>>, error: string|null}
      */
     public function listAgents(array $params = [], ?Request $request = null): array
@@ -29,6 +29,7 @@ class MesAgentsService
         $token = trim((string) ($params['token'] ?? ''));
         $idChef = (int) ($params['id_chef'] ?? 0);
         $search = trim((string) ($params['search'] ?? ''));
+        $sousGroupe = $this->normalizeSousGroupe((string) ($params['sous_groupe'] ?? ''));
         $page = max(1, (int) ($params['page'] ?? 1));
         $perPage = max(1, min(100, (int) ($params['per_page'] ?? 15)));
 
@@ -42,12 +43,18 @@ class MesAgentsService
             return $this->emptyResult('Le paramètre token ou id_chef est requis.');
         }
 
-        if ($this->databaseResolver->usesApi()) {
-            return $this->fetchFromExternalApi($token, $idChef, $search, $page, $perPage);
+        // Filtre sous-groupe : lecture Unipalm locale (même en mode API).
+        $dbConnection = $this->databaseResolver->connection();
+        if ($sousGroupe !== '' && $dbConnection === null) {
+            $dbConnection = $this->databaseResolver->connectionForAuth();
         }
 
-        if ($this->databaseResolver->connection() !== null) {
-            return $this->fetchFromDatabase($token, $idChef, $search, $page, $perPage);
+        if ($dbConnection !== null && (! $this->databaseResolver->usesApi() || $sousGroupe !== '')) {
+            return $this->fetchFromDatabase($token, $idChef, $search, $page, $perPage, $sousGroupe, $dbConnection);
+        }
+
+        if ($this->databaseResolver->usesApi()) {
+            return $this->fetchFromExternalApi($token, $idChef, $search, $page, $perPage);
         }
 
         if ($this->databaseResolver->usesDatabaseOnly()) {
@@ -55,6 +62,17 @@ class MesAgentsService
         }
 
         return $this->fetchFromExternalApi($token, $idChef, $search, $page, $perPage);
+    }
+
+    private function normalizeSousGroupe(string $value): string
+    {
+        $value = strtolower(trim($value));
+
+        return match ($value) {
+            'particulier', 'particuliers' => 'particulier',
+            'professionnel', 'professionnels' => 'professionnel',
+            default => '',
+        };
     }
 
     /**
@@ -191,14 +209,91 @@ class MesAgentsService
         return $this->databaseResolver->listChefsEquipe();
     }
 
+    /**
+     * @return array{total: int, particuliers: int, professionnels: int}
+     */
+    public function countBySousGroupe(?Request $request = null): array
+    {
+        $request ??= request();
+        $empty = ['total' => 0, 'particuliers' => 0, 'professionnels' => 0];
+
+        $token = $this->chefContext->resolveToken($request);
+        $idChef = (int) ($this->chefContext->apiQueryParams($request)['id_chef'] ?? 0);
+
+        $connection = $this->databaseResolver->connection()
+            ?? $this->databaseResolver->connectionForAuth();
+
+        if ($connection === null) {
+            return $empty;
+        }
+
+        if ($token === '' && $idChef <= 0) {
+            return $empty;
+        }
+
+        try {
+            $bindings = [];
+            $where = ['a.date_suppression IS NULL'];
+
+            if ($token !== '') {
+                $where[] = 'ce.token = ?';
+                $bindings[] = $token;
+            } else {
+                $where[] = 'a.id_chef = ?';
+                $bindings[] = $idChef;
+            }
+
+            $whereSql = implode(' AND ', $where);
+            $hasSousGroupe = \Illuminate\Support\Facades\Schema::connection($connection)
+                ->hasColumn('agents', 'sous_groupe');
+
+            if (! $hasSousGroupe) {
+                $countRow = DB::connection($connection)->selectOne(
+                    "SELECT COUNT(*) AS total
+                    FROM agents a
+                    INNER JOIN chef_equipe ce ON ce.id_chef = a.id_chef
+                    WHERE {$whereSql}",
+                    $bindings
+                );
+
+                return [
+                    'total' => (int) ($countRow->total ?? 0),
+                    'particuliers' => 0,
+                    'professionnels' => 0,
+                ];
+            }
+
+            $row = DB::connection($connection)->selectOne(
+                "SELECT
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN LOWER(TRIM(COALESCE(a.sous_groupe, ''))) IN ('particulier', 'particuliers') THEN 1 ELSE 0 END) AS particuliers,
+                    SUM(CASE WHEN LOWER(TRIM(COALESCE(a.sous_groupe, ''))) IN ('professionnel', 'professionnels') THEN 1 ELSE 0 END) AS professionnels
+                FROM agents a
+                INNER JOIN chef_equipe ce ON ce.id_chef = a.id_chef
+                WHERE {$whereSql}",
+                $bindings
+            );
+
+            return [
+                'total' => (int) ($row->total ?? 0),
+                'particuliers' => (int) ($row->particuliers ?? 0),
+                'professionnels' => (int) ($row->professionnels ?? 0),
+            ];
+        } catch (\Throwable $e) {
+            return $empty;
+        }
+    }
+
     private function fetchFromDatabase(
         string $token,
         int $idChef,
         string $search,
         int $page,
-        int $perPage
+        int $perPage,
+        string $sousGroupe = '',
+        ?string $connection = null
     ): array {
-        $connection = $this->databaseResolver->connection();
+        $connection ??= $this->databaseResolver->connection();
         if ($connection === null) {
             return $this->emptyResult('Connexion base camions non configurée.');
         }
@@ -223,6 +318,19 @@ class MesAgentsService
                 $term = '%' . $search . '%';
                 $where[] = '(a.nom LIKE ? OR a.prenom LIKE ? OR a.numero_agent LIKE ? OR CONCAT(a.nom, \' \', a.prenom) LIKE ?)';
                 array_push($bindings, $term, $term, $term, $term);
+            }
+
+            if ($sousGroupe !== '') {
+                $hasSousGroupe = \Illuminate\Support\Facades\Schema::connection($connection)
+                    ->hasColumn('agents', 'sous_groupe');
+
+                if ($hasSousGroupe) {
+                    if ($sousGroupe === 'particulier') {
+                        $where[] = "LOWER(TRIM(COALESCE(a.sous_groupe, ''))) IN ('particulier', 'particuliers')";
+                    } else {
+                        $where[] = "LOWER(TRIM(COALESCE(a.sous_groupe, ''))) IN ('professionnel', 'professionnels')";
+                    }
+                }
             }
 
             $whereSql = implode(' AND ', $where);

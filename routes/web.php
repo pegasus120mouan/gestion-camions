@@ -174,6 +174,13 @@ Route::middleware('auth')->group(function () {
             $nombreTicketsEnAttente = 0;
         }
 
+        $agentsCounts = ['total' => 0, 'particuliers' => 0, 'professionnels' => 0];
+        try {
+            $agentsCounts = app(\App\Services\MesAgentsService::class)->countBySousGroupe(request());
+        } catch (\Throwable $e) {
+            $agentsCounts = ['total' => 0, 'particuliers' => 0, 'professionnels' => 0];
+        }
+
         return view('dashboard', [
             'soldeChef' => $soldeChef,
             'soldeChefError' => $soldeChefError,
@@ -181,6 +188,7 @@ Route::middleware('auth')->group(function () {
             'totalDepenses' => $totalDepenses,
             'nombreTickets' => $nombreTickets,
             'nombreTicketsEnAttente' => $nombreTicketsEnAttente,
+            'agentsCounts' => $agentsCounts,
             'stocksParPont' => $stocksParPont,
             'totalStockEntrees' => $totalStockEntrees,
             'totalStockSorties' => $totalStockSorties,

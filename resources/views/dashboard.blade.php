@@ -15,10 +15,28 @@
                             @if(!empty($soldeChef['nom']))
                               <p class="text-muted small mb-3">{{ trim($soldeChef['nom'] . ' ' . $soldeChef['prenoms']) }}</p>
                             @endif
-                            <h2 class="mb-4 {{ ($soldeChef['reste_a_payer'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
+                            <h2 class="mb-2 {{ ($soldeChef['reste_a_payer'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
                               {{ number_format($soldeChef['reste_a_payer'], 0, ',', ' ') }} FCFA
                             </h2>
-                            <p class="text-muted small mb-0">Reste à payer (votre solde disponible)</p>
+                            <p class="text-muted small mb-3">Reste à payer (votre solde disponible)</p>
+                            <div class="row g-2">
+                              <div class="col-sm-6">
+                                <div class="border rounded p-2 bg-label-secondary">
+                                  <div class="text-muted small">Particuliers</div>
+                                  <div class="fw-bold {{ ($soldeChef['reste_particuliers'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
+                                    {{ number_format($soldeChef['reste_particuliers'] ?? 0, 0, ',', ' ') }} FCFA
+                                  </div>
+                                </div>
+                              </div>
+                              <div class="col-sm-6">
+                                <div class="border rounded p-2 bg-label-secondary">
+                                  <div class="text-muted small">Professionnels</div>
+                                  <div class="fw-bold {{ ($soldeChef['reste_professionnels'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
+                                    {{ number_format($soldeChef['reste_professionnels'] ?? 0, 0, ',', ' ') }} FCFA
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
                           @elseif(!empty($soldeChefError))
                             <h5 class="card-title text-warning mb-3">Solde chef d'équipe</h5>
                             <p class="mb-4 text-muted">{{ $soldeChefError }}</p>
@@ -326,101 +344,60 @@
                 </div>
               </div>
               <div class="row">
-                <!-- Order Statistics -->
+                <!-- Agents Statistics -->
                 <div class="col-md-6 col-lg-4 col-xl-4 order-0 mb-6">
                   <div class="card h-100">
                     <div class="card-header d-flex justify-content-between">
                       <div class="card-title mb-0">
-                        <h5 class="mb-1 me-2">Order Statistics</h5>
-                        <p class="card-subtitle">42.82k Total Sales</p>
+                        <h5 class="mb-1 me-2">Statistiques agents</h5>
+                        <p class="card-subtitle">Répartition par sous-groupe</p>
                       </div>
-                      <div class="dropdown">
-                        <button
-                          class="btn text-body-secondary p-0"
-                          type="button"
-                          id="orederStatistics"
-                          data-bs-toggle="dropdown"
-                          aria-haspopup="true"
-                          aria-expanded="false">
-                          <i class="icon-base bx bx-dots-vertical-rounded icon-lg"></i>
-                        </button>
-                        <div class="dropdown-menu dropdown-menu-end" aria-labelledby="orederStatistics">
-                          <a class="dropdown-item" href="javascript:void(0);">Select All</a>
-                          <a class="dropdown-item" href="javascript:void(0);">Refresh</a>
-                          <a class="dropdown-item" href="javascript:void(0);">Share</a>
-                        </div>
-                      </div>
+                      <a href="{{ route('agents.index') }}" class="btn btn-sm btn-outline-primary">
+                        Voir tout
+                      </a>
                     </div>
                     <div class="card-body">
                       <div class="d-flex justify-content-between align-items-center mb-6">
-                        <div class="d-flex flex-column align-items-center gap-1">
-                          <h3 class="mb-1">8,258</h3>
-                          <small>Total Orders</small>
+                        <div class="d-flex flex-column align-items-start gap-1">
+                          <h3 class="mb-1">{{ number_format($agentsCounts['total'] ?? 0, 0, ',', ' ') }}</h3>
+                          <small>Total agents</small>
                         </div>
-                        <div id="orderStatisticsChart"></div>
+                        <div class="avatar">
+                          <span class="avatar-initial rounded bg-label-primary">
+                            <i class="bx bx-group bx-lg"></i>
+                          </span>
+                        </div>
                       </div>
                       <ul class="p-0 m-0">
                         <li class="d-flex align-items-center mb-5">
                           <div class="avatar flex-shrink-0 me-3">
-                            <span class="avatar-initial rounded bg-label-primary"
-                              ><i class="icon-base bx bx-mobile-alt"></i
-                            ></span>
+                            <span class="avatar-initial rounded bg-label-info">
+                              <i class="bx bx-user"></i>
+                            </span>
                           </div>
                           <div class="d-flex w-100 flex-wrap align-items-center justify-content-between gap-2">
                             <div class="me-2">
-                              <h6 class="mb-0">Electronic</h6>
-                              <small>Mobile, Earbuds, TV</small>
+                              <h6 class="mb-0">Particuliers</h6>
+                              <small>Sous-groupe particuliers</small>
                             </div>
                             <div class="user-progress">
-                              <h6 class="mb-0">82.5k</h6>
-                            </div>
-                          </div>
-                        </li>
-                        <li class="d-flex align-items-center mb-5">
-                          <div class="avatar flex-shrink-0 me-3">
-                            <span class="avatar-initial rounded bg-label-success"
-                              ><i class="icon-base bx bx-closet"></i
-                            ></span>
-                          </div>
-                          <div class="d-flex w-100 flex-wrap align-items-center justify-content-between gap-2">
-                            <div class="me-2">
-                              <h6 class="mb-0">Fashion</h6>
-                              <small>T-shirt, Jeans, Shoes</small>
-                            </div>
-                            <div class="user-progress">
-                              <h6 class="mb-0">23.8k</h6>
-                            </div>
-                          </div>
-                        </li>
-                        <li class="d-flex align-items-center mb-5">
-                          <div class="avatar flex-shrink-0 me-3">
-                            <span class="avatar-initial rounded bg-label-info"
-                              ><i class="icon-base bx bx-home-alt"></i
-                            ></span>
-                          </div>
-                          <div class="d-flex w-100 flex-wrap align-items-center justify-content-between gap-2">
-                            <div class="me-2">
-                              <h6 class="mb-0">Decor</h6>
-                              <small>Fine Art, Dining</small>
-                            </div>
-                            <div class="user-progress">
-                              <h6 class="mb-0">849k</h6>
+                              <h6 class="mb-0">{{ number_format($agentsCounts['particuliers'] ?? 0, 0, ',', ' ') }}</h6>
                             </div>
                           </div>
                         </li>
                         <li class="d-flex align-items-center">
                           <div class="avatar flex-shrink-0 me-3">
-                            <span class="avatar-initial rounded bg-label-secondary"
-                              ><i class="icon-base bx bx-football"></i
-                            ></span>
+                            <span class="avatar-initial rounded bg-label-primary">
+                              <i class="bx bx-briefcase"></i>
+                            </span>
                           </div>
                           <div class="d-flex w-100 flex-wrap align-items-center justify-content-between gap-2">
                             <div class="me-2">
-                              <h6 class="mb-0">Sports</h6>
-                              <small>Football, Cricket Kit</small>
+                              <h6 class="mb-0">Professionnels</h6>
+                              <small>Sous-groupe professionnels</small>
                             </div>
                             <div class="user-progress">
-                              <h6 class="mb-0">99</h6>
+                              <h6 class="mb-0">{{ number_format($agentsCounts['professionnels'] ?? 0, 0, ',', ' ') }}</h6>
                             </div>
                           </div>
                         </li>
@@ -428,7 +405,7 @@
                     </div>
                   </div>
                 </div>
-                <!--/ Order Statistics -->
+                <!--/ Agents Statistics -->
 
                 <!-- Expense Overview -->
                 <div class="col-md-6 col-lg-4 order-1 mb-6">

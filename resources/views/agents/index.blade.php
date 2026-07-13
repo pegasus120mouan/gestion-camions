@@ -3,7 +3,7 @@
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h4 class="mb-0">Liste des agents</h4>
+      <h4 class="mb-0">{{ $titre ?? 'Liste des agents' }}</h4>
       @if(!empty($chefToken))
         <span class="badge bg-label-primary">
           Chef : {{ $chefActif['nom_complet'] ?? $chefToken }}
@@ -15,6 +15,9 @@
     <div class="card mb-4">
       <div class="card-body">
         <form method="GET" action="{{ route('agents.index') }}" class="row g-3">
+          @if(!empty($sousGroupe))
+            <input type="hidden" name="sous_groupe" value="{{ $sousGroupe }}">
+          @endif
           <div class="col-md-4">
             <label class="form-label">Rechercher</label>
             <input type="text" name="search" class="form-control" placeholder="Nom, prenom, numero..." value="{{ request('search') }}" />
@@ -32,7 +35,7 @@
           </div>
           <div class="col-md-4 d-flex align-items-end">
             <button type="submit" class="btn btn-primary me-2">Rechercher</button>
-            <a href="{{ route('agents.index') }}" class="btn btn-outline-secondary">Reinitialiser</a>
+            <a href="{{ route('agents.index', array_filter(['sous_groupe' => $sousGroupe ?? null])) }}" class="btn btn-outline-secondary">Reinitialiser</a>
           </div>
         </form>
       </div>

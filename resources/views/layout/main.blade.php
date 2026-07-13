@@ -454,12 +454,32 @@
             <li class="menu-header small text-uppercase">
               <span class="menu-header-text">Gestions</span>
             </li>
-           <li class="menu-item">
-              <a href="{{ route('agents.index') }}" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-user" style="color: #7367f0;"></i>
-                <div class="text-truncate" data-i18n="Agents">Gestion Pisteurs</div>
+
+
+
+            <li class="menu-item {{ request()->routeIs('agents.index') && in_array(request('sous_groupe'), ['professionnel', 'particulier'], true) ? 'open active' : '' }}">
+              <a href="javascript:void(0);" class="menu-link menu-toggle">
+                <i class="menu-icon tf-icons bx bx-lock-open-alt" style="color: #7367f0;"></i>
+                <div class="text-truncate" data-i18n="Authentications">Gestion des Pisteurs</div>
               </a>
+              <ul class="menu-sub">
+                <li class="menu-item {{ request()->routeIs('agents.index') && request('sous_groupe') === 'professionnel' ? 'active' : '' }}">
+                  <a href="{{ route('agents.index', ['sous_groupe' => 'professionnel']) }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Basic">Professionnels</div>
+                  </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('agents.index') && request('sous_groupe') === 'particulier' ? 'active' : '' }}">
+                  <a href="{{ route('agents.index', ['sous_groupe' => 'particulier']) }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Basic">Particuliers</div>
+                  </a>
+                </li>
+              </ul>
             </li>
+
+
+
+
+
             <li class="menu-item">
               <a href="{{ route('chef_chargeurs.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-user-check" style="color: #00cfe8;"></i>
