@@ -144,7 +144,7 @@
                 <td class="text-end {{ $financement->isAdvance() ? 'text-success' : 'text-danger' }} fw-bold">
                   {{ $financement->isAdvance() ? '+' : '' }}{{ number_format((float) $financement->montant, 0, ',', ' ') }} FCFA
                 </td>
-                <td>{{ $financement->motif }}</td>
+                <td>{{ $financement->motif_affiche }}</td>
               </tr>
             @empty
               <tr>

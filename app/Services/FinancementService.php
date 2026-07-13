@@ -161,6 +161,7 @@ class FinancementService
                 'id_agent' => $id,
                 'montant' => $row->montant,
                 'motif' => $row->motif,
+                'motif_affiche' => Financement::formatMotifAffiche($row->motif ?? null),
                 'date_financement' => $row->date_financement,
                 'nom_agent' => $agent['nom_complet'] ?? ('Agent #' . $id),
             ];

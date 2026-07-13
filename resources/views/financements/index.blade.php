@@ -167,7 +167,7 @@
                       <td class="text-end {{ (float) $financement->montant > 0 ? 'text-success' : 'text-danger' }}">
                         {{ number_format((float) $financement->montant, 0, ',', ' ') }} FCFA
                       </td>
-                      <td>{{ $financement->motif }}</td>
+                      <td>{{ $financement->motif_affiche }}</td>
                     </tr>
                   @empty
                     <tr>
