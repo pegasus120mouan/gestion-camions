@@ -69,9 +69,27 @@
               <p class="text-muted mb-2">{{ trim(($solde['nom'] ?? '') . ' ' . ($solde['prenoms'] ?? '')) }}</p>
               @endif
               <p class="text-muted small mb-2">Reste à payer</p>
-              <h2 class="mb-0 {{ ($solde['reste_a_payer'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
+              <h2 class="mb-3 {{ ($solde['reste_a_payer'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
                 {{ number_format($solde['reste_a_payer'], 0, ',', ' ') }} FCFA
               </h2>
+              <div class="row g-2">
+                <div class="col-sm-6">
+                  <div class="border rounded p-3 bg-light">
+                    <div class="text-muted small">Particuliers</div>
+                    <div class="fw-bold {{ ($solde['reste_particuliers'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
+                      {{ number_format($solde['reste_particuliers'] ?? 0, 0, ',', ' ') }} FCFA
+                    </div>
+                  </div>
+                </div>
+                <div class="col-sm-6">
+                  <div class="border rounded p-3 bg-light">
+                    <div class="text-muted small">Professionnels</div>
+                    <div class="fw-bold {{ ($solde['reste_professionnels'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
+                      {{ number_format($solde['reste_professionnels'] ?? 0, 0, ',', ' ') }} FCFA
+                    </div>
+                  </div>
+                </div>
+              </div>
             @else
               <p class="text-muted mb-0">Saisissez un token et cliquez sur « Enregistrer et consulter ».</p>
             @endif

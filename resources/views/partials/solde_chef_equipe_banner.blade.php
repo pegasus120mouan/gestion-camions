@@ -18,9 +18,25 @@
         </div>
 
         @if(!empty($soldeChef))
-          <h4 class="mb-0 {{ ($soldeChef['reste_a_payer'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
-            {{ number_format($soldeChef['reste_a_payer'], 0, ',', ' ') }} FCFA
-          </h4>
+          <div class="text-end">
+            <h4 class="mb-1 {{ ($soldeChef['reste_a_payer'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
+              {{ number_format($soldeChef['reste_a_payer'], 0, ',', ' ') }} FCFA
+            </h4>
+            <div class="d-flex flex-wrap justify-content-end gap-3 small">
+              <span>
+                Particuliers :
+                <strong class="{{ ($soldeChef['reste_particuliers'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
+                  {{ number_format($soldeChef['reste_particuliers'] ?? 0, 0, ',', ' ') }} FCFA
+                </strong>
+              </span>
+              <span>
+                Professionnels :
+                <strong class="{{ ($soldeChef['reste_professionnels'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
+                  {{ number_format($soldeChef['reste_professionnels'] ?? 0, 0, ',', ' ') }} FCFA
+                </strong>
+              </span>
+            </div>
+          </div>
         @elseif(!empty($soldeChefToken))
           <span class="text-warning small"><i class="bx bx-error-circle me-1"></i>Solde indisponible</span>
         @else

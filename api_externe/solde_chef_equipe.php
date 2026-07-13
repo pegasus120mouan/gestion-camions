@@ -44,7 +44,13 @@ try {
         ce.token,
         COALESCE(SUM(t.montant_paie), 0) AS total_montant,
         COALESCE(SUM(t.montant_payer), 0) AS montant_paye,
-        COALESCE(SUM(t.montant_paie), 0) - COALESCE(SUM(t.montant_payer), 0) AS reste_a_payer
+        COALESCE(SUM(t.montant_paie), 0) - COALESCE(SUM(t.montant_payer), 0) AS reste_a_payer,
+        COALESCE(SUM(CASE WHEN a.sous_groupe = \'particulier\' THEN t.montant_paie ELSE 0 END), 0)
+            - COALESCE(SUM(CASE WHEN a.sous_groupe = \'particulier\' THEN COALESCE(t.montant_payer, 0) ELSE 0 END), 0)
+            AS reste_particuliers,
+        COALESCE(SUM(CASE WHEN a.sous_groupe = \'professionnel\' THEN t.montant_paie ELSE 0 END), 0)
+            - COALESCE(SUM(CASE WHEN a.sous_groupe = \'professionnel\' THEN COALESCE(t.montant_payer, 0) ELSE 0 END), 0)
+            AS reste_professionnels
     FROM chef_equipe ce
     LEFT JOIN agents a ON a.id_chef = ce.id_chef AND a.date_suppression IS NULL
     LEFT JOIN tickets t ON t.id_agent = a.id_agent AND t.montant_paie IS NOT NULL
@@ -69,6 +75,8 @@ try {
             'total_montant' => (float) $solde['total_montant'],
             'montant_paye' => (float) $solde['montant_paye'],
             'reste_a_payer' => (float) $solde['reste_a_payer'],
+            'reste_particuliers' => (float) $solde['reste_particuliers'],
+            'reste_professionnels' => (float) $solde['reste_professionnels'],
         ],
     ]);
 } catch (Throwable $e) {
