@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\BordereauAgent;
+use App\Models\DemandeAvance;
 use App\Models\Financement;
 use App\Models\PaiementAgent;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -339,12 +340,23 @@ class FinancementService
             return null;
         }
 
+        // Déjà crédité côté Unipalm lors du paiement d'une demande d'avance API.
+        $paiementId = (int) $paiement->id;
+        if (
+            DemandeAvance::query()
+                ->where('paiement_agent_id', $paiementId)
+                ->where('source', DemandeAvance::SOURCE_API)
+                ->exists()
+        ) {
+            return null;
+        }
+
         $connection = $this->financementConnection();
         if ($connection === null || ! $this->hasFinancementOnConnection($connection)) {
             return null;
         }
 
-        $ref = $this->referenceAvancePaiement((int) $paiement->id);
+        $ref = $this->referenceAvancePaiement($paiementId);
         $exists = Financement::on($connection)
             ->where('id_agent', (int) $paiement->id_agent)
             ->where('motif', 'like', '%' . $ref . '%')
