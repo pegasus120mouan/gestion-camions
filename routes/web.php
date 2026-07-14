@@ -219,6 +219,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/vehicules/{vehicule_id}/etat', [CamionController::class, 'updateVehiculeEtat'])->name('vehicules.etat.update');
     Route::get('/camions-pgf', [CamionController::class, 'camionsPgf'])->name('camions.camions_pgf');
     Route::get('/camions-pgf/ajouter', [CamionController::class, 'ajouterCamionsPgf'])->name('camions.camions_pgf.ajouter');
+    Route::get('/camions-pgf/activites', [TicketController::class, 'index'])->name('camions.activites');
     Route::post('/camions/assigner-groupe', [CamionController::class, 'assignerGroupe'])->name('camions.assigner_groupe');
     Route::post('/camions/assigner-groupe-bulk', [CamionController::class, 'assignerGroupeBulk'])->name('camions.assigner_groupe_bulk');
     Route::delete('/camions/{vehicule_id}/retirer-groupe', [CamionController::class, 'retirerGroupe'])->name('camions.retirer_groupe');
@@ -259,6 +260,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/tickets/associer-fiche', [TicketController::class, 'associerFiche'])->name('tickets.associer_fiche');
     Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
     Route::put('/tickets/{id}', [TicketController::class, 'update'])->name('tickets.update');
+    Route::post('/tickets/{id}/prix-unitaire', [TicketController::class, 'updatePrixUnitaire'])->name('tickets.prix_unitaire');
+    Route::post('/tickets/{id}/payer', [TicketController::class, 'marquerPaye'])->name('tickets.payer');
     Route::delete('/tickets/{id}', [TicketController::class, 'destroy'])->name('tickets.destroy');
     Route::post('/tickets/{id}/valider', [TicketController::class, 'valider'])->name('tickets.valider');
     Route::post('/tickets/{id}/confirm-unipalm', [TicketController::class, 'confirmUnipalm'])->name('tickets.confirm_unipalm');

@@ -1,5 +1,5 @@
 @extends('layout.main')
-@section('title', 'Tickets')
+@section('title', !empty($onlyCamionsPgf) ? 'Activités camions PGF' : 'Tickets')
 
 @section('page-styles')
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
@@ -8,17 +8,73 @@
   .select2-container--bootstrap-5 .select2-selection {
     min-height: 38px;
   }
+  .table-activites-pgf {
+    font-size: 0.8125rem;
+  }
+  .table-activites-pgf th {
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+  }
+  .table-activites-pgf .form-control-sm {
+    font-size: 0.8125rem;
+    padding-top: 0.2rem;
+    padding-bottom: 0.2rem;
+  }
+  .table-activites-pgf .btn-attente-prix {
+    color: #dc3545;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    padding: 0.15rem 0.5rem;
+    border: 1px solid rgba(220, 53, 69, 0.35);
+    background: #fff;
+  }
+  .table-activites-pgf .btn-attente-prix:hover {
+    color: #fff;
+    background: #dc3545;
+    border-color: #dc3545;
+  }
+  .table-activites-pgf .btn-prix-saisi {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+  }
+  .table-activites-pgf .badge-statut-pgf {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+  }
 </style>
 @endsection
 
 @section('content')
+@php
+  $ticketsIndexRoute = $ticketsIndexRoute ?? 'tickets.index';
+  $ticketsQueryBase = !empty($onlyCamionsPgf)
+    ? request()->only(['vehicule', 'agent', 'statut', 'date_debut', 'date_fin'])
+    : request()->only(['vehicule', 'usine', 'agent', 'statut']);
+@endphp
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h4 class="mb-0">{{ !empty($enAttenteOnly) ? 'Mes tickets en attente' : 'Mes Tickets' }}</h4>
+      <div>
+        <h4 class="mb-0">
+          @if (!empty($onlyCamionsPgf))
+            Activités camions PGF
+          @elseif (!empty($enAttenteOnly))
+            Mes tickets en attente
+          @else
+            Mes Tickets
+          @endif
+        </h4>
+        @if (!empty($onlyCamionsPgf))
+          <small class="text-muted">Tickets liés aux véhicules du groupe PGF</small>
+        @endif
+      </div>
+      @if (empty($onlyCamionsPgf))
       <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAddTicket">
         <i class="bx bx-plus me-1"></i>Ajouter un ticket
       </button>
+      @endif
     </div>
 
     @if(session('success'))
@@ -46,9 +102,91 @@
       </div>
     @endif
 
+    @if (!empty($onlyCamionsPgf))
+    @php
+      $filtreActif = collect(['vehicule', 'agent', 'statut', 'date_debut', 'date_fin'])
+        ->contains(fn ($key) => filled(request($key)));
+    @endphp
+    <div class="card mb-4 border-0 shadow-sm">
+      <div class="card-header bg-transparent border-bottom py-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div class="d-flex align-items-center gap-2">
+            <span class="avatar avatar-sm rounded bg-label-primary">
+              <i class="bx bx-filter-alt"></i>
+            </span>
+            <div>
+              <h6 class="mb-0">Filtres de recherche</h6>
+              <small class="text-muted">Période, véhicule, agent et statut de paiement</small>
+            </div>
+          </div>
+          @if ($filtreActif)
+            <span class="badge bg-label-primary">Filtres actifs</span>
+          @endif
+        </div>
+      </div>
+      <div class="card-body">
+        <form method="GET" action="{{ route($ticketsIndexRoute) }}" class="row g-3 align-items-end">
+          <div class="col-md-3 col-lg-2">
+            <label class="form-label small text-uppercase text-muted mb-1" for="filtre_date_debut">Du</label>
+            <div class="input-group input-group-merge">
+              <span class="input-group-text"><i class="bx bx-calendar"></i></span>
+              <input type="date" name="date_debut" id="filtre_date_debut" class="form-control" value="{{ request('date_debut') }}">
+            </div>
+          </div>
+          <div class="col-md-3 col-lg-2">
+            <label class="form-label small text-uppercase text-muted mb-1" for="filtre_date_fin">Au</label>
+            <div class="input-group input-group-merge">
+              <span class="input-group-text"><i class="bx bx-calendar"></i></span>
+              <input type="date" name="date_fin" id="filtre_date_fin" class="form-control" value="{{ request('date_fin') }}">
+            </div>
+          </div>
+          <div class="col-md-3 col-lg-2">
+            <label class="form-label small text-uppercase text-muted mb-1" for="vehicule_input">Véhicule</label>
+            <div class="input-group input-group-merge">
+              <span class="input-group-text"><i class="bx bx-car"></i></span>
+              <input type="text" name="vehicule" id="vehicule_input" class="form-control" placeholder="Matricule..." value="{{ request('vehicule') }}" list="vehicules_list" autocomplete="off" />
+            </div>
+            <datalist id="vehicules_list">
+              @foreach(collect($vehiculesPgf ?? []) as $v)
+                @php
+                  $matriculeOpt = $v['matricule_vehicule'] ?? $v['matricule'] ?? null;
+                @endphp
+                @if ($matriculeOpt)
+                  <option value="{{ $matriculeOpt }}">
+                @endif
+              @endforeach
+            </datalist>
+          </div>
+          <div class="col-md-3 col-lg-2">
+            <label class="form-label small text-uppercase text-muted mb-1" for="filtre_agent">Agent</label>
+            <div class="input-group input-group-merge">
+              <span class="input-group-text"><i class="bx bx-user"></i></span>
+              <input type="text" name="agent" id="filtre_agent" class="form-control" placeholder="Nom agent..." value="{{ request('agent') }}" autocomplete="off" />
+            </div>
+          </div>
+          <div class="col-md-3 col-lg-2">
+            <label class="form-label small text-uppercase text-muted mb-1" for="filtre_statut">Statut</label>
+            <select name="statut" id="filtre_statut" class="form-select">
+              <option value="" @selected(request('statut', '') === '')>Tous</option>
+              <option value="non_paye" @selected(request('statut') === 'non_paye')>Non payé</option>
+              <option value="paye" @selected(request('statut') === 'paye')>Payé</option>
+            </select>
+          </div>
+          <div class="col-md-9 col-lg-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary flex-grow-1">
+              <i class="bx bx-search me-1"></i>Rechercher
+            </button>
+            <a href="{{ route($ticketsIndexRoute) }}" class="btn btn-outline-secondary" title="Réinitialiser">
+              <i class="bx bx-reset"></i>
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+    @else
     <div class="card mb-4">
       <div class="card-body">
-        <form method="GET" action="{{ route('tickets.index') }}" class="row g-3">
+        <form method="GET" action="{{ route($ticketsIndexRoute) }}" class="row g-3">
           @if(!empty($enAttenteOnly))
             <input type="hidden" name="statut" value="en_attente" />
           @endif
@@ -56,7 +194,7 @@
             <label class="form-label">Vehicule</label>
             <input type="text" name="vehicule" id="vehicule_input" class="form-control" placeholder="Matricule..." value="{{ request('vehicule') }}" list="vehicules_list" autocomplete="off" />
             <datalist id="vehicules_list">
-              @foreach($vehicules ?? [] as $matricule)
+              @foreach(($vehicules ?? []) as $matricule)
                 <option value="{{ $matricule }}">
               @endforeach
             </datalist>
@@ -71,11 +209,12 @@
           </div>
           <div class="col-md-3 d-flex align-items-end gap-2">
             <button type="submit" class="btn btn-primary">Rechercher</button>
-            <a href="{{ route('tickets.index', !empty($enAttenteOnly) ? ['statut' => 'en_attente'] : []) }}" class="btn btn-outline-secondary">Reinitialiser</a>
+            <a href="{{ route($ticketsIndexRoute, !empty($enAttenteOnly) ? ['statut' => 'en_attente'] : []) }}" class="btn btn-outline-secondary">Reinitialiser</a>
           </div>
         </form>
       </div>
     </div>
+    @endif
 
     <div class="card">
       <div class="table-responsive text-nowrap">
@@ -83,22 +222,39 @@
           <div class="alert alert-danger m-3">{{ $external_error }}</div>
         @endif
 
-        <table class="table">
+        <table class="table {{ !empty($onlyCamionsPgf) ? 'table-activites-pgf' : '' }}">
           <thead>
             <tr>
               <th>Date ticket</th>
               <th>N°Ticket</th>
               <th>Usine</th>
+              @if (empty($onlyCamionsPgf))
               <th>Produit</th>
+              @endif
               <th>Agent</th>
               <th>Pont</th>
               <th>Vehicule</th>
               <th>Poids Usine</th>
+              @if (!empty($onlyCamionsPgf))
+              <th class="text-end">Prix unitaire</th>
+              <th class="text-end">Montant</th>
+              <th>Statut</th>
+              @endif
               <th>Actions</th>
             </tr>
           </thead>
           <tbody class="table-border-bottom-0">
             @forelse($tickets as $t)
+              @php
+                $poidsLigne = (float) ($t['poids'] ?? 0);
+                $ticketValide = ($t['conformite'] ?? '') === 'valide';
+                $estCamionPgf = (bool) ($t['est_camion_pgf'] ?? false);
+                $prixManuel = array_key_exists('prix_unitaire_manuel', $t) ? $t['prix_unitaire_manuel'] : null;
+                $montantManuel = array_key_exists('montant_manuel', $t) ? $t['montant_manuel'] : null;
+                if ($montantManuel === null && $prixManuel !== null && $poidsLigne > 0) {
+                  $montantManuel = (float) $prixManuel * $poidsLigne;
+                }
+              @endphp
               <tr>
                 <td>
                   @php
@@ -117,7 +273,9 @@
                   </a>
                 </td>
                 <td>{{ $t['nom_usine'] ?? '-' }}</td>
+                @if (empty($onlyCamionsPgf))
                 <td>{{ $t['nom_produit'] ?? '-' }}</td>
+                @endif
                 <td>{{ $t['nom_agent'] ?? '-' }}</td>
                 <td>{{ $t['nom_pont'] ?? ($t['origine'] ?? '-') }}</td>
                 <td>
@@ -129,15 +287,72 @@
                     {{ $t['matricule_vehicule'] ?? '-' }}
                   @endif
                 </td>
-                <td>{{ number_format((float)($t['poids'] ?? 0), 0, ',', ' ') }}</td>
+                <td class="text-end">{{ number_format($poidsLigne, 0, ',', ' ') }}</td>
+                @if (!empty($onlyCamionsPgf))
+                <td style="min-width: 120px;" class="js-prix-cell-pgf text-end"
+                    data-ticket-id="{{ $t['id_ticket'] }}"
+                    data-ticket-numero="{{ $t['numero_ticket'] ?? '' }}"
+                    data-poids="{{ $poidsLigne }}"
+                    data-save-url="{{ route('tickets.prix_unitaire', $t['id_ticket']) }}"
+                    data-prix="{{ $prixManuel !== null ? rtrim(rtrim(number_format((float) $prixManuel, 2, '.', ''), '0'), '.') : '' }}">
+                  @if ($prixManuel === null)
+                    <button type="button" class="btn btn-sm btn-attente-prix js-open-prix-modal">
+                      En attente
+                    </button>
+                  @else
+                    <button type="button" class="btn btn-sm btn-outline-primary btn-prix-saisi js-open-prix-modal" title="Modifier le prix unitaire">
+                      {{ rtrim(rtrim(number_format((float) $prixManuel, 2, '.', ''), '0'), '.') }}
+                    </button>
+                  @endif
+                </td>
+                <td class="text-end fw-semibold js-montant-pgf" data-ticket-id="{{ $t['id_ticket'] }}">
+                  {{ $montantManuel !== null ? number_format((float) $montantManuel, 0, ',', ' ').' FCFA' : '—' }}
+                </td>
+                @php
+                  $statutRaw = mb_strtolower(trim((string) ($t['statut_ticket'] ?? '')), 'UTF-8');
+                  $estPaye = in_array($statutRaw, ['soldé', 'solde', 'payé', 'paye'], true);
+                  $peutPayer = $prixManuel !== null && $montantManuel !== null && (float) $montantManuel > 0;
+                @endphp
                 <td>
+                  @if ($estPaye)
+                    <span class="badge bg-label-success badge-statut-pgf js-statut-pgf">Payé</span>
+                  @else
+                    <span class="badge bg-label-warning badge-statut-pgf js-statut-pgf">Non payé</span>
+                  @endif
+                </td>
+                @endif
+                <td class="js-actions-pgf">
+                  @if (!empty($onlyCamionsPgf))
+                    @if ($estPaye)
+                      <button type="button" class="btn btn-sm btn-success" disabled title="Déjà payé">
+                        <i class="bx bx-check"></i> Payé
+                      </button>
+                    @elseif (! $peutPayer)
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-secondary"
+                        disabled
+                        title="Saisissez d’abord le prix unitaire et le montant"
+                      >
+                        <i class="bx bx-money"></i> Payer
+                      </button>
+                    @else
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-success js-payer-ticket-pgf"
+                        title="Marquer comme payé"
+                        data-ticket-id="{{ $t['id_ticket'] }}"
+                        data-ticket-numero="{{ $t['numero_ticket'] ?? '' }}"
+                        data-montant="{{ number_format((float) $montantManuel, 0, ',', ' ').' FCFA' }}"
+                        data-payer-url="{{ route('tickets.payer', $t['id_ticket']) }}"
+                      >
+                        <i class="bx bx-money"></i> Payer
+                      </button>
+                    @endif
+                  @else
                   <a href="{{ route('tickets.pdf', ['id' => $t['id_ticket']]) }}" class="btn btn-sm btn-outline-secondary me-1" target="_blank" rel="noopener" title="Imprimer en PDF">
                     <i class="bx bx-printer"></i>
                   </a>
-                  @php
-                    $ticketValide = ($t['conformite'] ?? '') === 'valide';
-                    $estCamionPgf = (bool) ($t['est_camion_pgf'] ?? false);
-                  @endphp
                   <button
                     type="button"
                     class="btn btn-sm {{ $ticketValide ? 'btn-secondary' : 'btn-outline-success' }}"
@@ -148,11 +363,12 @@
                   >
                     <i class="bx bx-check"></i> Valider
                   </button>
+                  @endif
                 </td>
               </tr>
             @empty
               <tr>
-                <td colspan="9" class="text-center">Aucun ticket</td>
+                <td colspan="{{ !empty($onlyCamionsPgf) ? 11 : 9 }}" class="text-center">Aucun ticket</td>
               </tr>
             @endforelse
           </tbody>
@@ -176,13 +392,13 @@
           @endphp
 
           <li class="page-item {{ $currentPage <= 1 ? 'disabled' : '' }}">
-            <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent', 'statut']), ['page' => $currentPage - 1])) }}">Precedent</a>
+            <a class="page-link" href="{{ route($ticketsIndexRoute, array_merge($ticketsQueryBase, ['page' => $currentPage - 1])) }}">Precedent</a>
           </li>
 
           @for($i = 1; $i <= $lastPage; $i++)
             @if($i == 1 || $i == $lastPage || abs($i - $currentPage) <= 2)
               <li class="page-item {{ $i == $currentPage ? 'active' : '' }}">
-                <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent', 'statut']), ['page' => $i])) }}">{{ $i }}</a>
+                <a class="page-link" href="{{ route($ticketsIndexRoute, array_merge($ticketsQueryBase, ['page' => $i])) }}">{{ $i }}</a>
               </li>
             @elseif($i == 2 && $currentPage > 4)
               <li class="page-item disabled"><span class="page-link">...</span></li>
@@ -192,7 +408,7 @@
           @endfor
 
           <li class="page-item {{ $currentPage >= $lastPage ? 'disabled' : '' }}">
-            <a class="page-link" href="{{ route('tickets.index', array_merge(request()->only(['vehicule', 'usine', 'agent', 'statut']), ['page' => $currentPage + 1])) }}">Suivant</a>
+            <a class="page-link" href="{{ route($ticketsIndexRoute, array_merge($ticketsQueryBase, ['page' => $currentPage + 1])) }}">Suivant</a>
           </li>
         </ul>
         <p class="text-center text-muted">Page {{ $currentPage }} sur {{ $lastPage }} ({{ $total }} tickets)</p>
@@ -1142,4 +1358,374 @@ $(document).ready(function() {
   @endif
 });
 </script>
+
+@endsection
+
+@section('page-scripts')
+@if (!empty($onlyCamionsPgf))
+{{-- Modal de saisie du prix unitaire --}}
+<div class="modal fade" id="modalSaisirPrixUnitaire" tabindex="-1" aria-labelledby="modalSaisirPrixUnitaireLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-primary text-white border-0">
+        <h5 class="modal-title text-white" id="modalSaisirPrixUnitaireLabel">
+          <i class="bx bx-edit me-2"></i>Saisir le prix unitaire
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <div class="small text-muted">Ticket</div>
+          <div class="fw-semibold" id="modalSaisirPrixTicket">—</div>
+        </div>
+        <div class="mb-3">
+          <div class="small text-muted">Poids usine</div>
+          <div class="fw-semibold" id="modalSaisirPrixPoids">—</div>
+        </div>
+        <div class="mb-3">
+          <label for="modalSaisirPrixInput" class="form-label">Prix unitaire (FCFA)</label>
+          <input type="text" class="form-control form-control-lg text-end" id="modalSaisirPrixInput" inputmode="decimal" autocomplete="off" placeholder="Ex: 90">
+          <div class="invalid-feedback">Indiquez un prix unitaire valide.</div>
+        </div>
+        <div class="rounded-3 border bg-light p-3 d-flex justify-content-between align-items-center">
+          <span class="text-muted">Montant calculé</span>
+          <strong class="fs-5" id="modalSaisirPrixMontant">—</strong>
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success" id="modalSaisirPrixValider">
+          <i class="bx bx-check me-1"></i>Valider
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{-- Modal de confirmation --}}
+<div class="modal fade" id="modalPrixUnitaireSaisi" tabindex="-1" aria-labelledby="modalPrixUnitaireSaisiLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-success text-white border-0">
+        <h5 class="modal-title text-white" id="modalPrixUnitaireSaisiLabel">
+          <i class="bx bx-check-circle me-2"></i>Prix unitaire saisi
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body text-center py-4">
+        <div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle bg-success bg-opacity-10" style="width:72px;height:72px;">
+          <i class="bx bx-check fs-1 text-success"></i>
+        </div>
+        <h5 class="mb-2">Prix unitaire saisi</h5>
+        <p class="text-muted mb-1" id="modalPrixUnitaireSaisiTicket">—</p>
+        <p class="mb-0 fw-semibold" id="modalPrixUnitaireSaisiDetails">—</p>
+      </div>
+      <div class="modal-footer border-0 justify-content-center pb-4">
+        <button type="button" class="btn btn-success px-4" data-bs-dismiss="modal">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (typeof bootstrap === 'undefined') {
+    console.error('Bootstrap non chargé : modal prix unitaire indisponible.');
+    return;
+  }
+
+  var csrfToken = @json(csrf_token());
+  var saisirEl = document.getElementById('modalSaisirPrixUnitaire');
+  var successEl = document.getElementById('modalPrixUnitaireSaisi');
+  if (!saisirEl) return;
+
+  var saisirModal = bootstrap.Modal.getOrCreateInstance(saisirEl);
+  var successModal = successEl ? bootstrap.Modal.getOrCreateInstance(successEl) : null;
+  var currentCell = null;
+  var saving = false;
+
+  var inputEl = document.getElementById('modalSaisirPrixInput');
+  var ticketEl = document.getElementById('modalSaisirPrixTicket');
+  var poidsEl = document.getElementById('modalSaisirPrixPoids');
+  var montantEl = document.getElementById('modalSaisirPrixMontant');
+  var validerBtn = document.getElementById('modalSaisirPrixValider');
+
+  function formatMontant(value) {
+    var n = Math.round(Number(value) || 0);
+    return n.toLocaleString('fr-FR') + ' FCFA';
+  }
+
+  function formatPrix(value) {
+    var n = Number(value) || 0;
+    return n.toLocaleString('fr-FR', { maximumFractionDigits: 2 });
+  }
+
+  function parseNombre(value) {
+    return parseFloat(String(value || '').replace(/\s/g, '').replace(',', '.')) || 0;
+  }
+
+  function refreshMontantPreview() {
+    if (!currentCell || !montantEl || !inputEl) return;
+    var poids = parseNombre(currentCell.getAttribute('data-poids'));
+    var prix = parseNombre(inputEl.value);
+    montantEl.textContent = (prix > 0 && poids > 0) ? formatMontant(prix * poids) : '—';
+  }
+
+  function openPrixModal(cell) {
+    currentCell = cell;
+    var ticketId = cell.getAttribute('data-ticket-id');
+    var numero = cell.getAttribute('data-ticket-numero') || '';
+    var poids = parseNombre(cell.getAttribute('data-poids'));
+    var prix = cell.getAttribute('data-prix') || '';
+
+    ticketEl.textContent = numero !== '' ? numero : ('Ticket #' + ticketId);
+    poidsEl.textContent = poids > 0 ? (poids.toLocaleString('fr-FR') + ' kg') : '—';
+    inputEl.value = prix;
+    inputEl.classList.remove('is-invalid');
+    refreshMontantPreview();
+    saisirModal.show();
+    setTimeout(function () {
+      inputEl.focus();
+      inputEl.select();
+    }, 250);
+  }
+
+  function updateCellAfterSave(prix, montantAffiche, montant) {
+    if (!currentCell) return;
+    var ticketId = currentCell.getAttribute('data-ticket-id');
+    currentCell.setAttribute('data-prix', String(prix));
+
+    var btn = currentCell.querySelector('.js-open-prix-modal');
+    if (btn) {
+      btn.className = 'btn btn-sm btn-outline-primary btn-prix-saisi js-open-prix-modal';
+      btn.title = 'Modifier le prix unitaire';
+      var display = String(prix);
+      if (Math.floor(Number(prix)) === Number(prix)) {
+        display = String(Math.round(Number(prix)));
+      }
+      btn.textContent = display;
+    }
+
+    var row = currentCell.closest('tr');
+    var montantCell = row.querySelector('.js-montant-pgf');
+    var montantTxt = montantAffiche || formatMontant(montant);
+    if (montantCell) {
+      montantCell.textContent = montantTxt;
+    }
+
+    // Activer « Payer » seulement une fois prix + montant présents (sauf déjà payé).
+    var actions = row.querySelector('.js-actions-pgf');
+    if (actions && !actions.querySelector('button.btn-success[disabled]')) {
+      var numero = currentCell.getAttribute('data-ticket-numero') || '';
+      var payerUrl = @json(url('/tickets')).replace(/\/$/, '') + '/' + ticketId + '/payer';
+      actions.innerHTML =
+        '<button type="button" class="btn btn-sm btn-outline-success js-payer-ticket-pgf" title="Marquer comme payé"' +
+        ' data-ticket-id="' + ticketId + '"' +
+        ' data-ticket-numero="' + String(numero).replace(/"/g, '&quot;') + '"' +
+        ' data-montant="' + String(montantTxt).replace(/"/g, '&quot;') + '"' +
+        ' data-payer-url="' + payerUrl + '">' +
+        '<i class="bx bx-money"></i> Payer</button>';
+    }
+
+    document.getElementById('modalPrixUnitaireSaisiTicket').textContent =
+      currentCell.getAttribute('data-ticket-numero') || ('Ticket #' + ticketId);
+    document.getElementById('modalPrixUnitaireSaisiDetails').textContent =
+      'Prix : ' + formatPrix(prix) + ' FCFA  ·  Montant : ' + montantTxt;
+  }
+
+  function validerPrix() {
+    if (!currentCell || saving) return;
+    var url = currentCell.getAttribute('data-save-url');
+    var prix = String(inputEl.value || '').trim();
+    if (prix === '' || parseNombre(prix) < 0) {
+      inputEl.classList.add('is-invalid');
+      return;
+    }
+
+    inputEl.classList.remove('is-invalid');
+    saving = true;
+    validerBtn.disabled = true;
+    validerBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Validation...';
+
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify({ prix_unitaire: prix }),
+    })
+      .then(function (response) {
+        return response.json().then(function (data) {
+          return { ok: response.ok, data: data };
+        });
+      })
+      .then(function (result) {
+        if (!result.ok || !result.data.success) {
+          throw new Error((result.data && result.data.message) || 'Enregistrement impossible');
+        }
+        updateCellAfterSave(
+          result.data.prix_unitaire != null ? result.data.prix_unitaire : parseNombre(prix),
+          result.data.montant_affiche,
+          result.data.montant
+        );
+        saisirModal.hide();
+        if (successModal) {
+          successModal.show();
+        }
+      })
+      .catch(function (error) {
+        inputEl.classList.add('is-invalid');
+        alert(error.message || 'Erreur lors de l’enregistrement du prix.');
+      })
+      .finally(function () {
+        saving = false;
+        validerBtn.disabled = false;
+        validerBtn.innerHTML = '<i class="bx bx-check me-1"></i>Valider';
+      });
+  }
+
+  // Délégation : marche même après mise à jour du bouton.
+  document.addEventListener('click', function (event) {
+    var btn = event.target.closest('.js-open-prix-modal');
+    if (!btn) return;
+    event.preventDefault();
+    var cell = btn.closest('.js-prix-cell-pgf');
+    if (cell) {
+      openPrixModal(cell);
+    }
+  });
+
+  if (inputEl) {
+    inputEl.addEventListener('input', refreshMontantPreview);
+    inputEl.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        validerPrix();
+      }
+    });
+  }
+
+  if (validerBtn) {
+    validerBtn.addEventListener('click', validerPrix);
+  }
+
+  saisirEl.addEventListener('hidden.bs.modal', function () {
+    currentCell = null;
+    if (inputEl) {
+      inputEl.value = '';
+      inputEl.classList.remove('is-invalid');
+    }
+    if (montantEl) {
+      montantEl.textContent = '—';
+    }
+  });
+})();
+</script>
+
+{{-- Modal confirmation paiement --}}
+<div class="modal fade" id="modalConfirmerPaiementPgf" tabindex="-1" aria-labelledby="modalConfirmerPaiementPgfLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-success text-white border-0">
+        <h5 class="modal-title text-white" id="modalConfirmerPaiementPgfLabel">
+          <i class="bx bx-money me-2"></i>Confirmer le paiement
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Marquer ce ticket comme <strong>Payé</strong> ?</p>
+        <div class="small text-muted">Ticket</div>
+        <div class="fw-semibold mb-2" id="modalPayerTicketNumero">—</div>
+        <div class="small text-muted">Montant</div>
+        <div class="fw-semibold" id="modalPayerTicketMontant">—</div>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-success" id="modalPayerConfirmer">
+          <i class="bx bx-check me-1"></i>Confirmer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (typeof bootstrap === 'undefined') return;
+
+  var csrfToken = @json(csrf_token());
+  var modalEl = document.getElementById('modalConfirmerPaiementPgf');
+  if (!modalEl) return;
+
+  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  var numeroEl = document.getElementById('modalPayerTicketNumero');
+  var montantEl = document.getElementById('modalPayerTicketMontant');
+  var confirmerBtn = document.getElementById('modalPayerConfirmer');
+  var currentBtn = null;
+  var paying = false;
+
+  document.addEventListener('click', function (event) {
+    var btn = event.target.closest('.js-payer-ticket-pgf');
+    if (!btn || btn.disabled) return;
+    event.preventDefault();
+    currentBtn = btn;
+    numeroEl.textContent = btn.getAttribute('data-ticket-numero') || ('Ticket #' + btn.getAttribute('data-ticket-id'));
+    montantEl.textContent = btn.getAttribute('data-montant') || '—';
+    modal.show();
+  });
+
+  confirmerBtn.addEventListener('click', function () {
+    if (!currentBtn || paying) return;
+    var url = currentBtn.getAttribute('data-payer-url');
+    paying = true;
+    confirmerBtn.disabled = true;
+    confirmerBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Paiement...';
+
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrfToken,
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    })
+      .then(function (response) {
+        return response.json().then(function (data) {
+          return { ok: response.ok, data: data };
+        });
+      })
+      .then(function (result) {
+        if (!result.ok || !result.data.success) {
+          throw new Error((result.data && result.data.message) || 'Paiement impossible');
+        }
+
+        var row = currentBtn.closest('tr');
+        if (row) {
+          var statut = row.querySelector('.js-statut-pgf');
+          if (statut) {
+            statut.className = 'badge bg-label-success badge-statut-pgf js-statut-pgf';
+            statut.textContent = 'Payé';
+          }
+          var cell = currentBtn.parentElement;
+          cell.innerHTML = '<button type="button" class="btn btn-sm btn-success" disabled title="Déjà payé"><i class="bx bx-check"></i> Payé</button>';
+        }
+
+        modal.hide();
+      })
+      .catch(function (error) {
+        alert(error.message || 'Erreur lors du paiement.');
+      })
+      .finally(function () {
+        paying = false;
+        confirmerBtn.disabled = false;
+        confirmerBtn.innerHTML = '<i class="bx bx-check me-1"></i>Confirmer';
+        currentBtn = null;
+      });
+  });
+})();
+</script>
+@endif
 @endsection
