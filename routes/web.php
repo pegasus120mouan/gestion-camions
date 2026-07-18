@@ -13,6 +13,7 @@ use App\Http\Controllers\AgentController;
 use App\Http\Controllers\UtilisateurController;
 use App\Http\Controllers\CommisController;
 use App\Http\Controllers\FinancementController;
+use App\Http\Controllers\AvanceTransporteurController;
 use App\Http\Controllers\UsineController;
 use App\Http\Controllers\StockPgfController;
 use App\Http\Controllers\GroupeController;
@@ -301,6 +302,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/financements', [FinancementController::class, 'index'])->name('financements.index');
     Route::get('/financements/agents/{id_agent}', [FinancementController::class, 'show'])->name('financements.show');
     Route::post('/financements', [FinancementController::class, 'store'])->name('financements.store');
+
+    Route::get('/avances-transporteur', [AvanceTransporteurController::class, 'index'])->name('avances_transporteur.index');
+    Route::post('/avances-transporteur', [AvanceTransporteurController::class, 'store'])->name('avances_transporteur.store');
+    Route::get('/avances-transporteur/{transporteur}', [AvanceTransporteurController::class, 'show'])->name('avances_transporteur.show');
 
     Route::get('/usines', [UsineController::class, 'index'])->name('usines.index');
 

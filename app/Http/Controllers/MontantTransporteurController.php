@@ -136,7 +136,8 @@ class MontantTransporteurController extends Controller
 
         $transporteur->avances()->create($validated);
 
-        return redirect()->route('gestionfinanciere.transporteur.show', $transporteur)
+        return redirect()
+            ->route('avances_transporteur.show', $transporteur)
             ->with(
                 'success',
                 'Avance de '.number_format((int) $validated['montant'], 0, ',', ' ')

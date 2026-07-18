@@ -674,10 +674,16 @@
             </li>-->
 
 
-           <li class="menu-item {{ request()->routeIs('financements.*') ? 'active' : '' }}">
+            <li class="menu-item {{ request()->routeIs('financements.*') ? 'active' : '' }}">
               <a href="{{ route('financements.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-money" style="color: #ea5455;"></i>
                 <div class="text-truncate" data-i18n="Financements">Historiques des Financements</div>
+              </a>
+            </li>
+            <li class="menu-item {{ request()->routeIs('avances_transporteur.*') ? 'active' : '' }}">
+              <a href="{{ route('avances_transporteur.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-wallet" style="color: #28c76f;"></i>
+                <div class="text-truncate" data-i18n="AvancesTransporteur">Historiques des avances transporteurs</div>
               </a>
             </li>
             <li class="menu-item">
