@@ -1,7 +1,7 @@
 @php
   $accordionId = $accordionId ?? 'accordionPrix';
   $groupesPrix = $groupesPrix ?? [];
-  $typeCamion = $typeCamion ?? 'transporteur';
+  $typeCamion = $typeCamion ?? 'autre_camion';
   $modalAddId = $modalAddId ?? 'modalAddPrixTransporteur';
   $editModalPrefix = $editModalPrefix ?? 'modalEditPrixTrans';
   $idAgent = $agent['id_agent'] ?? 0;

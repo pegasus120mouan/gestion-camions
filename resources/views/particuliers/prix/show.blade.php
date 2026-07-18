@@ -80,7 +80,6 @@
                   // Couleurs personnalisées selon le type
                   $colors = match(true) {
                     str_contains($code->nom, 'PGF') => ['#ff9500', '#ffb347', '#fff5e6'], // Orange doré
-                    str_contains($code->nom, 'Pisteur') || str_contains($code->nom, 'pisteur') => ['#00c6ff', '#0072ff', '#e6f7ff'], // Bleu cyan
                     default => ['#6c757d', '#adb5bd', '#f8f9fa'], // Gris
                   };
                 @endphp

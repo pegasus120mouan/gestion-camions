@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\BordereauAgent;
 use App\Models\BordereauTransporteur;
+use App\Models\DemandeAvance;
 use App\Models\Depense;
 use App\Models\Fournisseur;
 use App\Services\CaisseService;
@@ -14,7 +15,7 @@ use Illuminate\Http\Request;
 
 class EffectuerPaiementController extends Controller
 {
-    private const ONGLETS = ['agents', 'transporteurs', 'fournisseurs', 'salaires'];
+    private const ONGLETS = ['agents', 'transporteurs', 'fournisseurs', 'financements', 'salaires'];
 
     public function __construct(
         private readonly MesAgentsService $mesAgentsService,
@@ -38,6 +39,7 @@ class EffectuerPaiementController extends Controller
         $data = match ($onglet) {
             'transporteurs' => $this->dataTransporteurs($filters),
             'fournisseurs' => $this->dataFournisseurs($filters),
+            'financements' => $this->dataFinancements($filters),
             'salaires' => $this->dataSalaires($request, $filters),
             default => $this->dataAgents($request, $filters),
         };
@@ -163,6 +165,46 @@ class EffectuerPaiementController extends Controller
         return [
             'fournisseursData' => $lignes,
             'stats' => $stats,
+        ];
+    }
+
+    private function dataFinancements(array $filters): array
+    {
+        $query = DemandeAvance::query()
+            ->orderByDesc('date_demande')
+            ->orderByDesc('id');
+
+        if ($filters['q'] !== '') {
+            $q = $filters['q'];
+            $query->where(function ($builder) use ($q) {
+                $builder->where('agent_nom', 'like', "%{$q}%")
+                    ->orWhere('agent_numero', 'like', "%{$q}%")
+                    ->orWhere('reference', 'like', "%{$q}%")
+                    ->orWhere('commentaire', 'like', "%{$q}%");
+            });
+        }
+
+        if ($filters['statut'] === 'a_payer') {
+            $query->where('statut', DemandeAvance::STATUT_EN_ATTENTE);
+        } elseif ($filters['statut'] === 'soldes') {
+            $query->where('statut', DemandeAvance::STATUT_PAYEE);
+        }
+
+        $demandes = $query->paginate(25)->withQueryString();
+
+        $statsQuery = DemandeAvance::query();
+
+        return [
+            'demandesFinancement' => $demandes,
+            'stats' => [
+                'total' => (clone $statsQuery)->count(),
+                'a_payer' => (clone $statsQuery)
+                    ->where('statut', DemandeAvance::STATUT_EN_ATTENTE)
+                    ->count(),
+                'reste_total' => (float) (clone $statsQuery)
+                    ->where('statut', DemandeAvance::STATUT_EN_ATTENTE)
+                    ->sum('montant'),
+            ],
         ];
     }
 

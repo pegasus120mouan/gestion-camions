@@ -14,7 +14,6 @@ use App\Http\Controllers\UtilisateurController;
 use App\Http\Controllers\CommisController;
 use App\Http\Controllers\FinancementController;
 use App\Http\Controllers\UsineController;
-use App\Http\Controllers\CodeTransporteurController;
 use App\Http\Controllers\StockPgfController;
 use App\Http\Controllers\GroupeController;
 use App\Http\Controllers\PlanteurController;
@@ -304,14 +303,6 @@ Route::middleware('auth')->group(function () {
     Route::post('/financements', [FinancementController::class, 'store'])->name('financements.store');
 
     Route::get('/usines', [UsineController::class, 'index'])->name('usines.index');
-
-    Route::get('/code-transporteurs', [CodeTransporteurController::class, 'index'])->name('code_transporteurs.index');
-    Route::post('/code-transporteurs', [CodeTransporteurController::class, 'store'])->name('code_transporteurs.store');
-    Route::get('/code-transporteurs/{id}', [CodeTransporteurController::class, 'show'])->name('code_transporteurs.show');
-    Route::put('/code-transporteurs/{id}', [CodeTransporteurController::class, 'update'])->name('code_transporteurs.update');
-    Route::delete('/code-transporteurs/{id}', [CodeTransporteurController::class, 'destroy'])->name('code_transporteurs.destroy');
-    Route::post('/code-transporteurs/{id}/vehicules', [CodeTransporteurController::class, 'addVehicule'])->name('code_transporteurs.vehicules.add');
-    Route::delete('/code-transporteurs/{id}/vehicules/{vehicule_id}', [CodeTransporteurController::class, 'removeVehicule'])->name('code_transporteurs.vehicules.remove');
 
     Route::get('/depenses', [DepenseController::class, 'listeDepenses'])->name('depenses.liste');
     Route::post('/depenses', [DepenseController::class, 'storeFromList'])->name('depenses.store');

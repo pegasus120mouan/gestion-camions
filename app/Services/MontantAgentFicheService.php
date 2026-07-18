@@ -2,13 +2,11 @@
 
 namespace App\Services;
 
-use App\Models\CodeTransporteurVehicule;
 use App\Models\FicheSortie;
 use App\Models\Groupe;
 use App\Models\GroupeVehicule;
 use App\Models\PrixAgent;
 use App\Models\Ticket;
-use App\Models\TransporteurVehicule;
 use App\Services\MontantAgentReportingService;
 use App\Services\UsinesParProduitService;
 
@@ -18,7 +16,7 @@ class MontantAgentFicheService
     private ?array $vehiculesPgfLookup = null;
 
     /**
-     * Grille PrixAgent : pgf (camion PGF), autre_camion (camion transporteur TRP), transporteur (camion Pisteur).
+     * Grille PrixAgent : pgf (groupe camions-pgf) ou autre_camion (tout le reste).
      */
     public function typePrixPourMatricule(?string $matricule, ?int $vehiculeId = null): string
     {
@@ -34,75 +32,7 @@ class MontantAgentFicheService
             return 'pgf';
         }
 
-        $link = $this->lienCodeTransporteur($vehiculeId, $matricule);
-        if ($link?->codeTransporteur) {
-            return $this->typeSlugDepuisNomCodeTransporteur((string) $link->codeTransporteur->nom);
-        }
-
-        if ($this->vehiculeEstCamionTransporteur($vehiculeId, $matricule)) {
-            return 'autre_camion';
-        }
-
-        return 'transporteur';
-    }
-
-    private function typeSlugDepuisNomCodeTransporteur(string $nom): string
-    {
-        $nom = trim($nom);
-        if ($nom === '') {
-            return 'transporteur';
-        }
-
-        if (stripos($nom, 'PGF') !== false) {
-            return 'pgf';
-        }
-
-        if (strcasecmp($nom, 'Autre Camion') === 0 || strcasecmp($nom, 'Autre') === 0) {
-            return 'autre_camion';
-        }
-
-        if (stripos($nom, 'Pisteur') !== false) {
-            return 'transporteur';
-        }
-
-        return 'transporteur';
-    }
-
-    private function lienCodeTransporteur(int $vehiculeId, string $matricule): ?CodeTransporteurVehicule
-    {
-        if ($vehiculeId > 0) {
-            $link = CodeTransporteurVehicule::query()
-                ->with('codeTransporteur')
-                ->where('vehicule_id', $vehiculeId)
-                ->first();
-            if ($link) {
-                return $link;
-            }
-        }
-
-        if ($matricule !== '') {
-            return CodeTransporteurVehicule::query()
-                ->with('codeTransporteur')
-                ->where('matricule_vehicule', $matricule)
-                ->first();
-        }
-
-        return null;
-    }
-
-    private function vehiculeEstCamionTransporteur(int $vehiculeId, string $matricule): bool
-    {
-        if ($vehiculeId > 0 && TransporteurVehicule::query()->where('vehicule_id', $vehiculeId)->exists()) {
-            return true;
-        }
-
-        if ($matricule !== '') {
-            return TransporteurVehicule::query()
-                ->where('matricule_vehicule', $matricule)
-                ->exists();
-        }
-
-        return false;
+        return 'autre_camion';
     }
 
     /**
@@ -151,6 +81,20 @@ class MontantAgentFicheService
         return $matricule !== '' && isset($lookup['matricules'][$matricule]);
     }
 
+    /**
+     * Types de grille à interroger : autre_camion inclut l’ancien type transporteur.
+     *
+     * @return list<string>
+     */
+    private function typesPrixPourLookup(string $type): array
+    {
+        if ($type === 'autre_camion') {
+            return ['autre_camion', 'transporteur'];
+        }
+
+        return [$type];
+    }
+
     public function prixUnitairePourFiche(FicheSortie $fiche): ?float
     {
         if (!$fiche->id_agent || !$fiche->usine) {
@@ -170,7 +114,8 @@ class MontantAgentFicheService
         $query = PrixAgent::query()
             ->where('id_agent', $fiche->id_agent)
             ->where('nom_usine', $usine)
-            ->where('type', $type);
+            ->whereIn('type', $this->typesPrixPourLookup($type))
+            ->orderByRaw("CASE WHEN type = 'autre_camion' THEN 0 WHEN type = 'transporteur' THEN 1 ELSE 2 END");
 
         $dateRef = $fiche->date_chargement?->format('Y-m-d');
         if ($dateRef) {

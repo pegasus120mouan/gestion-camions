@@ -91,11 +91,10 @@
             <div class="d-flex flex-column gap-3">
               @foreach($codesTransporteurs as $code)
                 @php
-                  $typeSlug = $typeParCodeNom[$code->nom] ?? 'transporteur';
+                  $typeSlug = $typeParCodeNom[$code->nom] ?? 'autre_camion';
                   $countPrix = $prixCountsParType[$typeSlug] ?? 0;
                   $colors = match(true) {
                     str_contains($code->nom, 'PGF') => ['#ff9500', '#ffb347', '#fff5e6'],
-                    str_contains($code->nom, 'Pisteur') || str_contains($code->nom, 'pisteur') => ['#00c6ff', '#0072ff', '#e6f7ff'],
                     default => ['#6c757d', '#adb5bd', '#f8f9fa'],
                   };
                 @endphp
@@ -128,7 +127,7 @@
           $defaultCodeNom = null;
           $maxPrixCount = 0;
           foreach ($codesTransporteurs as $code) {
-            $slug = $typeParCodeNom[$code->nom] ?? 'transporteur';
+            $slug = $typeParCodeNom[$code->nom] ?? 'autre_camion';
             $count = $prixCountsParType[$slug] ?? 0;
             if ($count > $maxPrixCount) {
               $maxPrixCount = $count;
@@ -141,7 +140,7 @@
         @endphp
         @foreach($codesTransporteurs as $code)
           @php
-            $typeSlug = $typeParCodeNom[$code->nom] ?? 'transporteur';
+            $typeSlug = $typeParCodeNom[$code->nom] ?? 'autre_camion';
           @endphp
           @include('agents._prix_show_type_section', [
             'codeNom' => $code->nom,

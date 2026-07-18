@@ -459,11 +459,12 @@
                         $transporteurNom = $transporteurVehicule->transporteur->code . ' — '
                             . $transporteurVehicule->transporteur->nom . ' ' . $transporteurVehicule->transporteur->prenoms;
                     } else {
-                        $codeTransporteurVehicule = \App\Models\CodeTransporteurVehicule::with('codeTransporteur')
+                        $estCamionPgf = \App\Models\GroupeVehicule::query()
                             ->where('matricule_vehicule', $matriculeVehicule)
-                            ->first();
-                        if ($codeTransporteurVehicule && $codeTransporteurVehicule->codeTransporteur) {
-                            $transporteurNom = $codeTransporteurVehicule->codeTransporteur->nom;
+                            ->whereHas('groupe', fn ($query) => $query->where('nom_groupe', 'PGF'))
+                            ->exists();
+                        if ($estCamionPgf) {
+                            $transporteurNom = 'Camion PGF';
                         }
                     }
                   @endphp

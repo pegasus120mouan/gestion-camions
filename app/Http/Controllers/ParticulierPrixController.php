@@ -132,7 +132,10 @@ class ParticulierPrixController extends Controller
         ]);
 
         $produits = \App\Models\Produit::orderBy('nom')->get();
-        $codesTransporteurs = \App\Models\CodeTransporteur::orderBy('nom')->get();
+        $codesTransporteurs = collect([
+            (object) ['nom' => 'Autre Camion'],
+            (object) ['nom' => 'Camion PGF'],
+        ]);
 
         $prixParProduit = $agent->prix->groupBy('produit_id')->map(function ($prixGroup) {
             return $prixGroup->groupBy('type_transporteur');

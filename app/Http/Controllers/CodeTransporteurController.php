@@ -11,7 +11,7 @@ class CodeTransporteurController extends Controller
 {
     public function index(Request $request)
     {
-        $codes = CodeTransporteur::orderBy('nom')->get();
+        $codes = CodeTransporteur::prisEnCompte()->orderBy('nom')->get();
         $vehicules = $this->chargerVehiculesPourRecherche();
 
         $groupeTrouve = null;
@@ -29,6 +29,12 @@ class CodeTransporteurController extends Controller
                 ?? '';
 
             $groupeTrouve = $attribution?->codeTransporteur;
+            if ($groupeTrouve && ! $groupeTrouve->estPrisEnCompte()) {
+                $groupeTrouve = CodeTransporteur::prisEnCompte()
+                    ->where('nom', 'like', '%Autre Camion%')
+                    ->first()
+                    ?? CodeTransporteur::prisEnCompte()->first();
+            }
         }
 
         return view('code_transporteurs.index', [
@@ -122,6 +128,11 @@ class CodeTransporteurController extends Controller
     public function show(Request $request, int $id)
     {
         $code = CodeTransporteur::with('vehicules')->findOrFail($id);
+
+        if (! $code->estPrisEnCompte()) {
+            return redirect()->route('code_transporteurs.index')
+                ->with('error', 'Le code « camion Pisteur » n’est plus pris en compte. Utilisez Autre Camion ou Camion PGF.');
+        }
         
         // Récupérer les véhicules depuis l'API mes_camions
         $timeout = (int) config('services.external_auth.timeout', 10);
@@ -154,6 +165,12 @@ class CodeTransporteurController extends Controller
 
     public function addVehicule(Request $request, int $id)
     {
+        $code = CodeTransporteur::findOrFail($id);
+        if (! $code->estPrisEnCompte()) {
+            return redirect()->route('code_transporteurs.index')
+                ->with('error', 'Le code « camion Pisteur » n’est plus pris en compte.');
+        }
+
         $validated = $request->validate([
             'vehicule_id' => ['required', 'integer'],
             'matricule_vehicule' => ['required', 'string'],

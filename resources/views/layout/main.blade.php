@@ -454,7 +454,7 @@
             <li class="menu-item">
               <a href="javascript:void(0)" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-box" style="color: #28c76f;"></i>
-                <div class="text-truncate" data-i18n="User interface">Gestion piements</div>
+                <div class="text-truncate" data-i18n="User interface">Gestion paiements</div>
               </a>
               <ul class="menu-sub">
             
@@ -674,10 +674,10 @@
             </li>-->
 
 
-           <li class="menu-item">
+           <li class="menu-item {{ request()->routeIs('financements.*') ? 'active' : '' }}">
               <a href="{{ route('financements.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-money" style="color: #ea5455;"></i>
-                <div class="text-truncate" data-i18n="Financements">Financements</div>
+                <div class="text-truncate" data-i18n="Financements">Historiques des Financements</div>
               </a>
             </li>
             <li class="menu-item">
@@ -869,14 +869,6 @@
                 <div class="text-truncate" data-i18n="Basic">Groupe PGF</div>
               </a>
             </li> -->
-             <li class="menu-item">
-              <a href="{{ route('code_transporteurs.index') }}" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-code-alt"></i>
-                <div class="text-truncate" data-i18n="Basic">Code Transporteur</div>
-              </a>
-            </li>
-
-
             <li class="menu-item">
               <a href="{{ route('produits.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-collection"></i>

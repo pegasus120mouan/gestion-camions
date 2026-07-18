@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\CodeTransporteurVehicule;
 use App\Models\ParticulierAgentPrix;
 use App\Models\PrixAgent;
 use App\Models\Ticket;
@@ -26,13 +25,9 @@ class TicketPrixService
             return null;
         }
 
-        $link = CodeTransporteurVehicule::with('codeTransporteur')
-            ->where('matricule_vehicule', $matricule)
-            ->first();
-
-        $nom = $link?->codeTransporteur?->nom;
-
-        return $nom !== null && $nom !== '' ? trim($nom) : null;
+        return $this->typePrixPourMatricule($matricule) === 'pgf'
+            ? 'Camion PGF'
+            : 'Autre Camion';
     }
 
     /**
@@ -197,7 +192,7 @@ class TicketPrixService
         ?int $idUsine,
         ?int $produitId,
         ?string $dateTicket,
-        string $type = 'transporteur',
+        string $type = 'autre_camion',
         ?string $nomUsine = null,
     ): ?float {
         if ($idAgentApi <= 0) {
@@ -209,14 +204,23 @@ class TicketPrixService
             return null;
         }
 
-        return $this->chercherPrixAgent(
-            $idAgentApi,
-            $idUsine,
-            $nomUsine,
-            $produitId,
-            $dateTicket,
-            $type
-        );
+        $types = $type === 'autre_camion' ? ['autre_camion', 'transporteur'] : [$type];
+
+        foreach ($types as $typeLookup) {
+            $prix = $this->chercherPrixAgent(
+                $idAgentApi,
+                $idUsine,
+                $nomUsine,
+                $produitId,
+                $dateTicket,
+                $typeLookup
+            );
+            if ($prix !== null) {
+                return $prix;
+            }
+        }
+
+        return null;
     }
 
     private function chercherPrixAgent(

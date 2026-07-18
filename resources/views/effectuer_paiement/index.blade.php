@@ -54,6 +54,12 @@
         </a>
       </li>
       <li class="nav-item">
+        <a class="nav-link {{ $onglet === 'financements' ? 'active' : '' }}"
+          href="{{ route('effectuer_paiement.index', ['onglet' => 'financements']) }}">
+          <i class="bx bx-money me-1"></i>Financements
+        </a>
+      </li>
+      <li class="nav-item">
         <a class="nav-link {{ $onglet === 'salaires' ? 'active' : '' }}"
           href="{{ route('effectuer_paiement.index', ['onglet' => 'salaires']) }}">
           <i class="bx bx-wallet me-1"></i>Salaires
@@ -68,7 +74,7 @@
           <div class="col-md-4 col-lg-3">
             <label class="form-label small text-uppercase text-muted">Recherche</label>
             <input type="text" name="q" class="form-control form-control-sm" value="{{ $filters['q'] }}"
-              placeholder="@if($onglet === 'agents') N° bordereau, agent… @elseif($onglet === 'transporteurs') N° bordereau, transporteur… @elseif($onglet === 'fournisseurs') Nom du fournisseur… @else Chauffeur, camion… @endif">
+              placeholder="@if($onglet === 'agents') N° bordereau, agent… @elseif($onglet === 'transporteurs') N° bordereau, transporteur… @elseif($onglet === 'fournisseurs') Nom du fournisseur… @elseif($onglet === 'financements') Agent, référence… @else Chauffeur, camion… @endif">
           </div>
           <div class="col-md-3 col-lg-2">
             <label class="form-label small text-uppercase text-muted">Statut</label>
@@ -351,6 +357,98 @@
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    @elseif($onglet === 'financements')
+    {{-- ============ Onglet Financements ============ --}}
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h6 class="mb-0"><i class="bx bx-money me-1"></i>Demandes de financement</h6>
+        <span class="badge bg-label-secondary">{{ $demandesFinancement->total() }} demande(s)</span>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Agent</th>
+                <th>Date</th>
+                <th>Source</th>
+                <th class="text-end">Montant</th>
+                <th>Statut</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @forelse($demandesFinancement as $demande)
+                @php
+                  $enAttente = $demande->statut === \App\Models\DemandeAvance::STATUT_EN_ATTENTE;
+                  $idAgent = (int) $demande->id_agent;
+                @endphp
+                <tr>
+                  <td>
+                    @if($idAgent > 0)
+                      <a href="{{ route('gestionfinanciere.agent.show', ['id_agent' => $idAgent]) }}"
+                        class="fw-semibold text-primary text-decoration-none">
+                        {{ $demande->agent_nom ?: ('Agent #'.$idAgent) }}
+                      </a>
+                    @else
+                      <span class="fw-semibold">{{ $demande->agent_nom ?: '—' }}</span>
+                    @endif
+                    @if($demande->agent_numero)
+                      <div class="small text-muted">{{ $demande->agent_numero }}</div>
+                    @endif
+                  </td>
+                  <td>{{ $demande->date_demande?->format('d/m/Y') ?? '—' }}</td>
+                  <td>
+                    @if($demande->source === \App\Models\DemandeAvance::SOURCE_API)
+                      <span class="badge bg-label-info">Caisse Unipalm</span>
+                    @else
+                      <span class="badge bg-label-secondary">Caisse locale</span>
+                    @endif
+                  </td>
+                  <td class="text-end fw-semibold {{ $enAttente ? 'text-danger' : 'text-success' }}">
+                    {{ number_format((float) $demande->montant, 0, ',', ' ') }}
+                  </td>
+                  <td>
+                    @if($enAttente)
+                      <span class="badge bg-label-warning">À payer</span>
+                    @elseif($demande->statut === \App\Models\DemandeAvance::STATUT_PAYEE)
+                      <span class="badge bg-label-success">Payée</span>
+                    @else
+                      <span class="badge bg-label-secondary">{{ ucfirst(str_replace('_', ' ', (string) $demande->statut)) }}</span>
+                    @endif
+                  </td>
+                  <td class="text-end">
+                    @if($enAttente && $idAgent > 0)
+                      <a href="{{ route('gestionfinanciere.agent.show', ['id_agent' => $idAgent]) }}"
+                        class="btn btn-sm btn-success">
+                        <i class="bx bx-money me-1"></i>Payer
+                      </a>
+                    @elseif($demande->statut === \App\Models\DemandeAvance::STATUT_PAYEE)
+                      <span class="badge bg-label-success">Soldé</span>
+                    @else
+                      <span class="text-muted">—</span>
+                    @endif
+                  </td>
+                </tr>
+              @empty
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-5">
+                    <i class="bx bx-money fs-1 d-block mb-2 opacity-25"></i>
+                    Aucune demande de financement à afficher.
+                  </td>
+                </tr>
+              @endforelse
+            </tbody>
+          </table>
+        </div>
+        @if($demandesFinancement->hasPages())
+          <div class="mt-3">
+            {{ $demandesFinancement->links() }}
+          </div>
+        @endif
       </div>
     </div>
 

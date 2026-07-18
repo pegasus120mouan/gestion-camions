@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\CodeTransporteur;
 use App\Models\PrixAgent;
 use App\Models\Produit;
 use App\Services\ChefEquipeContext;
@@ -142,18 +141,6 @@ class AgentController extends Controller
         return "{$debut} au {$fin}";
     }
 
-    private function typeSlugPourCodeTransporteur(string $nom): string
-    {
-        if (str_contains($nom, 'PGF')) {
-            return 'pgf';
-        }
-        if (strcasecmp(trim($nom), 'Autre Camion') === 0 || strcasecmp(trim($nom), 'Autre') === 0) {
-            return 'autre_camion';
-        }
-
-        return 'transporteur';
-    }
-
     public function index(Request $request)
     {
         $token = $this->mesAgentsService->resolveToken($request);
@@ -233,22 +220,26 @@ class AgentController extends Controller
 
         $prixTransporteur = $orderPrix(PrixAgent::where('id_agent', $id_agent)->where('type', 'transporteur'))->get();
         $prixPgf = $orderPrix(PrixAgent::where('id_agent', $id_agent)->where('type', 'pgf'))->get();
-        $prixAutreCamion = $orderPrix(PrixAgent::where('id_agent', $id_agent)->where('type', 'autre_camion'))->get();
+        $prixAutreCamionSeuls = $orderPrix(PrixAgent::where('id_agent', $id_agent)->where('type', 'autre_camion'))->get();
+        // Ancien type "transporteur" = non-PGF → traité comme autre_camion
+        $prixAutreCamion = $prixAutreCamionSeuls->merge($prixTransporteur)->values();
 
-        $codesTransporteurs = CodeTransporteur::orderBy('nom')->get();
-        $typeParCodeNom = [];
-        foreach ($codesTransporteurs as $code) {
-            $typeParCodeNom[$code->nom] = $this->typeSlugPourCodeTransporteur($code->nom);
-        }
+        // Uniquement 2 grilles : Autre Camion (non-PGF) et Camion PGF
+        $codesTransporteurs = collect([
+            (object) ['nom' => 'Autre Camion'],
+            (object) ['nom' => 'Camion PGF'],
+        ]);
+        $typeParCodeNom = [
+            'Autre Camion' => 'autre_camion',
+            'Camion PGF' => 'pgf',
+        ];
 
         $prixParTypeSlug = [
-            'transporteur' => $this->grouperPrixParProduit($prixTransporteur, $produits),
             'pgf' => $this->grouperPrixParProduit($prixPgf, $produits),
             'autre_camion' => $this->grouperPrixParProduit($prixAutreCamion, $produits),
         ];
 
         $prixCountsParType = [
-            'transporteur' => $prixTransporteur->count(),
             'pgf' => $prixPgf->count(),
             'autre_camion' => $prixAutreCamion->count(),
         ];
@@ -261,7 +252,7 @@ class AgentController extends Controller
             'typeParCodeNom' => $typeParCodeNom,
             'prixParTypeSlug' => $prixParTypeSlug,
             'prixCountsParType' => $prixCountsParType,
-            'prixAll' => $prixTransporteur->merge($prixPgf)->merge($prixAutreCamion),
+            'prixAll' => $prixPgf->merge($prixAutreCamion),
             'prixTransporteur' => $prixTransporteur,
             'prixPgf' => $prixPgf,
             'prixAutreCamion' => $prixAutreCamion,
@@ -274,7 +265,7 @@ class AgentController extends Controller
             'produit_id' => ['required', 'integer', 'exists:produits,id'],
             'id_usine' => ['required', 'string'],
             'nom_usine' => ['required', 'string'],
-            'type' => ['required', 'in:transporteur,pgf,autre_camion'],
+            'type' => ['required', 'in:pgf,autre_camion'],
             'prix' => ['required', 'numeric', 'min:0'],
             'date_debut' => ['nullable', 'date'],
             'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],

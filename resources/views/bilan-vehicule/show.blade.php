@@ -8,9 +8,7 @@
           <i class="bx bx-arrow-back me-1"></i> Retour aux catégories
         </a>
         <h4 class="mb-0"><i class="bx bx-car me-2"></i>Bilan - {{ $vehicule->matricule_vehicule }}</h4>
-        @if($vehicule->codeTransporteur)
-        <small class="text-muted">Catégorie: {{ $vehicule->codeTransporteur->nom }}</small>
-        @endif
+        <small class="text-muted">Catégorie : {{ $categorieLabel }}</small>
       </div>
     </div>
 
