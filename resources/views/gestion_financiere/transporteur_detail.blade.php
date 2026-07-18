@@ -632,26 +632,51 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  document.querySelectorAll('.montant-input-bordereau').forEach(function(input) {
-    input.addEventListener('input', function() {
-      this.value = formatNumber(this.value);
-    });
-  });
-
   var urlPaiementBordereauBase = @json(url('/gestion-financiere/transporteur/' . $transporteur->id . '/bordereaux'));
   var avanceDisponible = @json((int) ($montantAvancesTransporteur ?? 0));
+  var inputPaiementBordereau = document.getElementById('paiementBordereauMontant');
+
+  function appliquerLimiteMontantPaiement(input) {
+    if (!input) return;
+    var digits = String(input.value || '').replace(/\D/g, '');
+    var limite = parseInt(input.dataset.max || '0', 10);
+    var montant = digits ? parseInt(digits, 10) : 0;
+
+    if (limite > 0 && montant > limite) {
+      montant = limite;
+    }
+
+    input.value = montant > 0 ? montant.toLocaleString('fr-FR') : '';
+  }
+
+  if (inputPaiementBordereau) {
+    inputPaiementBordereau.addEventListener('input', function() {
+      appliquerLimiteMontantPaiement(this);
+    });
+    inputPaiementBordereau.addEventListener('blur', function() {
+      appliquerLimiteMontantPaiement(this);
+    });
+    inputPaiementBordereau.addEventListener('paste', function(event) {
+      event.preventDefault();
+      var texte = (event.clipboardData || window.clipboardData).getData('text') || '';
+      this.value = texte;
+      appliquerLimiteMontantPaiement(this);
+    });
+  }
+
   document.querySelectorAll('.btn-paiement-bordereau').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var id = btn.getAttribute('data-bordereau-id');
       var numero = btn.getAttribute('data-bordereau-numero');
       var reste = parseInt(btn.getAttribute('data-bordereau-reste') || '0', 10);
       var limite = avanceDisponible > 0 ? Math.min(reste, avanceDisponible) : reste;
-      var input = document.getElementById('paiementBordereauMontant');
       document.getElementById('formPaiementBordereau').action = urlPaiementBordereauBase + '/' + id + '/paiement';
       document.getElementById('paiementBordereauNumero').textContent = numero;
       document.getElementById('paiementBordereauReste').textContent = reste.toLocaleString('fr-FR');
-      input.value = limite > 0 ? limite.toLocaleString('fr-FR') : '';
-      input.dataset.max = String(limite);
+      if (inputPaiementBordereau) {
+        inputPaiementBordereau.dataset.max = String(limite);
+        inputPaiementBordereau.value = limite > 0 ? limite.toLocaleString('fr-FR') : '';
+      }
       document.getElementById('paiementBordereauLimite').textContent =
         'Maximum autorisé : ' + limite.toLocaleString('fr-FR') + ' FCFA';
     });
