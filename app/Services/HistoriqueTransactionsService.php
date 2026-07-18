@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AvanceTransporteur;
 use App\Models\PaiementAgent;
 use App\Models\PaiementChefChargeur;
 use App\Models\PaiementFournisseur;
@@ -180,6 +181,36 @@ class HistoriqueTransactionsService
     private function paiementsTransporteurs(string $search, string $dateDebut, string $dateFin): Collection
     {
         $rows = collect();
+
+        $queryAvances = AvanceTransporteur::query()->with('transporteur');
+        if ($search !== '') {
+            $queryAvances->where(function ($q) use ($search) {
+                $q->where('reference', 'like', "%{$search}%")
+                    ->orWhere('commentaire', 'like', "%{$search}%")
+                    ->orWhereHas('transporteur', fn ($t) => $t->where('nom', 'like', "%{$search}%"));
+            });
+        }
+        $this->applyDateFilters($queryAvances, $dateDebut, $dateFin, 'date_avance');
+
+        $rows = $rows->merge($queryAvances->get()->map(function (AvanceTransporteur $avance) {
+            return (object) [
+                'key' => 'avance-transporteur-'.$avance->id,
+                'id_sort' => (int) $avance->id,
+                'date_sort' => optional($avance->date_avance)->format('Y-m-d') ?: '1970-01-01',
+                'date' => $avance->date_avance,
+                'type' => 'transporteur',
+                'type_label' => 'Avance transporteur',
+                'beneficiaire' => $avance->transporteur
+                    ? trim(($avance->transporteur->nom ?? '').' '.($avance->transporteur->prenoms ?? ''))
+                    : ('Transporteur #'.$avance->transporteur_id),
+                'reference' => $avance->reference ?: '—',
+                'mode' => $avance->mode_paiement ?: '—',
+                'montant' => (float) $avance->montant,
+                'note' => $avance->commentaire ?: 'Avance',
+                'pdf_url' => null,
+                'detail_url' => null,
+            ];
+        }));
 
         $queryGestion = PaiementTransporteurGestion::query()->with('transporteur');
         if ($search !== '') {

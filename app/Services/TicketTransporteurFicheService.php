@@ -51,7 +51,11 @@ class TicketTransporteurFicheService
             return null;
         }
 
-        $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
+        try {
+            $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
+        } catch (\Throwable $e) {
+            $agent = null;
+        }
 
         return $agent ? trim((string) ($agent['nom_complet'] ?? '')) : null;
     }
@@ -125,7 +129,11 @@ class TicketTransporteurFicheService
             $nomAgentFiche = trim((string) ($fiche->nom_agent ?? ''));
             $numeroAgentFiche = trim((string) ($fiche->numero_agent ?? ''));
             if ($nomAgentFiche === '' || $numeroAgentFiche === '') {
-                $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
+                try {
+                    $agent = app(MesAgentsService::class)->findAgentById((int) $ticket->id_agent);
+                } catch (\Throwable $e) {
+                    $agent = null;
+                }
                 if ($agent) {
                     $nomAgent = trim((string) ($agent['nom_complet'] ?? ''));
                     if ($nomAgent !== '' && $nomAgentFiche !== $nomAgent) {

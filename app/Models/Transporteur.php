@@ -23,6 +23,11 @@ class Transporteur extends Model
         return $this->hasMany(PaiementTransporteurGestion::class)->orderBy('date_paiement', 'desc');
     }
 
+    public function avances(): HasMany
+    {
+        return $this->hasMany(AvanceTransporteur::class)->orderByDesc('date_avance');
+    }
+
     public function bordereaux(): HasMany
     {
         return $this->hasMany(BordereauTransporteur::class)->orderByDesc('date_generation');

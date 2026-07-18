@@ -609,19 +609,50 @@ class MesTicketsService
             $tickets
         )));
 
-        if ($ids === []) {
+        $numeros = array_values(array_filter(array_map(
+            static fn (array $t) => trim((string) ($t['numero_ticket'] ?? '')),
+            $tickets
+        )));
+
+        if ($ids === [] && $numeros === []) {
             return [];
         }
 
-        $validated = TicketValidation::query()
-            ->whereIn('id_ticket', $ids)
-            ->pluck('id_ticket')
+        // L'id API peut changer : on matche aussi par numéro de ticket.
+        $validations = TicketValidation::query()
+            ->where(function ($query) use ($ids, $numeros) {
+                if ($ids !== []) {
+                    $query->whereIn('id_ticket', $ids);
+                }
+                if ($numeros !== []) {
+                    $ids !== []
+                        ? $query->orWhereIn('numero_ticket', $numeros)
+                        : $query->whereIn('numero_ticket', $numeros);
+                }
+            })
+            ->get(['id_ticket', 'numero_ticket']);
+
+        $validatedIds = $validations->pluck('id_ticket')
+            ->map(static fn ($id) => (int) $id)
+            ->flip()
+            ->all();
+        $validatedNumeros = $validations->pluck('numero_ticket')
+            ->map(static fn ($n) => trim((string) $n))
+            ->filter()
             ->flip()
             ->all();
 
         return array_values(array_filter(
             $tickets,
-            static fn (array $t) => ! isset($validated[(int) ($t['id_ticket'] ?? 0)])
+            static function (array $t) use ($validatedIds, $validatedNumeros) {
+                if (isset($validatedIds[(int) ($t['id_ticket'] ?? 0)])) {
+                    return false;
+                }
+
+                $numero = trim((string) ($t['numero_ticket'] ?? ''));
+
+                return $numero === '' || ! isset($validatedNumeros[$numero]);
+            }
         ));
     }
 

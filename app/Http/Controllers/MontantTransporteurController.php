@@ -78,6 +78,7 @@ class MontantTransporteurController extends Controller
 
         $montants = $this->calculerMontantsTransporteur($transporteur, $fichesSortie, $bordereaux);
         $paiementsGestion = $transporteur->paiementsGestion()->orderBy('date_paiement', 'desc')->get();
+        $avancesTransporteur = $transporteur->avances()->get();
 
         return view('gestion_financiere.transporteur_detail', array_merge([
             'transporteur' => $transporteur,
@@ -87,12 +88,20 @@ class MontantTransporteurController extends Controller
             'vehicules' => $vehicules,
             'paiementsGestion' => $paiementsGestion,
             'montantPayeGestion' => $paiementsGestion->sum('montant'),
+            'avancesTransporteur' => $avancesTransporteur,
+            'montantAvancesTransporteur' => $avancesTransporteur->sum('montant'),
             'ticketFicheService' => $ticketFicheService,
         ], $montants));
     }
 
     public function storePaiementGestion(Request $request, Transporteur $transporteur)
     {
+        if ($request->has('montant')) {
+            $request->merge([
+                'montant' => preg_replace('/\s+/', '', (string) $request->input('montant')),
+            ]);
+        }
+
         $validated = $request->validate([
             'montant' => ['required', 'integer', 'min:1'],
             'date_paiement' => ['required', 'date'],
@@ -103,7 +112,36 @@ class MontantTransporteurController extends Controller
 
         $transporteur->paiementsGestion()->create($validated);
 
-        return redirect()->back()->with('success', 'Paiement enregistré avec succès.');
+        return redirect()->back()->with(
+            'success',
+            'Paiement de '.number_format((int) $validated['montant'], 0, ',', ' ').' FCFA enregistré avec succès.'
+        );
+    }
+
+    public function storeAvance(Request $request, Transporteur $transporteur)
+    {
+        if ($request->has('montant')) {
+            $request->merge([
+                'montant' => preg_replace('/\s+/', '', (string) $request->input('montant')),
+            ]);
+        }
+
+        $validated = $request->validate([
+            'montant' => ['required', 'integer', 'min:1'],
+            'date_avance' => ['required', 'date'],
+            'mode_paiement' => ['nullable', 'string', 'max:50'],
+            'reference' => ['nullable', 'string', 'max:100'],
+            'commentaire' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $transporteur->avances()->create($validated);
+
+        return redirect()->route('gestionfinanciere.transporteur.show', $transporteur)
+            ->with(
+                'success',
+                'Avance de '.number_format((int) $validated['montant'], 0, ',', ' ')
+                .' FCFA enregistrée avec succès.'
+            );
     }
 
     public function updatePU(Request $request, int $ficheId)
@@ -242,8 +280,13 @@ class MontantTransporteurController extends Controller
             ->filter(fn ($fiche) => $fiche->bordereau_transporteur_id === null)
             ->sum('montant_paye_transporteur');
         $montantPayeBordereaux = (float) $bordereaux->sum('montant_paye');
-        $montantPayeGestion = $transporteur->paiementsGestion()->sum('montant');
-        $montantPaye = $totalAvance + $montantPayeFiches + $montantPayeBordereaux + $montantPayeGestion;
+        $montantPayeGestion = (float) $transporteur->paiementsGestion()->sum('montant');
+        $montantAvancesTransporteur = (float) $transporteur->avances()->sum('montant');
+        $montantPayeSansAvances = $totalAvance
+            + $montantPayeFiches
+            + $montantPayeBordereaux
+            + $montantPayeGestion;
+        $montantPaye = $montantPayeSansAvances + $montantAvancesTransporteur;
         $resteAPayer = $montantDu - $montantPaye;
 
         return [
@@ -252,7 +295,9 @@ class MontantTransporteurController extends Controller
             'reste_a_payer' => (int) $resteAPayer,
             'montantDu' => (int) $montantDu,
             'montantPaye' => (int) $montantPaye,
+            'montantPayeSansAvances' => (int) $montantPayeSansAvances,
             'resteAPayer' => (int) $resteAPayer,
+            'montantAvancesTransporteur' => (int) $montantAvancesTransporteur,
         ];
     }
 

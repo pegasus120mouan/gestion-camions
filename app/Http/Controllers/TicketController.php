@@ -263,13 +263,29 @@ class TicketController extends Controller
         $localTicketsById = $localTickets->keyBy('id_ticket');
         $localTicketsByNumero = $localTickets->keyBy('numero_ticket');
 
-        $validatedTicketIds = $ticketIds !== []
+        $validations = ($ticketIds !== [] || $numerosTickets !== [])
             ? TicketValidation::query()
-                ->whereIn('id_ticket', $ticketIds)
-                ->pluck('id_ticket')
-                ->flip()
-                ->all()
-            : [];
+                ->where(function ($query) use ($ticketIds, $numerosTickets) {
+                    if ($ticketIds !== []) {
+                        $query->whereIn('id_ticket', $ticketIds);
+                    }
+                    if ($numerosTickets !== []) {
+                        $ticketIds !== []
+                            ? $query->orWhereIn('numero_ticket', $numerosTickets)
+                            : $query->whereIn('numero_ticket', $numerosTickets);
+                    }
+                })
+                ->get(['id_ticket', 'numero_ticket'])
+            : collect();
+        $validatedTicketIds = $validations->pluck('id_ticket')
+            ->map(static fn ($id) => (int) $id)
+            ->flip()
+            ->all();
+        $validatedNumeros = $validations->pluck('numero_ticket')
+            ->map(static fn ($n) => trim((string) $n))
+            ->filter()
+            ->flip()
+            ->all();
 
         $particulierAgentIds = $localTickets->pluck('particulier_agent_id')->filter()->unique()->values();
         $prixParticuliers = $particulierAgentIds->isNotEmpty()
@@ -309,7 +325,8 @@ class TicketController extends Controller
                     ? ($localPourDonnees?->statut_ticket ?? $ticket['statut_ticket'] ?? 'non soldé')
                     : ($ticket['statut_ticket'] ?? $localPourDonnees?->statut_ticket),
                 'created_at' => $ticket['created_at'] ?? ($localPourDonnees?->created_at?->format('Y-m-d H:i:s')),
-                'conformite' => isset($validatedTicketIds[$idTicket]) ? 'valide' : null,
+                'conformite' => (isset($validatedTicketIds[$idTicket])
+                    || ($numeroTicket !== '' && isset($validatedNumeros[$numeroTicket]))) ? 'valide' : null,
             ];
         }
 

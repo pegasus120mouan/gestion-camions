@@ -9,6 +9,9 @@
         <span class="badge bg-secondary ms-1">{{ $transporteur->vehicules->count() }} camion(s)</span>
       </div>
       <div>
+        <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#modalAvanceTransporteur">
+          <i class="bx bx-wallet me-1"></i>Avance
+        </button>
         <a href="{{ route('gestionfinanciere.montant_transporteur') }}" class="btn btn-secondary">
           <i class="bx bx-arrow-back me-1"></i>Retour
         </a>
@@ -29,12 +32,28 @@
       </div>
     @endif
 
+    <div class="row mb-3">
+      <div class="col-12">
+        <div class="d-flex justify-content-center">
+          <a href="#section-avances-transporteur"
+             class="badge rounded-pill text-decoration-none px-4 py-3 d-inline-flex align-items-center gap-2"
+             style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); font-size: 1rem; font-weight: 600;">
+            <i class="bx bx-wallet text-white"></i>
+            <span class="text-white">
+              Montant avance : {{ number_format($montantAvancesTransporteur ?? 0, 0, ',', ' ') }} FCFA
+            </span>
+          </a>
+        </div>
+      </div>
+    </div>
+
     <div class="row mb-4">
       <div class="col-md-4">
         <div class="card" style="background-color: #f8d7da; border-left: 4px solid #dc3545;">
           <div class="card-body">
             <h6 class="card-title" style="color: #842029;">Montant dû</h6>
             <h3 class="mb-0" style="color: #842029;">{{ number_format($montantDu, 0, ',', ' ') }} FCFA</h3>
+            <small class="text-muted">Tickets / fiches liés au transporteur</small>
           </div>
         </div>
       </div>
@@ -42,7 +61,13 @@
         <div class="card" style="background-color: #d1e7dd; border-left: 4px solid #198754;">
           <div class="card-body">
             <h6 class="card-title" style="color: #0f5132;">Montant payé</h6>
-            <h3 class="mb-0" style="color: #0f5132;">{{ number_format($montantPaye, 0, ',', ' ') }} FCFA</h3>
+            <h3 class="mb-0" style="color: #0f5132;">{{ number_format($montantPayeSansAvances ?? $montantPaye, 0, ',', ' ') }} FCFA</h3>
+            <small class="text-muted">
+              Paiements fiches / bordereaux
+              @if(($montantAvancesTransporteur ?? 0) > 0)
+                · Avances : {{ number_format($montantAvancesTransporteur, 0, ',', ' ') }} FCFA
+              @endif
+            </small>
           </div>
         </div>
       </div>
@@ -51,6 +76,64 @@
           <div class="card-body">
             <h6 class="card-title" style="color: #664d03;">Reste à payer</h6>
             <h3 class="mb-0" style="color: #664d03;">{{ number_format($resteAPayer, 0, ',', ' ') }} FCFA</h3>
+            <small class="text-muted">Montant dû − montant payé − avances</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row mb-4" id="section-avances-transporteur">
+      <div class="col-12">
+        <div class="card mb-4">
+          <div class="card-header d-flex justify-content-between align-items-center" style="background-color: #d1e7dd; border-bottom: 1px solid #badbcc;">
+            <h5 class="card-title mb-0" style="color: #0f5132;">
+              <i class="bx bx-wallet me-2"></i>Avances ({{ ($avancesTransporteur ?? collect())->count() }})
+            </h5>
+            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalAvanceTransporteur">
+              <i class="bx bx-plus me-1"></i>Ajouter une avance
+            </button>
+          </div>
+          <div class="table-responsive text-nowrap">
+            <table class="table table-sm table-bordered table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Mode</th>
+                  <th>Référence</th>
+                  <th>Commentaire</th>
+                  <th class="text-end">Montant</th>
+                </tr>
+              </thead>
+              <tbody>
+                @forelse($avancesTransporteur ?? [] as $avance)
+                  <tr>
+                    <td>{{ $avance->date_avance?->format('d/m/Y') ?? '—' }}</td>
+                    <td>{{ $avance->mode_paiement ?: '—' }}</td>
+                    <td>{{ $avance->reference ?: '—' }}</td>
+                    <td>{{ $avance->commentaire ?: '—' }}</td>
+                    <td class="text-end fw-semibold text-success">
+                      {{ number_format((float) $avance->montant, 0, ',', ' ') }} FCFA
+                    </td>
+                  </tr>
+                @empty
+                  <tr>
+                    <td colspan="5" class="text-center text-muted py-4">
+                      Aucune avance enregistrée pour ce transporteur.
+                    </td>
+                  </tr>
+                @endforelse
+              </tbody>
+              @if(($avancesTransporteur ?? collect())->isNotEmpty())
+                <tfoot>
+                  <tr class="fw-bold">
+                    <td colspan="4">Total avances</td>
+                    <td class="text-end text-success">
+                      {{ number_format((float) ($montantAvancesTransporteur ?? 0), 0, ',', ' ') }} FCFA
+                    </td>
+                  </tr>
+                </tfoot>
+              @endif
+            </table>
           </div>
         </div>
       </div>
@@ -268,6 +351,57 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="modalAvanceTransporteur" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title text-white"><i class="bx bx-wallet me-2"></i>Avance transporteur</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" action="{{ route('gestionfinanciere.transporteur.avance.store', $transporteur) }}" id="formAvanceTransporteur">
+        @csrf
+        <div class="modal-body">
+          <div class="alert alert-info mb-3">
+            <strong>Reste à payer :</strong> {{ number_format($resteAPayer, 0, ',', ' ') }} FCFA
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Montant avance (FCFA) <span class="text-danger">*</span></label>
+            <input type="text" name="montant" id="avanceTransporteurMontant" class="form-control" required
+              placeholder="Ex: 500 000" inputmode="numeric" autocomplete="off" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Date de l’avance <span class="text-danger">*</span></label>
+            <input type="date" name="date_avance" class="form-control" required value="{{ date('Y-m-d') }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Mode de paiement</label>
+            <select name="mode_paiement" class="form-select">
+              <option value="Espèces" selected>Espèces</option>
+              <option value="Virement">Virement</option>
+              <option value="Chèque">Chèque</option>
+              <option value="Mobile Money">Mobile Money</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Référence</label>
+            <input type="text" name="reference" class="form-control" placeholder="Optionnel" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Commentaire</label>
+            <input type="text" name="commentaire" class="form-control" value="Avance" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-success">
+            <i class="bx bx-save me-1"></i>Enregistrer
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -722,6 +856,24 @@ document.addEventListener('DOMContentLoaded', function() {
         alert('Sélectionnez au moins une fiche.');
       }
     });
+  }
+
+  var formAvance = document.getElementById('formAvanceTransporteur');
+  if (formAvance) {
+    formAvance.addEventListener('submit', function() {
+      var input = document.getElementById('avanceTransporteurMontant');
+      if (input) {
+        input.value = String(input.value || '').replace(/\s/g, '');
+      }
+    });
+
+    var montantInput = document.getElementById('avanceTransporteurMontant');
+    if (montantInput) {
+      montantInput.addEventListener('input', function() {
+        var digits = String(this.value || '').replace(/\D/g, '');
+        this.value = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+      });
+    }
   }
 
   var formPaiementBordereau = document.getElementById('formPaiementBordereau');
