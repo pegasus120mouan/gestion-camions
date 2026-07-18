@@ -449,12 +449,10 @@ Route::middleware('auth')->group(function () {
     // Montant Transporteurs
     Route::get('/gestion-financiere/montant-transporteur', [MontantTransporteurController::class, 'index'])->name('gestionfinanciere.montant_transporteur');
     Route::get('/gestion-financiere/transporteur/{transporteur}', [MontantTransporteurController::class, 'show'])->name('gestionfinanciere.transporteur.show');
-    Route::post('/gestion-financiere/montant-transporteur/{transporteur}/paiement', [MontantTransporteurController::class, 'storePaiementGestion'])->name('gestionfinanciere.paiement_transporteur.store');
     Route::post('/gestion-financiere/transporteur/{transporteur}/avance', [MontantTransporteurController::class, 'storeAvance'])->name('gestionfinanciere.transporteur.avance.store');
     Route::get('/gestion-financiere/transporteur/{transporteur}/historique-paiements', [MontantTransporteurController::class, 'historiquePaiements'])->name('gestionfinanciere.transporteur.historique');
     Route::get('/gestion-financiere/transporteur/vehicule/{matricule}', [MontantTransporteurController::class, 'showVehicule'])->name('gestionfinanciere.transporteur.vehicule');
     Route::put('/gestion-financiere/transporteur/fiche/{ficheId}/pu', [MontantTransporteurController::class, 'updatePU'])->name('gestionfinanciere.transporteur.updatePU');
-    Route::post('/gestion-financiere/transporteur/fiche/{ficheId}/paiement', [MontantTransporteurController::class, 'storePaiement'])->name('gestionfinanciere.transporteur.paiement');
     Route::get('/gestion-financiere/transporteur/{transporteur}/bordereaux/fiches-eligibles', [MontantTransporteurController::class, 'fichesEligiblesBordereau'])->name('gestionfinanciere.transporteur.bordereau.fiches');
     Route::post('/gestion-financiere/transporteur/{transporteur}/bordereaux', [MontantTransporteurController::class, 'storeBordereau'])->name('gestionfinanciere.transporteur.bordereau.store');
     Route::get('/gestion-financiere/transporteur/{transporteur}/bordereaux/{id}', [MontantTransporteurController::class, 'showBordereau'])->name('gestionfinanciere.transporteur.bordereau.show');

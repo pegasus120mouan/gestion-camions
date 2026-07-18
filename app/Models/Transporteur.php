@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Transporteur extends Model
 {
@@ -12,6 +14,16 @@ class Transporteur extends Model
         'nom',
         'prenoms',
     ];
+
+    protected function nom(): Attribute
+    {
+        return Attribute::get(fn ($value) => Str::title(trim((string) $value)));
+    }
+
+    protected function prenoms(): Attribute
+    {
+        return Attribute::get(fn ($value) => Str::title(trim((string) $value)));
+    }
 
     public function vehicules(): HasMany
     {

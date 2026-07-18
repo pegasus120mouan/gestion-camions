@@ -11,6 +11,7 @@ use App\Services\BordereauTransporteurService;
 use App\Services\TicketTransporteurFicheService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class MontantTransporteurController extends Controller
 {
@@ -80,6 +81,18 @@ class MontantTransporteurController extends Controller
         $paiementsGestion = $transporteur->paiementsGestion()->orderBy('date_paiement', 'desc')->get();
         $avancesTransporteur = $transporteur->avances()->get();
 
+        $historiquePaiements = PaiementTransporteur::query()
+            ->with('bordereau')
+            ->where(function ($query) use ($bordereaux, $matricules) {
+                $query->whereIn('id_bordereau', $bordereaux->pluck('id'));
+                if (! empty($matricules)) {
+                    $query->orWhereIn('matricule_vehicule', $matricules);
+                }
+            })
+            ->orderByDesc('date_paiement')
+            ->orderByDesc('id')
+            ->get();
+
         return view('gestion_financiere.transporteur_detail', array_merge([
             'transporteur' => $transporteur,
             'fichesSortie' => $fichesHorsBordereau,
@@ -90,32 +103,9 @@ class MontantTransporteurController extends Controller
             'montantPayeGestion' => $paiementsGestion->sum('montant'),
             'avancesTransporteur' => $avancesTransporteur,
             'montantAvancesTransporteur' => $avancesTransporteur->sum('montant'),
+            'historiquePaiements' => $historiquePaiements,
             'ticketFicheService' => $ticketFicheService,
         ], $montants));
-    }
-
-    public function storePaiementGestion(Request $request, Transporteur $transporteur)
-    {
-        if ($request->has('montant')) {
-            $request->merge([
-                'montant' => preg_replace('/\s+/', '', (string) $request->input('montant')),
-            ]);
-        }
-
-        $validated = $request->validate([
-            'montant' => ['required', 'integer', 'min:1'],
-            'date_paiement' => ['required', 'date'],
-            'mode_paiement' => ['nullable', 'string', 'max:50'],
-            'reference' => ['nullable', 'string', 'max:100'],
-            'commentaire' => ['nullable', 'string', 'max:500'],
-        ]);
-
-        $transporteur->paiementsGestion()->create($validated);
-
-        return redirect()->back()->with(
-            'success',
-            'Paiement de '.number_format((int) $validated['montant'], 0, ',', ' ').' FCFA enregistré avec succès.'
-        );
     }
 
     public function storeAvance(Request $request, Transporteur $transporteur)
@@ -171,37 +161,6 @@ class MontantTransporteurController extends Controller
 
         return redirect($this->redirectUrlPourFiche($fiche))
             ->with('success', 'Prix unitaire enregistré avec succès.');
-    }
-
-    public function storePaiement(Request $request, int $ficheId)
-    {
-        $montant = str_replace(' ', '', $request->input('montant'));
-        $request->merge(['montant' => $montant]);
-
-        $validated = $request->validate([
-            'montant' => ['required', 'numeric', 'min:1'],
-            'date_paiement' => ['required', 'date'],
-            'observation' => ['nullable', 'string'],
-        ]);
-
-        $fiche = FicheSortie::findOrFail($ficheId);
-
-        PaiementTransporteur::create([
-            'fiche_sortie_id' => $ficheId,
-            'matricule_vehicule' => $fiche->matricule_vehicule,
-            'montant' => $validated['montant'],
-            'date_paiement' => $validated['date_paiement'],
-            'observation' => $validated['observation'] ?? null,
-        ]);
-
-        $nouveauMontantPaye = ($fiche->montant_paye_transporteur ?? 0) + $validated['montant'];
-
-        $fiche->update([
-            'montant_paye_transporteur' => $nouveauMontantPaye,
-        ]);
-
-        return redirect($this->redirectUrlPourFiche($fiche))
-            ->with('success', 'Paiement de ' . number_format($validated['montant'], 0, ',', ' ') . ' FCFA enregistré avec succès.');
     }
 
     public function historiquePaiements(Request $request, Transporteur $transporteur)
@@ -282,7 +241,10 @@ class MontantTransporteurController extends Controller
             ->sum('montant_paye_transporteur');
         $montantPayeBordereaux = (float) $bordereaux->sum('montant_paye');
         $montantPayeGestion = (float) $transporteur->paiementsGestion()->sum('montant');
-        $montantAvancesTransporteur = (float) $transporteur->avances()->sum('montant');
+        // Seul le solde non consommé des avances compte : la part utilisée est
+        // déjà incluse dans les paiements de bordereaux.
+        $montantAvancesTransporteur = (float) $transporteur->avances()
+            ->sum(\Illuminate\Support\Facades\DB::raw('montant - montant_utilise'));
         $montantPayeSansAvances = $totalAvance
             + $montantPayeFiches
             + $montantPayeBordereaux
@@ -470,18 +432,67 @@ class MontantTransporteurController extends Controller
             ->where('transporteur_id', $transporteur->id)
             ->findOrFail($id);
 
-        PaiementTransporteur::create([
-            'id_bordereau' => $bordereau->id,
-            'matricule_vehicule' => '',
-            'montant' => $validated['montant'],
-            'date_paiement' => $validated['date_paiement'],
-            'observation' => $validated['observation'] ?? ('Paiement bordereau ' . $bordereau->numero),
-        ]);
+        $montantViaAvance = 0;
+        $montantEspeces = 0;
 
-        $bordereau->update([
-            'montant_paye' => (float) $bordereau->montant_paye + $validated['montant'],
-        ]);
+        DB::transaction(function () use ($transporteur, $bordereau, $validated, &$montantViaAvance, &$montantEspeces) {
+            // L'avance disponible du transporteur est obligatoirement consommée en premier.
+            $montantViaAvance = $this->consommerAvances($transporteur, (int) $validated['montant']);
+            $montantEspeces = (int) $validated['montant'] - $montantViaAvance;
 
-        return back()->with('success', 'Paiement de ' . number_format($validated['montant'], 0, ',', ' ') . ' FCFA enregistré pour le bordereau ' . $bordereau->numero . '.');
+            $observation = $validated['observation'] ?? ('Paiement bordereau ' . $bordereau->numero);
+            if ($montantViaAvance > 0) {
+                $observation .= ' — dont ' . number_format($montantViaAvance, 0, ',', ' ') . ' FCFA imputés sur avance';
+            }
+
+            PaiementTransporteur::create([
+                'fiche_sortie_id' => null,
+                'id_bordereau' => $bordereau->id,
+                'matricule_vehicule' => '',
+                'montant' => $validated['montant'],
+                'date_paiement' => $validated['date_paiement'],
+                'observation' => $observation,
+            ]);
+
+            $bordereau->update([
+                'montant_paye' => (float) $bordereau->montant_paye + $validated['montant'],
+            ]);
+        });
+
+        $message = 'Paiement de ' . number_format($validated['montant'], 0, ',', ' ') . ' FCFA enregistré pour le bordereau ' . $bordereau->numero . '.';
+        if ($montantViaAvance > 0) {
+            $message .= ' ' . number_format($montantViaAvance, 0, ',', ' ') . ' FCFA imputés sur l\'avance'
+                . ($montantEspeces > 0 ? ', ' . number_format($montantEspeces, 0, ',', ' ') . ' FCFA en paiement direct.' : '.');
+        }
+
+        return back()->with('success', $message);
+    }
+
+    /**
+     * Impute le montant sur les avances disponibles (les plus anciennes d'abord)
+     * et retourne la part effectivement couverte par les avances.
+     */
+    private function consommerAvances(Transporteur $transporteur, int $montant): int
+    {
+        $consomme = 0;
+
+        $avances = $transporteur->avances()
+            ->whereColumn('montant_utilise', '<', 'montant')
+            ->reorder()
+            ->orderBy('date_avance')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($avances as $avance) {
+            if ($consomme >= $montant) {
+                break;
+            }
+
+            $imputation = min($avance->solde, $montant - $consomme);
+            $avance->increment('montant_utilise', $imputation);
+            $consomme += $imputation;
+        }
+
+        return $consomme;
     }
 }

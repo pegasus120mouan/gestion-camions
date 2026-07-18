@@ -5,7 +5,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
       <h4 class="fw-bold mb-0">
         <span class="text-muted fw-light">Avances transporteurs /</span>
-        {{ $transporteur->code }} — {{ strtoupper(trim($transporteur->nom.' '.$transporteur->prenoms)) }}
+        {{ $transporteur->code }} — {{ $transporteur->nom }} {{ $transporteur->prenoms }}
       </h4>
       <div class="d-flex gap-2">
         <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalAvanceTransporteur">
@@ -69,6 +69,8 @@
               <th>Référence</th>
               <th>Commentaire</th>
               <th class="text-end">Montant</th>
+              <th class="text-end">Utilisé</th>
+              <th class="text-end">Solde</th>
             </tr>
           </thead>
           <tbody>
@@ -81,10 +83,16 @@
                 <td class="text-end fw-semibold text-success">
                   {{ number_format((float) $avance->montant, 0, ',', ' ') }} FCFA
                 </td>
+                <td class="text-end text-danger">
+                  {{ $avance->montant_utilise > 0 ? number_format($avance->montant_utilise, 0, ',', ' ').' FCFA' : '—' }}
+                </td>
+                <td class="text-end fw-semibold {{ $avance->solde > 0 ? 'text-primary' : 'text-muted' }}">
+                  {{ number_format($avance->solde, 0, ',', ' ') }} FCFA
+                </td>
               </tr>
             @empty
               <tr>
-                <td colspan="5" class="text-center text-muted py-4">Aucune avance enregistrée pour ce transporteur.</td>
+                <td colspan="7" class="text-center text-muted py-4">Aucune avance enregistrée pour ce transporteur.</td>
               </tr>
             @endforelse
           </tbody>
@@ -93,6 +101,8 @@
               <tr class="fw-bold">
                 <td colspan="4">Total avances</td>
                 <td class="text-end text-success">{{ number_format($totalAvances, 0, ',', ' ') }} FCFA</td>
+                <td class="text-end text-danger">{{ number_format($avances->sum('montant_utilise'), 0, ',', ' ') }} FCFA</td>
+                <td class="text-end text-primary">{{ number_format($avances->sum('solde'), 0, ',', ' ') }} FCFA</td>
               </tr>
             </tfoot>
           @endif

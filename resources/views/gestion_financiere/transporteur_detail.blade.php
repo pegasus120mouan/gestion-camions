@@ -202,6 +202,59 @@
           </div>
         </div>
 
+        @if($fichesSortie->isEmpty())
+        <div class="card">
+          <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <h5 class="mb-0"><i class="bx bx-history me-2"></i>Historique des paiements ({{ $historiquePaiements->count() }})</h5>
+              <small class="text-muted">Paiements de bordereaux et de fiches enregistrés pour ce transporteur.</small>
+            </div>
+          </div>
+          <div class="table-responsive text-nowrap">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Bordereau</th>
+                  <th>Véhicule</th>
+                  <th class="text-end">Montant</th>
+                  <th>Observation</th>
+                </tr>
+              </thead>
+              <tbody>
+                @forelse($historiquePaiements as $paiement)
+                  <tr>
+                    <td>{{ $paiement->date_paiement?->format('d/m/Y') ?? '—' }}</td>
+                    <td>
+                      @if($paiement->bordereau)
+                        <span class="badge bg-label-danger">{{ $paiement->bordereau->numero }}</span>
+                      @else
+                        <span class="text-muted">—</span>
+                      @endif
+                    </td>
+                    <td>{{ $paiement->matricule_vehicule ?: '—' }}</td>
+                    <td class="text-end fw-semibold text-success">{{ number_format((float) $paiement->montant, 0, ',', ' ') }} FCFA</td>
+                    <td class="text-wrap" style="max-width: 420px;">{{ $paiement->observation ?: '—' }}</td>
+                  </tr>
+                @empty
+                  <tr>
+                    <td colspan="5" class="text-center text-muted py-4">Aucun paiement enregistré pour ce transporteur</td>
+                  </tr>
+                @endforelse
+              </tbody>
+              @if($historiquePaiements->isNotEmpty())
+                <tfoot>
+                  <tr class="fw-bold">
+                    <td colspan="3">Total payé</td>
+                    <td class="text-end text-success">{{ number_format((float) $historiquePaiements->sum('montant'), 0, ',', ' ') }} FCFA</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              @endif
+            </table>
+          </div>
+        </div>
+        @else
         <div class="card">
           <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
@@ -279,9 +332,6 @@
                       <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalPU{{ $fiche->id }}" title="Saisir le prix unitaire">
                         <i class="bx bx-money me-1"></i>Prix unitaire
                       </button>
-                      <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#modalPaiementFiche{{ $fiche->id }}" title="Enregistrer un paiement">
-                        <i class="bx bx-plus"></i>
-                      </button>
                     </td>
                   </tr>
                 @empty
@@ -293,6 +343,7 @@
             </table>
           </div>
         </div>
+        @endif
       </div>
     </div>
   </div>
@@ -351,13 +402,6 @@
     $numeroTicket = $ticketFicheService->numeroTicketEffectif($fiche);
     $pu = $fiche->prix_unitaire_transport;
     $montantGlobalFiche = $pu ? ($poids * $pu) : 0;
-    $depensesTableau = \App\Models\Depense::where('matricule_vehicule', $fiche->matricule_vehicule)
-        ->whereDate('date_depense', '>=', $fiche->date_chargement)
-        ->whereDate('date_depense', '<=', $fiche->date_dechargement ?? $fiche->date_chargement)
-        ->sum('montant');
-    $avanceTableau = ($fiche->carburant ?? 0) + ($fiche->frais_route ?? 0) + $depensesTableau;
-    $montantPayeFiche = $fiche->montant_paye_transporteur ?? 0;
-    $resteAPayerFiche = $montantGlobalFiche - $avanceTableau - $montantPayeFiche;
   @endphp
 
   <div class="modal fade" id="modalPU{{ $fiche->id }}" tabindex="-1" aria-hidden="true">
@@ -405,39 +449,6 @@
       </div>
     </div>
   </div>
-
-  <div class="modal fade" id="modalPaiementFiche{{ $fiche->id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <form action="{{ route('gestionfinanciere.transporteur.paiement', $fiche->id) }}" method="POST">
-          @csrf
-          <div class="modal-header">
-            <h5 class="modal-title">Paiement fiche - {{ $fiche->matricule_vehicule }}</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <p class="mb-2"><strong>Reste à payer:</strong> <span class="{{ $resteAPayerFiche < 0 ? 'text-danger' : 'text-success' }}">{{ number_format($resteAPayerFiche, 0, ',', ' ') }} FCFA</span></p>
-            <div class="mb-3">
-              <label class="form-label">Montant (FCFA)</label>
-              <input type="text" name="montant" class="form-control montant-input-fiche" required placeholder="0">
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Date du paiement</label>
-              <input type="date" name="date_paiement" class="form-control" value="{{ date('Y-m-d') }}" required>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Observation</label>
-              <textarea name="observation" class="form-control" rows="2"></textarea>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-            <button type="submit" class="btn btn-success">Enregistrer</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
 @endforeach
 
 <div class="modal fade" id="modalPaiementBordereau" tabindex="-1" aria-hidden="true">
@@ -452,6 +463,13 @@
         <div class="modal-body">
           <p class="mb-2">Bordereau : <strong id="paiementBordereauNumero"></strong></p>
           <p class="mb-3">Reste à payer : <strong id="paiementBordereauReste" class="text-danger"></strong> FCFA</p>
+          @if(($montantAvancesTransporteur ?? 0) > 0)
+            <div class="alert alert-warning mb-3">
+              <i class="bx bx-wallet me-1"></i>
+              Avance disponible : <strong>{{ number_format($montantAvancesTransporteur, 0, ',', ' ') }} FCFA</strong>.<br>
+              <small>Ce paiement sera obligatoirement imputé sur l'avance en priorité ; seul l'éventuel surplus sera payé directement.</small>
+            </div>
+          @endif
           <div class="mb-3">
             <label class="form-label">Montant (FCFA) <span class="text-danger">*</span></label>
             <input type="text" name="montant" id="paiementBordereauMontant" class="form-control montant-input-bordereau" required placeholder="Ex: 123 000" inputmode="numeric" autocomplete="off" />
@@ -563,20 +581,6 @@ document.addEventListener('DOMContentLoaded', function() {
     value = value.replace(/\D/g, '');
     return value ? parseInt(value, 10).toLocaleString('fr-FR').replace(/\u202F/g, ' ').replace(/,/g, ' ') : '';
   }
-
-  document.querySelectorAll('.montant-input-fiche').forEach(function(input) {
-    input.addEventListener('input', function() {
-      this.value = formatNumber(this.value);
-    });
-  });
-
-  document.querySelectorAll('form').forEach(function(form) {
-    form.addEventListener('submit', function() {
-      form.querySelectorAll('.montant-input-fiche').forEach(function(input) {
-        input.value = input.value.replace(/\s/g, '');
-      });
-    });
-  });
 
   function chargerHistorique(vehicule) {
     var url = '{{ route("gestionfinanciere.transporteur.historique", $transporteur) }}';

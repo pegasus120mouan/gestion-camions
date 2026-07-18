@@ -12,6 +12,7 @@ class AvanceTransporteur extends Model
     protected $fillable = [
         'transporteur_id',
         'montant',
+        'montant_utilise',
         'date_avance',
         'mode_paiement',
         'reference',
@@ -20,8 +21,14 @@ class AvanceTransporteur extends Model
 
     protected $casts = [
         'montant' => 'integer',
+        'montant_utilise' => 'integer',
         'date_avance' => 'date',
     ];
+
+    public function getSoldeAttribute(): int
+    {
+        return max(0, $this->montant - $this->montant_utilise);
+    }
 
     public function transporteur(): BelongsTo
     {

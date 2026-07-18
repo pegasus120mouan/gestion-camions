@@ -38,6 +38,7 @@
               <th class="text-white text-uppercase py-3">Transporteur</th>
               <th class="text-white text-uppercase text-center py-3">Nombre d’avances</th>
               <th class="text-white text-uppercase text-center py-3">Montant total</th>
+              <th class="text-white text-uppercase text-center py-3">Solde restant</th>
               <th class="text-white text-uppercase text-center py-3">Action</th>
             </tr>
           </thead>
@@ -46,7 +47,7 @@
               <tr>
                 <td class="py-3 fw-semibold">
                   <i class="bx bx-bus me-1"></i>
-                  {{ $summary->code }} — {{ strtoupper(trim($summary->nom.' '.$summary->prenoms)) }}
+                  {{ $summary->code }} — {{ $summary->nom }} {{ $summary->prenoms }}
                 </td>
                 <td class="text-center py-3">
                   <span class="badge rounded-pill bg-{{ (int) $summary->nombre_avances > 0 ? 'primary' : 'secondary' }}">
@@ -59,6 +60,11 @@
                   </strong>
                 </td>
                 <td class="text-center py-3">
+                  <strong class="{{ (float) $summary->solde_restant > 0 ? 'text-primary' : 'text-muted' }}">
+                    {{ number_format((float) $summary->solde_restant, 0, ',', ' ') }} FCFA
+                  </strong>
+                </td>
+                <td class="text-center py-3">
                   <a href="{{ route('avances_transporteur.show', $summary->id) }}" class="btn btn-sm btn-outline-success">
                     <i class="bx bx-history me-1"></i>Voir l’historique
                   </a>
@@ -66,7 +72,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="4" class="text-center py-4 text-muted">Aucun transporteur trouvé.</td>
+                <td colspan="5" class="text-center py-4 text-muted">Aucun transporteur trouvé.</td>
               </tr>
             @endforelse
           </tbody>

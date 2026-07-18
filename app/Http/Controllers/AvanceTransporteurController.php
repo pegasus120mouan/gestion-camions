@@ -24,6 +24,7 @@ class AvanceTransporteurController extends Controller
                 'transporteurs.prenoms',
                 DB::raw('COUNT(avances_transporteur.id) as nombre_avances'),
                 DB::raw('COALESCE(SUM(avances_transporteur.montant), 0) as montant_total'),
+                DB::raw('COALESCE(SUM(avances_transporteur.montant - avances_transporteur.montant_utilise), 0) as solde_restant'),
             ])
             ->groupBy('transporteurs.id', 'transporteurs.code', 'transporteurs.nom', 'transporteurs.prenoms');
 
