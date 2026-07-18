@@ -450,6 +450,153 @@
               </ul>
             </li>
 
+
+            <li class="menu-item">
+              <a href="javascript:void(0)" class="menu-link menu-toggle">
+                <i class="menu-icon tf-icons bx bx-box" style="color: #28c76f;"></i>
+                <div class="text-truncate" data-i18n="User interface">Gestion piements</div>
+              </a>
+              <ul class="menu-sub">
+            
+              <li class="menu-item">
+                  <a href="{{ route('effectuer_paiement.index', ['statut' => 'tous']) }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Effectuer un paiement</div>
+                  </a>
+                </li>
+
+             <!--   <li class="menu-item {{ request()->routeIs('gestionfinanciere.montant_particulier', 'gestionfinanciere.particulier.*') ? 'active' : '' }}">
+                  <a href="{{ route('gestionfinanciere.montant_particulier') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Montant Agents Particuliers</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.synthese_produit') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Synthèse par produit</div>
+                  </a>
+                </li>
+                  <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.montant_chef_chargeur') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Montant chef chargeur</div>
+                  </a>
+                </li> 
+                 <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.montant_fournisseur') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Montant Fournisseur</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.montant_transporteur') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Montant Transporteur</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Soldes</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.sorties') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Alerts">Demande de sortie</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.recus.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Alerts">Reçu de paiement</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="{{ route('gestionfinanciere.chauffeurs_salaires.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Alerts">Gestion Salaires Chauffeurs</div>
+                  </a>
+                </li>-->
+               <!-- <li class="menu-item">
+                  <a href="ui-badges.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Badges">Badges</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-buttons.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Buttons">Buttons</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-carousel.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Carousel">Carousel</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-collapse.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Collapse">Collapse</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-dropdowns.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Dropdowns">Dropdowns</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-footer.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Footer">Footer</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-list-groups.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="List Groups">List groups</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-modals.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Modals">Modals</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-navbar.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Navbar">Navbar</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-offcanvas.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Offcanvas">Offcanvas</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-pagination-breadcrumbs.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Pagination & Breadcrumbs">Pagination &amp; Breadcrumbs</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-progress.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Progress">Progress</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-spinners.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Spinners">Spinners</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-tabs-pills.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Tabs & Pills">Tabs &amp; Pills</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-toasts.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Toasts">Toasts</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-tooltips-popovers.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Tooltips & Popovers">Tooltips &amp; Popovers</div>
+                  </a>
+                </li>
+                <li class="menu-item">
+                  <a href="ui-typography.html" class="menu-link">
+                    <div class="text-truncate" data-i18n="Typography">Typography</div>
+                  </a>
+                </li>-->
+              </ul>
+            </li>
+
             <!-- Apps & Pages -->
             <li class="menu-header small text-uppercase">
               <span class="menu-header-text">Gestions</span>

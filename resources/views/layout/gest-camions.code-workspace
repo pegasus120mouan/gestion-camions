@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../../../../v2-unipalm"
+		},
+		{
+			"path": "../../../../unipalm"
 		}
 	],
 	"settings": {}
