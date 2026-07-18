@@ -12,6 +12,7 @@ use App\Services\TicketTransporteurFicheService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class MontantTransporteurController extends Controller
 {
@@ -249,8 +250,8 @@ class MontantTransporteurController extends Controller
             + $montantPayeFiches
             + $montantPayeBordereaux
             + $montantPayeGestion;
-        $montantPaye = $montantPayeSansAvances + $montantAvancesTransporteur;
-        $resteAPayer = $montantDu - $montantPaye;
+        $montantPaye = min($montantDu, $montantPayeSansAvances + $montantAvancesTransporteur);
+        $resteAPayer = max(0, $montantDu - $montantPaye);
 
         return [
             'montant_du' => (int) $montantDu,
@@ -423,22 +424,48 @@ class MontantTransporteurController extends Controller
         $request->merge(['montant' => $montant]);
 
         $validated = $request->validate([
-            'montant' => ['required', 'numeric', 'min:1'],
+            'montant' => ['required', 'integer', 'min:1'],
             'date_paiement' => ['required', 'date'],
             'observation' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $bordereau = BordereauTransporteur::query()
-            ->where('transporteur_id', $transporteur->id)
-            ->findOrFail($id);
-
         $montantViaAvance = 0;
         $montantEspeces = 0;
 
-        DB::transaction(function () use ($transporteur, $bordereau, $validated, &$montantViaAvance, &$montantEspeces) {
+        $bordereau = DB::transaction(function () use ($transporteur, $id, $validated, &$montantViaAvance, &$montantEspeces) {
+            $bordereau = BordereauTransporteur::query()
+                ->where('transporteur_id', $transporteur->id)
+                ->lockForUpdate()
+                ->findOrFail($id);
+
+            $montant = (int) $validated['montant'];
+            $resteBordereau = (int) round($bordereau->reste_a_payer);
+            $avances = $transporteur->avances()
+                ->whereColumn('montant_utilise', '<', 'montant')
+                ->reorder()
+                ->orderBy('date_avance')
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get();
+            $soldeAvance = (int) $avances->sum('solde');
+
+            if ($montant > $resteBordereau) {
+                throw ValidationException::withMessages([
+                    'montant' => 'Le paiement ne peut pas dépasser le reste dû de '
+                        .number_format($resteBordereau, 0, ',', ' ').' FCFA.',
+                ]);
+            }
+
+            if ($soldeAvance > 0 && $montant > $soldeAvance) {
+                throw ValidationException::withMessages([
+                    'montant' => 'Le paiement ne peut pas dépasser le solde d’avance de '
+                        .number_format($soldeAvance, 0, ',', ' ').' FCFA.',
+                ]);
+            }
+
             // L'avance disponible du transporteur est obligatoirement consommée en premier.
-            $montantViaAvance = $this->consommerAvances($transporteur, (int) $validated['montant']);
-            $montantEspeces = (int) $validated['montant'] - $montantViaAvance;
+            $montantViaAvance = $this->consommerAvances($avances, $montant);
+            $montantEspeces = $montant - $montantViaAvance;
 
             $observation = $validated['observation'] ?? ('Paiement bordereau ' . $bordereau->numero);
             if ($montantViaAvance > 0) {
@@ -455,8 +482,10 @@ class MontantTransporteurController extends Controller
             ]);
 
             $bordereau->update([
-                'montant_paye' => (float) $bordereau->montant_paye + $validated['montant'],
+                'montant_paye' => (float) $bordereau->montant_paye + $montant,
             ]);
+
+            return $bordereau;
         });
 
         $message = 'Paiement de ' . number_format($validated['montant'], 0, ',', ' ') . ' FCFA enregistré pour le bordereau ' . $bordereau->numero . '.';
@@ -472,16 +501,9 @@ class MontantTransporteurController extends Controller
      * Impute le montant sur les avances disponibles (les plus anciennes d'abord)
      * et retourne la part effectivement couverte par les avances.
      */
-    private function consommerAvances(Transporteur $transporteur, int $montant): int
+    private function consommerAvances($avances, int $montant): int
     {
         $consomme = 0;
-
-        $avances = $transporteur->avances()
-            ->whereColumn('montant_utilise', '<', 'montant')
-            ->reorder()
-            ->orderBy('date_avance')
-            ->orderBy('id')
-            ->get();
 
         foreach ($avances as $avance) {
             if ($consomme >= $montant) {

@@ -32,6 +32,13 @@
       </div>
     @endif
 
+    @if($errors->any())
+      <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ $errors->first() }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
     <div class="row mb-3">
       <div class="col-12">
         <div class="d-flex justify-content-center">
@@ -467,12 +474,13 @@
             <div class="alert alert-warning mb-3">
               <i class="bx bx-wallet me-1"></i>
               Avance disponible : <strong>{{ number_format($montantAvancesTransporteur, 0, ',', ' ') }} FCFA</strong>.<br>
-              <small>Ce paiement sera obligatoirement imputé sur l'avance en priorité ; seul l'éventuel surplus sera payé directement.</small>
+              <small>Le paiement sera imputé sur l'avance et ne pourra dépasser ni son solde ni le reste dû du bordereau.</small>
             </div>
           @endif
           <div class="mb-3">
             <label class="form-label">Montant (FCFA) <span class="text-danger">*</span></label>
             <input type="text" name="montant" id="paiementBordereauMontant" class="form-control montant-input-bordereau" required placeholder="Ex: 123 000" inputmode="numeric" autocomplete="off" />
+            <small id="paiementBordereauLimite" class="text-muted"></small>
           </div>
           <div class="mb-3">
             <label class="form-label">Date du paiement <span class="text-danger">*</span></label>
@@ -631,15 +639,21 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   var urlPaiementBordereauBase = @json(url('/gestion-financiere/transporteur/' . $transporteur->id . '/bordereaux'));
+  var avanceDisponible = @json((int) ($montantAvancesTransporteur ?? 0));
   document.querySelectorAll('.btn-paiement-bordereau').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var id = btn.getAttribute('data-bordereau-id');
       var numero = btn.getAttribute('data-bordereau-numero');
       var reste = parseInt(btn.getAttribute('data-bordereau-reste') || '0', 10);
+      var limite = avanceDisponible > 0 ? Math.min(reste, avanceDisponible) : reste;
+      var input = document.getElementById('paiementBordereauMontant');
       document.getElementById('formPaiementBordereau').action = urlPaiementBordereauBase + '/' + id + '/paiement';
       document.getElementById('paiementBordereauNumero').textContent = numero;
       document.getElementById('paiementBordereauReste').textContent = reste.toLocaleString('fr-FR');
-      document.getElementById('paiementBordereauMontant').value = reste > 0 ? reste.toLocaleString('fr-FR') : '';
+      input.value = limite > 0 ? limite.toLocaleString('fr-FR') : '';
+      input.dataset.max = String(limite);
+      document.getElementById('paiementBordereauLimite').textContent =
+        'Maximum autorisé : ' + limite.toLocaleString('fr-FR') + ' FCFA';
     });
   });
 
@@ -756,9 +770,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
   var formPaiementBordereau = document.getElementById('formPaiementBordereau');
   if (formPaiementBordereau) {
-    formPaiementBordereau.addEventListener('submit', function() {
+    formPaiementBordereau.addEventListener('submit', function(event) {
       var input = document.getElementById('paiementBordereauMontant');
-      if (input) input.value = input.value.replace(/\s/g, '');
+      if (input) {
+        var montant = parseInt(input.value.replace(/\s/g, ''), 10) || 0;
+        var limite = parseInt(input.dataset.max || '0', 10);
+        if (montant > limite) {
+          event.preventDefault();
+          alert('Le montant ne peut pas dépasser ' + limite.toLocaleString('fr-FR') + ' FCFA.');
+          return;
+        }
+        input.value = String(montant);
+      }
     });
   }
 });
