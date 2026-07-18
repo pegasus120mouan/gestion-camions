@@ -250,8 +250,8 @@ class MontantTransporteurController extends Controller
             + $montantPayeFiches
             + $montantPayeBordereaux
             + $montantPayeGestion;
-        $montantPaye = min($montantDu, $montantPayeSansAvances + $montantAvancesTransporteur);
-        $resteAPayer = max(0, $montantDu - $montantPaye);
+        $montantPaye = $montantPayeSansAvances;
+        $resteAPayer = $montantDu - $montantPaye - $montantAvancesTransporteur;
 
         return [
             'montant_du' => (int) $montantDu,
