@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\BordereauAgent;
 use App\Models\BordereauTransporteur;
-use App\Models\AvanceTransporteur;
 use App\Models\DemandeAvance;
 use App\Models\Depense;
 use App\Models\Fournisseur;
@@ -13,6 +12,7 @@ use App\Services\ChauffeurSalaireService;
 use App\Services\FinancementService;
 use App\Services\MesAgentsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class EffectuerPaiementController extends Controller
 {
@@ -132,14 +132,16 @@ class EffectuerPaiementController extends Controller
             ->values();
 
         if ($transporteurIds->isNotEmpty()) {
-            $soldes = AvanceTransporteur::query()
+            // Query builder (pas Eloquent) : le modèle AvanceTransporteur a un
+            // accessor `solde` qui écraserait l'alias SQL (montant/utilise absents).
+            $soldes = DB::table('avances_transporteur')
                 ->whereIn('transporteur_id', $transporteurIds)
-                ->selectRaw('transporteur_id, COALESCE(SUM(montant - montant_utilise), 0) as solde')
                 ->groupBy('transporteur_id')
+                ->selectRaw('transporteur_id, COALESCE(SUM(GREATEST(montant - montant_utilise, 0)), 0) as solde')
                 ->pluck('solde', 'transporteur_id');
 
             foreach ($transporteurIds as $id) {
-                $avances[(int) $id] = (int) round((float) ($soldes[$id] ?? 0));
+                $avances[(int) $id] = (int) round((float) ($soldes[(int) $id] ?? $soldes[(string) $id] ?? 0));
             }
         }
 
