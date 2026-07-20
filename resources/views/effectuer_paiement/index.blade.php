@@ -227,12 +227,16 @@
                 <th class="text-end">Total</th>
                 <th class="text-end">Payé</th>
                 <th class="text-end">Reste</th>
+                <th class="text-end">Avance</th>
                 <th class="text-end">Actions</th>
               </tr>
             </thead>
             <tbody>
               @forelse($bordereauxTransporteur as $bordereau)
-                @php $reste = (int) round($bordereau->reste_a_payer); @endphp
+                @php
+                  $reste = (int) round($bordereau->reste_a_payer);
+                  $avance = (int) (($avancesTransporteurs ?? [])[$bordereau->transporteur_id] ?? 0);
+                @endphp
                 <tr>
                   <td>
                     <a href="{{ route('gestionfinanciere.transporteur.bordereau.pdf', ['transporteur' => $bordereau->transporteur_id, 'id' => $bordereau->id]) }}"
@@ -255,6 +259,13 @@
                     {{ number_format($reste, 0, ',', ' ') }}
                   </td>
                   <td class="text-end">
+                    @if($avance > 0)
+                      <span class="badge bg-label-warning">{{ number_format($avance, 0, ',', ' ') }}</span>
+                    @else
+                      <span class="text-muted">0</span>
+                    @endif
+                  </td>
+                  <td class="text-end">
                     @if($reste > 0)
                       <button type="button"
                         class="btn btn-sm btn-success btn-paiement-transporteur"
@@ -263,7 +274,8 @@
                         data-transporteur-id="{{ $bordereau->transporteur_id }}"
                         data-bordereau-id="{{ $bordereau->id }}"
                         data-bordereau-numero="{{ $bordereau->numero }}"
-                        data-bordereau-reste="{{ $reste }}">
+                        data-bordereau-reste="{{ $reste }}"
+                        data-avance="{{ $avance }}">
                         <i class="bx bx-money me-1"></i>Payer
                       </button>
                     @else
@@ -273,7 +285,7 @@
                 </tr>
               @empty
                 <tr>
-                  <td colspan="7" class="text-center text-muted py-5">
+                  <td colspan="8" class="text-center text-muted py-5">
                     <i class="bx bx-bus fs-1 d-block mb-2 opacity-25"></i>
                     Aucun bordereau transporteur à afficher.
                   </td>
@@ -614,11 +626,19 @@
           <div class="alert alert-info mb-2">
             <strong>Reste à payer :</strong> <span id="paiementTransporteurReste">0</span> FCFA
           </div>
+          <div class="alert alert-warning mb-2 d-none" id="paiementTransporteurAvanceAlert">
+            <strong>Avance disponible :</strong> <span id="paiementTransporteurAvanceMontant">0</span> FCFA
+            <br><small>Le paiement sera imputé sur l'avance du transporteur.</small>
+          </div>
+          <div class="alert alert-success mb-2 d-none" id="paiementTransporteurCaisseAlert">
+            <strong>Caisse locale :</strong> <span id="paiementTransporteurCaisseMontant">{{ number_format((int) $soldeCaisseLocale, 0, ',', ' ') }}</span> FCFA
+            <br><small>Pas d'avance — le paiement sera débité de la caisse locale.</small>
+          </div>
           <div class="mb-3">
             <label class="form-label">Montant (FCFA)</label>
             <input type="text" name="montant" id="paiementTransporteurMontant" class="form-control" required
               placeholder="Ex: 500 000" inputmode="numeric" autocomplete="off" />
-            <small class="text-muted">Maximum : le reste à payer du bordereau.</small>
+            <small class="text-muted" id="paiementTransporteurMontantHint">Montant maximum selon le reste et la source.</small>
           </div>
           <div class="mb-3">
             <label class="form-label">Date de paiement</label>
@@ -787,10 +807,41 @@ document.addEventListener('DOMContentLoaded', function () {
   // ---- Bordereaux transporteurs ----
   var formTransporteur = document.getElementById('formPaiementTransporteur');
   var inputTransporteur = document.getElementById('paiementTransporteurMontant');
+  var hintTransporteur = document.getElementById('paiementTransporteurMontantHint');
+  var alertAvanceTransporteur = document.getElementById('paiementTransporteurAvanceAlert');
+  var alertCaisseTransporteur = document.getElementById('paiementTransporteurCaisseAlert');
   var resteTransporteur = 0;
+  var avanceTransporteur = 0;
 
-  brancherMontant(inputTransporteur, function () { return resteTransporteur; });
-  brancherSubmit(formTransporteur, inputTransporteur, function () { return resteTransporteur; });
+  function calculerPlafondTransporteur() {
+    if (avanceTransporteur > 0) {
+      return resteTransporteur > 0
+        ? Math.min(resteTransporteur, avanceTransporteur)
+        : avanceTransporteur;
+    }
+    return resteTransporteur > 0
+      ? Math.min(resteTransporteur, Math.max(0, soldeCaisseLocale))
+      : Math.max(0, soldeCaisseLocale);
+  }
+
+  function appliquerPlafondTransporteur() {
+    var plafond = calculerPlafondTransporteur();
+    if (avanceTransporteur > 0) {
+      alertAvanceTransporteur.classList.remove('d-none');
+      alertCaisseTransporteur.classList.add('d-none');
+      document.getElementById('paiementTransporteurAvanceMontant').textContent = formatNombre(avanceTransporteur);
+      hintTransporteur.textContent = 'Maximum : ' + formatNombre(plafond) + ' FCFA (plafonné par l\'avance).';
+    } else {
+      alertAvanceTransporteur.classList.add('d-none');
+      alertCaisseTransporteur.classList.remove('d-none');
+      document.getElementById('paiementTransporteurCaisseMontant').textContent = formatNombre(soldeCaisseLocale);
+      hintTransporteur.textContent = 'Maximum : ' + formatNombre(plafond) + ' FCFA (plafonné par la caisse locale).';
+    }
+    inputTransporteur.value = plafond > 0 ? formatMontantSaisie(String(plafond)) : '';
+  }
+
+  brancherMontant(inputTransporteur, calculerPlafondTransporteur);
+  brancherSubmit(formTransporteur, inputTransporteur, calculerPlafondTransporteur);
 
   document.querySelectorAll('.btn-paiement-transporteur').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -798,11 +849,12 @@ document.addEventListener('DOMContentLoaded', function () {
       var bordereauId = btn.getAttribute('data-bordereau-id');
       var numero = btn.getAttribute('data-bordereau-numero');
       resteTransporteur = parseInt(btn.getAttribute('data-bordereau-reste') || '0', 10);
+      avanceTransporteur = parseInt(btn.getAttribute('data-avance') || '0', 10);
 
       formTransporteur.action = '{{ url('/gestion-financiere/transporteur') }}/' + transporteurId + '/bordereaux/' + bordereauId + '/paiement';
       document.getElementById('paiementTransporteurNumero').textContent = numero || '—';
       document.getElementById('paiementTransporteurReste').textContent = formatNombre(resteTransporteur);
-      inputTransporteur.value = resteTransporteur > 0 ? formatMontantSaisie(String(resteTransporteur)) : '';
+      appliquerPlafondTransporteur();
     });
   });
 

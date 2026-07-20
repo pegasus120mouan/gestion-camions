@@ -13,6 +13,26 @@
       </div>
     @endif
 
+    <div class="card mb-4">
+      <div class="card-body">
+        <form method="GET" action="{{ route('gestionfinanciere.montant_transporteur') }}" class="row g-3 align-items-end">
+          <div class="col-md-8">
+            <label for="search" class="form-label">Rechercher un transporteur</label>
+            <input type="text" name="search" id="search" class="form-control"
+              placeholder="Nom, prénoms ou code…" value="{{ $search ?? '' }}">
+          </div>
+          <div class="col-md-4 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bx bx-search me-1"></i>Rechercher
+            </button>
+            <a href="{{ route('gestionfinanciere.montant_transporteur') }}" class="btn btn-outline-secondary">
+              <i class="bx bx-reset me-1"></i>Réinitialiser
+            </a>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0"><i class="bx bx-truck me-2"></i>Liste des Transporteurs</h5>
@@ -68,7 +88,9 @@
               </tr>
             @empty
               <tr>
-                <td colspan="7" class="text-center text-muted py-4">Aucun transporteur enregistré</td>
+                <td colspan="7" class="text-center text-muted py-4">
+                  {{ !empty($search) ? 'Aucun transporteur trouvé pour cette recherche.' : 'Aucun transporteur enregistré' }}
+                </td>
               </tr>
             @endforelse
           </tbody>

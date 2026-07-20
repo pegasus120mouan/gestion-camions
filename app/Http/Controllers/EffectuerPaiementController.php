@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\BordereauAgent;
 use App\Models\BordereauTransporteur;
+use App\Models\AvanceTransporteur;
 use App\Models\DemandeAvance;
 use App\Models\Depense;
 use App\Models\Fournisseur;
@@ -121,8 +122,30 @@ class EffectuerPaiementController extends Controller
 
         $this->appliquerStatutBordereau($query, $filters['statut']);
 
+        $bordereauxTransporteur = $query->paginate(25)->withQueryString();
+
+        $avances = [];
+        $transporteurIds = $bordereauxTransporteur->getCollection()
+            ->pluck('transporteur_id')
+            ->unique()
+            ->filter()
+            ->values();
+
+        if ($transporteurIds->isNotEmpty()) {
+            $soldes = AvanceTransporteur::query()
+                ->whereIn('transporteur_id', $transporteurIds)
+                ->selectRaw('transporteur_id, COALESCE(SUM(montant - montant_utilise), 0) as solde')
+                ->groupBy('transporteur_id')
+                ->pluck('solde', 'transporteur_id');
+
+            foreach ($transporteurIds as $id) {
+                $avances[(int) $id] = (int) round((float) ($soldes[$id] ?? 0));
+            }
+        }
+
         return [
-            'bordereauxTransporteur' => $query->paginate(25)->withQueryString(),
+            'bordereauxTransporteur' => $bordereauxTransporteur,
+            'avancesTransporteurs' => $avances,
             'stats' => $this->statsBordereaux(BordereauTransporteur::query()),
         ];
     }

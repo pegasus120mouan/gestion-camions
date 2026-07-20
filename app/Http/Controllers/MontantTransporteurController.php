@@ -24,19 +24,38 @@ class MontantTransporteurController extends Controller
         private CaisseService $caisseService,
     ) {}
 
-    public function index()
+    public function index(Request $request)
     {
-        $transporteurs = Transporteur::withCount('vehicules')->orderBy('nom')->get();
+        $search = trim((string) $request->query('search', ''));
+
+        $transporteursQuery = Transporteur::withCount('vehicules')
+            ->with('bordereaux')
+            ->orderBy('nom');
+
+        if ($search !== '') {
+            $transporteursQuery->where(function ($query) use ($search) {
+                $query->where('nom', 'like', "%{$search}%")
+                    ->orWhere('prenoms', 'like', "%{$search}%")
+                    ->orWhere('code', 'like', "%{$search}%");
+            });
+        }
+
+        $transporteurs = $transporteursQuery->get();
 
         $data = [];
         foreach ($transporteurs as $transporteur) {
-            $montants = $this->calculerMontantsTransporteur($transporteur);
+            $montants = $this->calculerMontantsTransporteur(
+                $transporteur,
+                null,
+                $transporteur->bordereaux
+            );
 
             $data[] = array_merge(['transporteur' => $transporteur], $montants);
         }
 
         return view('gestion_financiere.montant_transporteur', [
             'data' => $data,
+            'search' => $search,
         ]);
     }
 
@@ -255,16 +274,16 @@ class MontantTransporteurController extends Controller
             + $montantPayeBordereaux
             + $montantPayeGestion;
         $montantPaye = $montantPayeSansAvances;
-        $resteAPayer = $montantDu - $montantPaye - $montantAvancesTransporteur;
+        $resteAPayer = (int) round($montantDu - $montantPaye - $montantAvancesTransporteur);
 
         return [
             'montant_du' => (int) $montantDu,
             'montant_paye' => (int) $montantPaye,
-            'reste_a_payer' => (int) $resteAPayer,
+            'reste_a_payer' => $resteAPayer,
             'montantDu' => (int) $montantDu,
             'montantPaye' => (int) $montantPaye,
             'montantPayeSansAvances' => (int) $montantPayeSansAvances,
-            'resteAPayer' => (int) $resteAPayer,
+            'resteAPayer' => $resteAPayer,
             'montantAvancesTransporteur' => (int) $montantAvancesTransporteur,
         ];
     }

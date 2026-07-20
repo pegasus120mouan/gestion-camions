@@ -71,9 +71,6 @@
             <h3 class="mb-0" style="color: #0f5132;">{{ number_format($montantPayeSansAvances ?? $montantPaye, 0, ',', ' ') }} FCFA</h3>
             <small class="text-muted">
               Paiements fiches / bordereaux
-              @if(($montantAvancesTransporteur ?? 0) > 0)
-                · Avances : {{ number_format($montantAvancesTransporteur, 0, ',', ' ') }} FCFA
-              @endif
             </small>
           </div>
         </div>
@@ -83,7 +80,7 @@
           <div class="card-body">
             <h6 class="card-title" style="color: #664d03;">Reste à payer</h6>
             <h3 class="mb-0" style="color: #664d03;">{{ number_format($resteAPayer, 0, ',', ' ') }} FCFA</h3>
-            <small class="text-muted">Montant dû − montant payé − avances</small>
+            <small class="text-muted">Montant dû − montant payé − avances disponibles</small>
           </div>
         </div>
       </div>
