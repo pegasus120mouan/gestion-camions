@@ -38,19 +38,19 @@
       <li class="nav-item">
         <a class="nav-link {{ $onglet === 'agents' ? 'active' : '' }}"
           href="{{ route('effectuer_paiement.index', ['onglet' => 'agents']) }}">
-          <i class="bx bx-file me-1"></i>Bordereaux
+          <i class="bx bx-file me-1"></i>Bordereaux Pisteurs
         </a>
       </li>
       <li class="nav-item">
         <a class="nav-link {{ $onglet === 'transporteurs' ? 'active' : '' }}"
           href="{{ route('effectuer_paiement.index', ['onglet' => 'transporteurs']) }}">
-          <i class="bx bx-bus me-1"></i>Transporteurs
+          <i class="bx bx-bus me-1"></i>Bordereaux Transporteurs
         </a>
       </li>
       <li class="nav-item">
         <a class="nav-link {{ $onglet === 'fournisseurs' ? 'active' : '' }}"
           href="{{ route('effectuer_paiement.index', ['onglet' => 'fournisseurs']) }}">
-          <i class="bx bx-store me-1"></i>Fournisseurs
+          <i class="bx bx-store me-1"></i>Factures Fournisseurs
         </a>
       </li>
       <li class="nav-item">
@@ -118,7 +118,7 @@
     {{-- ============ Onglet Bordereaux agents ============ --}}
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="bx bx-file me-1"></i>Bordereaux agents</h6>
+        <h6 class="mb-0"><i class="bx bx-file me-1"></i>Bordereaux Pisteurs</h6>
         <span class="badge bg-label-secondary">{{ $bordereaux->total() }} bordereau(x)</span>
       </div>
       <div class="card-body">
@@ -213,7 +213,7 @@
     {{-- ============ Onglet Transporteurs ============ --}}
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="bx bx-bus me-1"></i>Bordereaux transporteurs</h6>
+        <h6 class="mb-0"><i class="bx bx-bus me-1"></i>Bordereaux Transporteurs</h6>
         <span class="badge bg-label-secondary">{{ $bordereauxTransporteur->total() }} bordereau(x)</span>
       </div>
       <div class="card-body">
@@ -307,7 +307,7 @@
     {{-- ============ Onglet Fournisseurs ============ --}}
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <h6 class="mb-0"><i class="bx bx-store me-1"></i>Fournisseurs</h6>
+        <h6 class="mb-0"><i class="bx bx-store me-1"></i>Factures Fournisseurs</h6>
         <span class="badge bg-label-secondary">{{ $fournisseursData->count() }} fournisseur(s)</span>
       </div>
       <div class="card-body">

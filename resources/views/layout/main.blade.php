@@ -85,7 +85,7 @@
             <!-- Dashboards -->
             <li class="menu-item active open">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-home-smile"></i>
+                <i class="menu-icon tf-icons bx bx-home-smile" style="color: #7367f0;"></i>
                 <div class="text-truncate" data-i18n="Dashboards">Tableau de bord</div>
 
               </a>
@@ -864,7 +864,7 @@
             </li> -->
             <li class="menu-item">
               <a href="{{ route('produits.index') }}" class="menu-link">
-                <i class="menu-icon tf-icons bx bx-collection"></i>
+                <i class="menu-icon tf-icons bx bx-package" style="color: #28c76f;"></i>
                 <div class="text-truncate" data-i18n="Basic">Produits</div>
               </a>
             </li>
@@ -875,7 +875,7 @@
 
               <li class="menu-item">
               <a href="javascript:void(0)" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-box"></i>
+                <i class="menu-icon tf-icons bx bx-bus" style="color: #ff9f43;"></i>
                 <div class="text-truncate" data-i18n="User interface">Gestion Camions PGF</div>
               </a>
               <ul class="menu-sub">
@@ -982,7 +982,7 @@
 
             <li class="menu-item">
               <a href="javascript:void(0)" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-box"></i>
+                <i class="menu-icon tf-icons bx bx-group" style="color: #00cfe8;"></i>
                 <div class="text-truncate" data-i18n="User interface">Gestion Particuliers</div>
               </a>
               <ul class="menu-sub">
@@ -1089,7 +1089,7 @@
 
             <li class="menu-item">
               <a href="javascript:void(0)" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-box"></i>
+                <i class="menu-icon tf-icons bx bx-history" style="color: #7367f0;"></i>
                 <div class="text-truncate" data-i18n="User interface">Gestion Historique</div>
               </a>
               <ul class="menu-sub">
@@ -1190,7 +1190,7 @@
 
             <li class="menu-item">
               <a href="javascript:void(0)" class="menu-link menu-toggle">
-                <i class="menu-icon tf-icons bx bx-box"></i>
+                <i class="menu-icon tf-icons bx bx-wrench" style="color: #ea5455;"></i>
                 <div class="text-truncate" data-i18n="User interface">Paramètres Généraux</div>
               </a>
               <ul class="menu-sub">
