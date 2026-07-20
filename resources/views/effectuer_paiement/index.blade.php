@@ -583,7 +583,7 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Mode de paiement</label>
-            <select name="mode_paiement" class="form-select">
+            <select name="mode_paiement" id="paiementBordereauMode" class="form-select">
               <option value="">-- Sélectionner --</option>
               <option value="Espèces">Espèces</option>
               <option value="Virement">Virement</option>
@@ -757,9 +757,36 @@ document.addEventListener('DOMContentLoaded', function () {
   var hint = document.getElementById('paiementBordereauMontantHint');
   var alertFinancement = document.getElementById('paiementFinancementAlert');
   var alertCaisse = document.getElementById('paiementCaisseLocaleAlert');
+  var selectModePaiement = document.getElementById('paiementBordereauMode');
   var resteCourant = 0;
   var financementCourant = 0;
   var soldeCaisseLocale = {{ (int) $soldeCaisseLocale }};
+  var optionsModeCaisse = [
+    { value: '', label: '-- Sélectionner --' },
+    { value: 'Espèces', label: 'Espèces' },
+    { value: 'Virement', label: 'Virement' },
+    { value: 'Chèque', label: 'Chèque' },
+    { value: 'Mobile Money', label: 'Mobile Money' }
+  ];
+
+  function remplirModesPaiement(parFinancement) {
+    if (!selectModePaiement) return;
+    selectModePaiement.innerHTML = '';
+    if (parFinancement) {
+      var opt = document.createElement('option');
+      opt.value = 'Remboursement';
+      opt.textContent = 'Remboursement';
+      opt.selected = true;
+      selectModePaiement.appendChild(opt);
+      return;
+    }
+    optionsModeCaisse.forEach(function (item) {
+      var opt = document.createElement('option');
+      opt.value = item.value;
+      opt.textContent = item.label;
+      selectModePaiement.appendChild(opt);
+    });
+  }
 
   function calculerPlafondAgent() {
     if (financementCourant > 0) {
@@ -777,11 +804,13 @@ document.addEventListener('DOMContentLoaded', function () {
       alertCaisse.classList.add('d-none');
       document.getElementById('paiementFinancementMontant').textContent = formatNombre(financementCourant);
       hint.textContent = 'Maximum : ' + formatNombre(plafond) + ' FCFA (plafonné par le financement).';
+      remplirModesPaiement(true);
     } else {
       alertFinancement.classList.add('d-none');
       alertCaisse.classList.remove('d-none');
       document.getElementById('paiementCaisseLocaleMontant').textContent = formatNombre(soldeCaisseLocale);
       hint.textContent = 'Maximum : ' + formatNombre(plafond) + ' FCFA (plafonné par la caisse locale).';
+      remplirModesPaiement(false);
     }
     inputMontant.value = plafond > 0 ? formatMontantSaisie(String(plafond)) : '';
   }

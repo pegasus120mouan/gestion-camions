@@ -596,8 +596,9 @@ class MontantAgentController extends Controller
                     'id_bordereau' => $bordereau->id,
                     'montant' => $montant,
                     'date_paiement' => $validated['date_paiement'],
-                    'mode_paiement' => $validated['mode_paiement']
-                        ?: ($source === 'local' ? 'Caisse locale' : 'Financement'),
+                    'mode_paiement' => $source === 'financement'
+                        ? 'Remboursement'
+                        : ($validated['mode_paiement'] ?: 'Caisse locale'),
                     'caisse' => $source,
                     'reference' => $validated['reference'] ?? null,
                     'commentaire' => $validated['commentaire'] ?? null,
