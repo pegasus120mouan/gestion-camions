@@ -7,6 +7,7 @@ use App\Models\Camion;
 use App\Models\FicheSortie;
 use App\Models\Groupe;
 use App\Models\GroupeVehicule;
+use App\Models\Ticket;
 use App\Models\TransporteurVehicule;
 use App\Models\User;
 use Carbon\Carbon;
@@ -537,5 +538,315 @@ class CamionController extends Controller
             ->delete();
 
         return back()->with('success', 'Véhicule retiré du groupe avec succès.');
+    }
+
+    /**
+     * Revenus des camions du groupe PGF (vue type montant transporteur).
+     */
+    public function revenuesPgf()
+    {
+        $montants = $this->calculerMontantsPgf();
+
+        $data = [[
+            'nom' => 'PGF',
+            'prenoms' => '',
+            'code' => 'PGF',
+            'camions_count' => $montants['camions_count'],
+            'montant_du' => $montants['montant_du'],
+            'montant_paye' => $montants['montant_paye'],
+            'reste_a_payer' => $montants['reste_a_payer'],
+        ]];
+
+        return view('camions.revenues_pgf', [
+            'data' => $data,
+        ]);
+    }
+
+    /**
+     * Situation financière détaillée des camions PGF.
+     */
+    public function revenuesPgfShow(Request $request)
+    {
+        $filtres = [
+            'vehicule' => trim((string) $request->query('vehicule', '')),
+            'date_debut' => $request->query('date_debut'),
+            'date_fin' => $request->query('date_fin'),
+        ];
+
+        $vehiculesPgf = $this->vehiculesPgf();
+        $vehiculeIds = $vehiculesPgf->pluck('vehicule_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        $matricules = $vehiculesPgf->pluck('matricule_vehicule')
+            ->map(fn ($m) => strtoupper(trim((string) $m)))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $montants = $this->calculerMontantsPgf($filtres);
+
+        $fichesQuery = FicheSortie::query()
+            ->when($vehiculeIds !== [], fn ($q) => $q->whereIn('vehicule_id', $vehiculeIds), fn ($q) => $q->whereRaw('1 = 0'))
+            ->orderByDesc('date_chargement')
+            ->orderByDesc('id');
+
+        if ($filtres['vehicule'] !== '') {
+            $fichesQuery->where(function ($q) use ($filtres) {
+                $q->where('matricule_vehicule', $filtres['vehicule'])
+                    ->orWhere('vehicule_id', (int) $filtres['vehicule']);
+            });
+        }
+        if (! empty($filtres['date_debut'])) {
+            $fichesQuery->whereDate('date_chargement', '>=', $filtres['date_debut']);
+        }
+        if (! empty($filtres['date_fin'])) {
+            $fichesQuery->whereDate('date_chargement', '<=', $filtres['date_fin']);
+        }
+
+        $fiches = $fichesQuery->limit(200)->get();
+
+        $ticketsQuery = Ticket::query()
+            ->when(
+                $vehiculeIds !== [] || $matricules !== [],
+                function ($q) use ($vehiculeIds, $matricules) {
+                    $q->where(function ($inner) use ($vehiculeIds, $matricules) {
+                        if ($vehiculeIds !== []) {
+                            $inner->whereIn('vehicule_id', $vehiculeIds);
+                        }
+                        if ($matricules !== []) {
+                            $inner->orWhereIn('matricule_vehicule', $matricules);
+                        }
+                    });
+                },
+                fn ($q) => $q->whereRaw('1 = 0')
+            )
+            ->orderByDesc('date_ticket')
+            ->orderByDesc('id_ticket');
+
+        if ($filtres['vehicule'] !== '') {
+            $ticketsQuery->where(function ($q) use ($filtres) {
+                $q->where('matricule_vehicule', $filtres['vehicule'])
+                    ->orWhere('vehicule_id', (int) $filtres['vehicule']);
+            });
+        }
+        if (! empty($filtres['date_debut'])) {
+            $ticketsQuery->whereDate('date_ticket', '>=', $filtres['date_debut']);
+        }
+        if (! empty($filtres['date_fin'])) {
+            $ticketsQuery->whereDate('date_ticket', '<=', $filtres['date_fin']);
+        }
+
+        $tickets = $ticketsQuery->limit(200)->get();
+
+        $usinesById = \App\Models\Usine::query()
+            ->get(['id_usine', 'nom_usine'])
+            ->pluck('nom_usine', 'id_usine')
+            ->all();
+
+        $fichesByTicketId = FicheSortie::query()
+            ->whereIn('id_ticket', $tickets->pluck('id_ticket')->filter()->all())
+            ->get()
+            ->keyBy('id_ticket');
+
+        $ticketsDetails = $tickets->map(function ($ticket) use ($usinesById, $fichesByTicketId) {
+            $idTicket = (int) $ticket->id_ticket;
+            $fiche = $fichesByTicketId->get($idTicket);
+            $poids = (float) ($ticket->poids ?? 0);
+            $prix = $ticket->prix_unitaire !== null ? (float) $ticket->prix_unitaire : null;
+            $montant = $ticket->montant_paie !== null
+                ? (float) $ticket->montant_paie
+                : (($prix !== null && $poids > 0) ? $prix * $poids : null);
+            $statut = mb_strtolower(trim((string) ($ticket->statut_ticket ?? '')), 'UTF-8');
+            $estPaye = in_array($statut, ['soldé', 'solde', 'payé', 'paye'], true);
+
+            return [
+                'id_ticket' => $idTicket,
+                'date_ticket' => $ticket->date_ticket,
+                'numero_ticket' => $ticket->numero_ticket,
+                'nom_usine' => $usinesById[(int) ($ticket->id_usine ?? 0)] ?? '—',
+                'nom_agent' => $fiche?->nom_agent ?: '—',
+                'nom_pont' => $fiche?->nom_pont ?: '—',
+                'vehicule_id' => (int) ($ticket->vehicule_id ?? 0),
+                'matricule_vehicule' => $ticket->matricule_vehicule ?: '—',
+                'poids' => $poids,
+                'prix_unitaire' => $prix,
+                'montant' => $montant,
+                'est_paye' => $estPaye,
+            ];
+        })->values();
+
+        $camionsDetails = $vehiculesPgf->map(function ($vehicule) {
+            $id = (int) $vehicule->vehicule_id;
+            $matricule = strtoupper(trim((string) $vehicule->matricule_vehicule));
+
+            $montantDu = (float) FicheSortie::query()
+                ->where('vehicule_id', $id)
+                ->sum('montant_camion');
+            $montantPayeFiche = (float) FicheSortie::query()
+                ->where('vehicule_id', $id)
+                ->sum('montant_paye_transporteur');
+
+            $ticketsVehicule = Ticket::query()
+                ->where(function ($q) use ($id, $matricule) {
+                    $q->where('vehicule_id', $id);
+                    if ($matricule !== '') {
+                        $q->orWhere('matricule_vehicule', $matricule);
+                    }
+                })
+                ->get(['montant_paie', 'statut_ticket']);
+
+            $montantPayeTickets = (float) $ticketsVehicule
+                ->filter(function ($t) {
+                    $statut = mb_strtolower(trim((string) ($t->statut_ticket ?? '')), 'UTF-8');
+
+                    return in_array($statut, ['soldé', 'solde', 'payé', 'paye'], true)
+                        && (float) ($t->montant_paie ?? 0) > 0;
+                })
+                ->sum('montant_paie');
+
+            if ($montantDu <= 0) {
+                $montantDu = (float) $ticketsVehicule
+                    ->filter(fn ($t) => (float) ($t->montant_paie ?? 0) > 0)
+                    ->sum('montant_paie');
+            }
+
+            $montantPaye = $montantPayeFiche + $montantPayeTickets;
+
+            return [
+                'vehicule_id' => $id,
+                'matricule' => $vehicule->matricule_vehicule,
+                'nb_fiches' => FicheSortie::query()->where('vehicule_id', $id)->count(),
+                'montant_du' => (int) round($montantDu),
+                'montant_paye' => (int) round($montantPaye),
+                'reste_a_payer' => (int) round($montantDu - $montantPaye),
+            ];
+        })->values();
+
+        return view('camions.revenues_pgf_show', [
+            'montantDu' => $montants['montant_du'],
+            'montantPaye' => $montants['montant_paye'],
+            'resteAPayer' => $montants['reste_a_payer'],
+            'camionsCount' => $montants['camions_count'],
+            'vehiculesPgf' => $vehiculesPgf,
+            'camionsDetails' => $camionsDetails,
+            'fiches' => $fiches,
+            'tickets' => $ticketsDetails,
+            'filtres' => $filtres,
+        ]);
+    }
+
+    /**
+     * @return \Illuminate\Support\Collection<int, GroupeVehicule>
+     */
+    private function vehiculesPgf()
+    {
+        $groupeIds = Groupe::query()
+            ->where('nom_groupe', 'like', '%PGF%')
+            ->pluck('id');
+
+        return GroupeVehicule::query()
+            ->whereIn('groupe_id', $groupeIds)
+            ->orderBy('matricule_vehicule')
+            ->get();
+    }
+
+    /**
+     * @param  array{vehicule?: string, date_debut?: string|null, date_fin?: string|null}  $filtres
+     * @return array{camions_count: int, montant_du: int, montant_paye: int, reste_a_payer: int}
+     */
+    private function calculerMontantsPgf(array $filtres = []): array
+    {
+        $vehiculesPgf = $this->vehiculesPgf();
+        $vehiculeIds = $vehiculesPgf->pluck('vehicule_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+        $matricules = $vehiculesPgf->pluck('matricule_vehicule')
+            ->map(fn ($m) => strtoupper(trim((string) $m)))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $vehiculeFiltre = trim((string) ($filtres['vehicule'] ?? ''));
+        $dateDebut = $filtres['date_debut'] ?? null;
+        $dateFin = $filtres['date_fin'] ?? null;
+
+        $fichesQuery = FicheSortie::query()
+            ->when($vehiculeIds !== [], fn ($q) => $q->whereIn('vehicule_id', $vehiculeIds), fn ($q) => $q->whereRaw('1 = 0'));
+
+        if ($vehiculeFiltre !== '') {
+            $fichesQuery->where(function ($q) use ($vehiculeFiltre) {
+                $q->where('matricule_vehicule', $vehiculeFiltre)
+                    ->orWhere('vehicule_id', (int) $vehiculeFiltre);
+            });
+        }
+        if (! empty($dateDebut)) {
+            $fichesQuery->whereDate('date_chargement', '>=', $dateDebut);
+        }
+        if (! empty($dateFin)) {
+            $fichesQuery->whereDate('date_chargement', '<=', $dateFin);
+        }
+
+        $montantDuFiches = (float) (clone $fichesQuery)->sum('montant_camion');
+        $montantPayeFiches = (float) (clone $fichesQuery)->sum('montant_paye_transporteur');
+
+        $ticketsQuery = Ticket::query();
+        if ($vehiculeIds !== [] || $matricules !== []) {
+            $ticketsQuery->where(function ($q) use ($vehiculeIds, $matricules) {
+                if ($vehiculeIds !== []) {
+                    $q->whereIn('vehicule_id', $vehiculeIds);
+                }
+                if ($matricules !== []) {
+                    $q->orWhereIn('matricule_vehicule', $matricules);
+                }
+            });
+        } else {
+            $ticketsQuery->whereRaw('1 = 0');
+        }
+
+        if ($vehiculeFiltre !== '') {
+            $ticketsQuery->where(function ($q) use ($vehiculeFiltre) {
+                $q->where('matricule_vehicule', $vehiculeFiltre)
+                    ->orWhere('vehicule_id', (int) $vehiculeFiltre);
+            });
+        }
+        if (! empty($dateDebut)) {
+            $ticketsQuery->whereDate('date_ticket', '>=', $dateDebut);
+        }
+        if (! empty($dateFin)) {
+            $ticketsQuery->whereDate('date_ticket', '<=', $dateFin);
+        }
+
+        $tickets = $ticketsQuery->get(['montant_paie', 'statut_ticket']);
+        $montantDuTickets = (float) $tickets
+            ->filter(fn ($t) => (float) ($t->montant_paie ?? 0) > 0)
+            ->sum('montant_paie');
+        $montantPayeTickets = (float) $tickets
+            ->filter(function ($t) {
+                $statut = mb_strtolower(trim((string) ($t->statut_ticket ?? '')), 'UTF-8');
+
+                return in_array($statut, ['soldé', 'solde', 'payé', 'paye'], true)
+                    && (float) ($t->montant_paie ?? 0) > 0;
+            })
+            ->sum('montant_paie');
+
+        $montantDu = $montantDuFiches > 0 ? $montantDuFiches : $montantDuTickets;
+        $montantPaye = $montantDuFiches > 0
+            ? ($montantPayeFiches + $montantPayeTickets)
+            : $montantPayeTickets;
+
+        return [
+            'camions_count' => $vehiculesPgf->count(),
+            'montant_du' => (int) round($montantDu),
+            'montant_paye' => (int) round($montantPaye),
+            'reste_a_payer' => (int) round($montantDu - $montantPaye),
+        ];
     }
 }

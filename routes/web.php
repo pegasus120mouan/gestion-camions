@@ -220,6 +220,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/camions-pgf', [CamionController::class, 'camionsPgf'])->name('camions.camions_pgf');
     Route::get('/camions-pgf/ajouter', [CamionController::class, 'ajouterCamionsPgf'])->name('camions.camions_pgf.ajouter');
     Route::get('/camions-pgf/activites', [TicketController::class, 'index'])->name('camions.activites');
+    Route::get('/camions-pgf/revenues', [CamionController::class, 'revenuesPgf'])->name('camions.revenues');
+    Route::get('/camions-pgf/revenues/detail', [CamionController::class, 'revenuesPgfShow'])->name('camions.revenues.show');
     Route::post('/camions/assigner-groupe', [CamionController::class, 'assignerGroupe'])->name('camions.assigner_groupe');
     Route::post('/camions/assigner-groupe-bulk', [CamionController::class, 'assignerGroupeBulk'])->name('camions.assigner_groupe_bulk');
     Route::delete('/camions/{vehicule_id}/retirer-groupe', [CamionController::class, 'retirerGroupe'])->name('camions.retirer_groupe');

@@ -889,6 +889,11 @@
                     <div class="text-truncate" data-i18n="Accordion">Activités</div>
                   </a>
                 </li>
+                <li class="menu-item">
+                  <a href="{{ route('camions.revenues') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Revenues camions PGF</div>
+                  </a>
+                </li>
                <!-- <li class="menu-item">
                   <a href="ui-badges.html" class="menu-link">
                     <div class="text-truncate" data-i18n="Badges">Badges</div>
