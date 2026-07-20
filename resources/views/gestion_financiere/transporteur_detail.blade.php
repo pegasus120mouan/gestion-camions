@@ -476,6 +476,12 @@
               Avance disponible : <strong>{{ number_format($montantAvancesTransporteur, 0, ',', ' ') }} FCFA</strong>.<br>
               <small>Le paiement sera imputé sur l'avance et ne pourra dépasser ni son solde ni le reste dû du bordereau.</small>
             </div>
+          @else
+            <div class="alert alert-success mb-3">
+              <i class="bx bx-wallet me-1"></i>
+              <strong>Caisse locale :</strong> {{ number_format((int) ($soldeCaisseLocale ?? 0), 0, ',', ' ') }} FCFA<br>
+              <small>Pas d'avance disponible — le paiement sera débité de la caisse locale.</small>
+            </div>
           @endif
           <div class="mb-3">
             <label class="form-label">Montant (FCFA) <span class="text-danger">*</span></label>
@@ -634,6 +640,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   var urlPaiementBordereauBase = @json(url('/gestion-financiere/transporteur/' . $transporteur->id . '/bordereaux'));
   var avanceDisponible = @json((int) ($montantAvancesTransporteur ?? 0));
+  var soldeCaisseLocale = @json((int) ($soldeCaisseLocale ?? 0));
   var inputPaiementBordereau = document.getElementById('paiementBordereauMontant');
 
   function appliquerLimiteMontantPaiement(input) {
@@ -669,7 +676,9 @@ document.addEventListener('DOMContentLoaded', function() {
       var id = btn.getAttribute('data-bordereau-id');
       var numero = btn.getAttribute('data-bordereau-numero');
       var reste = parseInt(btn.getAttribute('data-bordereau-reste') || '0', 10);
-      var limite = avanceDisponible > 0 ? Math.min(reste, avanceDisponible) : reste;
+      var limite = avanceDisponible > 0
+        ? Math.min(reste, avanceDisponible)
+        : Math.min(reste, Math.max(0, soldeCaisseLocale));
       document.getElementById('formPaiementBordereau').action = urlPaiementBordereauBase + '/' + id + '/paiement';
       document.getElementById('paiementBordereauNumero').textContent = numero;
       document.getElementById('paiementBordereauReste').textContent = reste.toLocaleString('fr-FR');
@@ -677,8 +686,11 @@ document.addEventListener('DOMContentLoaded', function() {
         inputPaiementBordereau.dataset.max = String(limite);
         inputPaiementBordereau.value = limite > 0 ? limite.toLocaleString('fr-FR') : '';
       }
-      document.getElementById('paiementBordereauLimite').textContent =
-        'Maximum autorisé : ' + limite.toLocaleString('fr-FR') + ' FCFA';
+      var hint = 'Maximum autorisé : ' + limite.toLocaleString('fr-FR') + ' FCFA';
+      if (avanceDisponible <= 0) {
+        hint += ' (plafonné par la caisse locale)';
+      }
+      document.getElementById('paiementBordereauLimite').textContent = hint;
     });
   });
 

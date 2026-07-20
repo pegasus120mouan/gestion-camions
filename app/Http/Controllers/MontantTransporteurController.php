@@ -7,7 +7,10 @@ use App\Models\Depense;
 use App\Models\FicheSortie;
 use App\Models\PaiementTransporteur;
 use App\Models\Transporteur;
+use App\Models\User;
 use App\Services\BordereauTransporteurService;
+use App\Services\CaisseService;
+use App\Services\ChefEquipeSession;
 use App\Services\TicketTransporteurFicheService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -18,6 +21,7 @@ class MontantTransporteurController extends Controller
 {
     public function __construct(
         private BordereauTransporteurService $bordereauTransporteur,
+        private CaisseService $caisseService,
     ) {}
 
     public function index()
@@ -103,9 +107,9 @@ class MontantTransporteurController extends Controller
             'paiementsGestion' => $paiementsGestion,
             'montantPayeGestion' => $paiementsGestion->sum('montant'),
             'avancesTransporteur' => $avancesTransporteur,
-            'montantAvancesTransporteur' => $avancesTransporteur->sum('montant'),
             'historiquePaiements' => $historiquePaiements,
             'ticketFicheService' => $ticketFicheService,
+            'soldeCaisseLocale' => (int) round($this->caisseService->getSolde()),
         ], $montants));
     }
 
@@ -431,70 +435,136 @@ class MontantTransporteurController extends Controller
 
         $montantViaAvance = 0;
         $montantEspeces = 0;
+        $user = $this->resolveOptionalUser($request);
 
-        $bordereau = DB::transaction(function () use ($transporteur, $id, $validated, &$montantViaAvance, &$montantEspeces) {
-            $bordereau = BordereauTransporteur::query()
-                ->where('transporteur_id', $transporteur->id)
-                ->lockForUpdate()
-                ->findOrFail($id);
+        try {
+            $bordereau = DB::transaction(function () use ($transporteur, $id, $validated, $user, &$montantViaAvance, &$montantEspeces) {
+                $bordereau = BordereauTransporteur::query()
+                    ->where('transporteur_id', $transporteur->id)
+                    ->lockForUpdate()
+                    ->findOrFail($id);
 
-            $montant = (int) $validated['montant'];
-            $resteBordereau = (int) round($bordereau->reste_a_payer);
-            $avances = $transporteur->avances()
-                ->whereColumn('montant_utilise', '<', 'montant')
-                ->reorder()
-                ->orderBy('date_avance')
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get();
-            $soldeAvance = (int) $avances->sum('solde');
+                $montant = (int) $validated['montant'];
+                $resteBordereau = (int) round($bordereau->reste_a_payer);
+                $avances = $transporteur->avances()
+                    ->whereColumn('montant_utilise', '<', 'montant')
+                    ->reorder()
+                    ->orderBy('date_avance')
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+                $soldeAvance = (int) $avances->sum('solde');
+                $soldeCaisseLocale = (int) round($this->caisseService->getSolde());
 
-            if ($montant > $resteBordereau) {
-                throw ValidationException::withMessages([
-                    'montant' => 'Le paiement ne peut pas dépasser le reste dû de '
-                        .number_format($resteBordereau, 0, ',', ' ').' FCFA.',
+                if ($montant > $resteBordereau) {
+                    throw ValidationException::withMessages([
+                        'montant' => 'Le paiement ne peut pas dépasser le reste dû de '
+                            .number_format($resteBordereau, 0, ',', ' ').' FCFA.',
+                    ]);
+                }
+
+                if ($soldeAvance > 0 && $montant > $soldeAvance) {
+                    throw ValidationException::withMessages([
+                        'montant' => 'Le paiement ne peut pas dépasser le solde d’avance de '
+                            .number_format($soldeAvance, 0, ',', ' ').' FCFA.',
+                    ]);
+                }
+
+                // Sans avance : le paiement est débité de la caisse locale.
+                if ($soldeAvance <= 0 && $montant > $soldeCaisseLocale) {
+                    throw ValidationException::withMessages([
+                        'montant' => 'Le paiement ne peut pas dépasser le solde de la caisse locale ('
+                            .number_format($soldeCaisseLocale, 0, ',', ' ').' FCFA).',
+                    ]);
+                }
+
+                // L'avance disponible du transporteur est obligatoirement consommée en premier.
+                $montantViaAvance = $this->consommerAvances($avances, $montant);
+                $montantEspeces = $montant - $montantViaAvance;
+
+                $observation = $validated['observation'] ?? ('Paiement bordereau ' . $bordereau->numero);
+                if ($montantViaAvance > 0) {
+                    $observation .= ' — dont ' . number_format($montantViaAvance, 0, ',', ' ') . ' FCFA imputés sur avance';
+                }
+                if ($montantEspeces > 0) {
+                    $observation .= ' — dont ' . number_format($montantEspeces, 0, ',', ' ') . ' FCFA débités de la caisse locale';
+                }
+
+                PaiementTransporteur::create([
+                    'fiche_sortie_id' => null,
+                    'id_bordereau' => $bordereau->id,
+                    'matricule_vehicule' => '',
+                    'montant' => $validated['montant'],
+                    'date_paiement' => $validated['date_paiement'],
+                    'observation' => $observation,
                 ]);
-            }
 
-            if ($soldeAvance > 0 && $montant > $soldeAvance) {
-                throw ValidationException::withMessages([
-                    'montant' => 'Le paiement ne peut pas dépasser le solde d’avance de '
-                        .number_format($soldeAvance, 0, ',', ' ').' FCFA.',
+                $bordereau->update([
+                    'montant_paye' => (float) $bordereau->montant_paye + $montant,
                 ]);
-            }
 
-            // L'avance disponible du transporteur est obligatoirement consommée en premier.
-            $montantViaAvance = $this->consommerAvances($avances, $montant);
-            $montantEspeces = $montant - $montantViaAvance;
+                if ($montantEspeces > 0) {
+                    $this->caisseService->debiter(
+                        $montantEspeces,
+                        'Paiement bordereau '.$bordereau->numero,
+                        $user,
+                        'Local',
+                    );
+                }
 
-            $observation = $validated['observation'] ?? ('Paiement bordereau ' . $bordereau->numero);
-            if ($montantViaAvance > 0) {
-                $observation .= ' — dont ' . number_format($montantViaAvance, 0, ',', ' ') . ' FCFA imputés sur avance';
-            }
-
-            PaiementTransporteur::create([
-                'fiche_sortie_id' => null,
-                'id_bordereau' => $bordereau->id,
-                'matricule_vehicule' => '',
-                'montant' => $validated['montant'],
-                'date_paiement' => $validated['date_paiement'],
-                'observation' => $observation,
-            ]);
-
-            $bordereau->update([
-                'montant_paye' => (float) $bordereau->montant_paye + $montant,
-            ]);
-
-            return $bordereau;
-        });
+                return $bordereau;
+            });
+        } catch (\InvalidArgumentException $e) {
+            return back()
+                ->withErrors(['montant' => $e->getMessage()])
+                ->with('error', $e->getMessage())
+                ->withInput();
+        }
 
         $message = 'Paiement de ' . number_format($validated['montant'], 0, ',', ' ') . ' FCFA enregistré pour le bordereau ' . $bordereau->numero . '.';
         if ($montantViaAvance > 0) {
             $message .= ' ' . number_format($montantViaAvance, 0, ',', ' ') . ' FCFA imputés sur l\'avance'
-                . ($montantEspeces > 0 ? ', ' . number_format($montantEspeces, 0, ',', ' ') . ' FCFA en paiement direct.' : '.');
+                . ($montantEspeces > 0 ? ', ' . number_format($montantEspeces, 0, ',', ' ') . ' FCFA débités de la caisse locale.' : '.');
+        } elseif ($montantEspeces > 0) {
+            $message .= ' Débité de la caisse locale.';
         }
 
         return back()->with('success', $message);
+    }
+
+    private function resolveOptionalUser(Request $request): ?User
+    {
+        $user = $request->user();
+        if ($user instanceof User) {
+            return $user;
+        }
+
+        try {
+            $chef = app(ChefEquipeSession::class)->chef($request);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (! $chef) {
+            return null;
+        }
+
+        $idChef = (int) ($chef['id_chef'] ?? 0);
+        $login = trim((string) ($chef['login'] ?? ''));
+
+        $userQuery = User::query();
+        if ($idChef > 0) {
+            $userQuery->where('id_chef', $idChef);
+        }
+        if ($login !== '') {
+            $userQuery->when(
+                $idChef > 0,
+                fn ($q) => $q->orWhere('login', $login),
+                fn ($q) => $q->where('login', $login),
+            );
+        }
+
+        return $userQuery->first();
     }
 
     /**
