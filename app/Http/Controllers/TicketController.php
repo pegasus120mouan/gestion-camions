@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BordereauPgf;
 use App\Models\FicheSortie;
 use App\Models\Groupe;
 use App\Models\GroupeAgent;
@@ -451,9 +452,36 @@ class TicketController extends Controller
                 $ticket['montant_manuel'] = ($local && $local->prix_saisi_manuel && $local->montant_paie !== null)
                     ? (float) $local->montant_paie
                     : null;
+                $ticket['bordereau_pgf_id'] = $local?->bordereau_pgf_id
+                    ? (int) $local->bordereau_pgf_id
+                    : null;
             }
         }
         unset($ticket);
+
+        if ($onlyCamionsPgf) {
+            $bordereauIds = collect($ticketsArray)
+                ->pluck('bordereau_pgf_id')
+                ->filter()
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+            $numerosBordereau = $bordereauIds === []
+                ? collect()
+                : BordereauPgf::query()->whereIn('id', $bordereauIds)->pluck('numero', 'id');
+
+            foreach ($ticketsArray as &$ticket) {
+                $bordereauId = $ticket['bordereau_pgf_id'] ?? null;
+                $ticket['numero_bordereau'] = $bordereauId
+                    ? (string) ($numerosBordereau[$bordereauId] ?? '')
+                    : null;
+                if ($ticket['numero_bordereau'] === '') {
+                    $ticket['numero_bordereau'] = null;
+                }
+            }
+            unset($ticket);
+        }
 
         $vehiculesPgfLookup = $this->vehiculesPgfLookup();
         $fichesNonDechargees = $this->fichesNonDechargeesPourChef($request);

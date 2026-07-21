@@ -2,23 +2,37 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BordereauPgf;
 use App\Models\CamionEtat;
 use App\Models\Camion;
 use App\Models\FicheSortie;
 use App\Models\Groupe;
 use App\Models\GroupeVehicule;
+use App\Models\PaiementPgf;
 use App\Models\Ticket;
 use App\Models\TransporteurVehicule;
+use App\Models\Usine;
 use App\Models\User;
+use App\Services\BordereauPgfService;
+use App\Services\CaisseService;
+use App\Services\ChefEquipeSession;
+use App\Services\MesTicketsService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 
 class CamionController extends Controller
 {
+    public function __construct(
+        private BordereauPgfService $bordereauPgf,
+        private CaisseService $caisseService,
+    ) {}
+
     public function index(Request $request)
     {
         $timeout = 10;
@@ -543,15 +557,17 @@ class CamionController extends Controller
     /**
      * Revenus des camions du groupe PGF (vue type montant transporteur).
      */
-    public function revenuesPgf()
+    public function revenuesPgf(Request $request)
     {
-        $montants = $this->calculerMontantsPgf();
+        $tickets = $this->ticketsDepuisActivitesPgf($request);
+        $bordereaux = BordereauPgf::query()->orderByDesc('id')->get();
+        $montants = $this->calculerMontantsDepuisTicketsPgf($tickets, $bordereaux);
 
         $data = [[
             'nom' => 'PGF',
             'prenoms' => '',
             'code' => 'PGF',
-            'camions_count' => $montants['camions_count'],
+            'camions_count' => $this->vehiculesPgf()->count(),
             'montant_du' => $montants['montant_du'],
             'montant_paye' => $montants['montant_paye'],
             'reste_a_payer' => $montants['reste_a_payer'],
@@ -574,169 +590,245 @@ class CamionController extends Controller
         ];
 
         $vehiculesPgf = $this->vehiculesPgf();
-        $vehiculeIds = $vehiculesPgf->pluck('vehicule_id')
-            ->map(fn ($id) => (int) $id)
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-        $matricules = $vehiculesPgf->pluck('matricule_vehicule')
-            ->map(fn ($m) => strtoupper(trim((string) $m)))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
-        $montants = $this->calculerMontantsPgf($filtres);
-
-        $fichesQuery = FicheSortie::query()
-            ->when($vehiculeIds !== [], fn ($q) => $q->whereIn('vehicule_id', $vehiculeIds), fn ($q) => $q->whereRaw('1 = 0'))
-            ->orderByDesc('date_chargement')
-            ->orderByDesc('id');
-
-        if ($filtres['vehicule'] !== '') {
-            $fichesQuery->where(function ($q) use ($filtres) {
-                $q->where('matricule_vehicule', $filtres['vehicule'])
-                    ->orWhere('vehicule_id', (int) $filtres['vehicule']);
-            });
-        }
-        if (! empty($filtres['date_debut'])) {
-            $fichesQuery->whereDate('date_chargement', '>=', $filtres['date_debut']);
-        }
-        if (! empty($filtres['date_fin'])) {
-            $fichesQuery->whereDate('date_chargement', '<=', $filtres['date_fin']);
-        }
-
-        $fiches = $fichesQuery->limit(200)->get();
-
-        $ticketsQuery = Ticket::query()
-            ->when(
-                $vehiculeIds !== [] || $matricules !== [],
-                function ($q) use ($vehiculeIds, $matricules) {
-                    $q->where(function ($inner) use ($vehiculeIds, $matricules) {
-                        if ($vehiculeIds !== []) {
-                            $inner->whereIn('vehicule_id', $vehiculeIds);
-                        }
-                        if ($matricules !== []) {
-                            $inner->orWhereIn('matricule_vehicule', $matricules);
-                        }
-                    });
-                },
-                fn ($q) => $q->whereRaw('1 = 0')
-            )
-            ->orderByDesc('date_ticket')
-            ->orderByDesc('id_ticket');
-
-        if ($filtres['vehicule'] !== '') {
-            $ticketsQuery->where(function ($q) use ($filtres) {
-                $q->where('matricule_vehicule', $filtres['vehicule'])
-                    ->orWhere('vehicule_id', (int) $filtres['vehicule']);
-            });
-        }
-        if (! empty($filtres['date_debut'])) {
-            $ticketsQuery->whereDate('date_ticket', '>=', $filtres['date_debut']);
-        }
-        if (! empty($filtres['date_fin'])) {
-            $ticketsQuery->whereDate('date_ticket', '<=', $filtres['date_fin']);
-        }
-
-        $tickets = $ticketsQuery->limit(200)->get();
-
-        $usinesById = \App\Models\Usine::query()
-            ->get(['id_usine', 'nom_usine'])
-            ->pluck('nom_usine', 'id_usine')
-            ->all();
-
-        $fichesByTicketId = FicheSortie::query()
-            ->whereIn('id_ticket', $tickets->pluck('id_ticket')->filter()->all())
-            ->get()
-            ->keyBy('id_ticket');
-
-        $ticketsDetails = $tickets->map(function ($ticket) use ($usinesById, $fichesByTicketId) {
-            $idTicket = (int) $ticket->id_ticket;
-            $fiche = $fichesByTicketId->get($idTicket);
-            $poids = (float) ($ticket->poids ?? 0);
-            $prix = $ticket->prix_unitaire !== null ? (float) $ticket->prix_unitaire : null;
-            $montant = $ticket->montant_paie !== null
-                ? (float) $ticket->montant_paie
-                : (($prix !== null && $poids > 0) ? $prix * $poids : null);
-            $statut = mb_strtolower(trim((string) ($ticket->statut_ticket ?? '')), 'UTF-8');
-            $estPaye = in_array($statut, ['soldé', 'solde', 'payé', 'paye'], true);
-
-            return [
-                'id_ticket' => $idTicket,
-                'date_ticket' => $ticket->date_ticket,
-                'numero_ticket' => $ticket->numero_ticket,
-                'nom_usine' => $usinesById[(int) ($ticket->id_usine ?? 0)] ?? '—',
-                'nom_agent' => $fiche?->nom_agent ?: '—',
-                'nom_pont' => $fiche?->nom_pont ?: '—',
-                'vehicule_id' => (int) ($ticket->vehicule_id ?? 0),
-                'matricule_vehicule' => $ticket->matricule_vehicule ?: '—',
-                'poids' => $poids,
-                'prix_unitaire' => $prix,
-                'montant' => $montant,
-                'est_paye' => $estPaye,
-            ];
-        })->values();
-
-        $camionsDetails = $vehiculesPgf->map(function ($vehicule) {
-            $id = (int) $vehicule->vehicule_id;
-            $matricule = strtoupper(trim((string) $vehicule->matricule_vehicule));
-
-            $montantDu = (float) FicheSortie::query()
-                ->where('vehicule_id', $id)
-                ->sum('montant_camion');
-            $montantPayeFiche = (float) FicheSortie::query()
-                ->where('vehicule_id', $id)
-                ->sum('montant_paye_transporteur');
-
-            $ticketsVehicule = Ticket::query()
-                ->where(function ($q) use ($id, $matricule) {
-                    $q->where('vehicule_id', $id);
-                    if ($matricule !== '') {
-                        $q->orWhere('matricule_vehicule', $matricule);
-                    }
-                })
-                ->get(['montant_paie', 'statut_ticket']);
-
-            $montantPayeTickets = (float) $ticketsVehicule
-                ->filter(function ($t) {
-                    $statut = mb_strtolower(trim((string) ($t->statut_ticket ?? '')), 'UTF-8');
-
-                    return in_array($statut, ['soldé', 'solde', 'payé', 'paye'], true)
-                        && (float) ($t->montant_paie ?? 0) > 0;
-                })
-                ->sum('montant_paie');
-
-            if ($montantDu <= 0) {
-                $montantDu = (float) $ticketsVehicule
-                    ->filter(fn ($t) => (float) ($t->montant_paie ?? 0) > 0)
-                    ->sum('montant_paie');
-            }
-
-            $montantPaye = $montantPayeFiche + $montantPayeTickets;
-
-            return [
-                'vehicule_id' => $id,
-                'matricule' => $vehicule->matricule_vehicule,
-                'nb_fiches' => FicheSortie::query()->where('vehicule_id', $id)->count(),
-                'montant_du' => (int) round($montantDu),
-                'montant_paye' => (int) round($montantPaye),
-                'reste_a_payer' => (int) round($montantDu - $montantPaye),
-            ];
-        })->values();
+        $ticketsDetails = collect($this->ticketsDepuisActivitesPgf($request, $filtres));
+        $bordereaux = BordereauPgf::query()->orderByDesc('id')->get();
+        $montants = $this->calculerMontantsDepuisTicketsPgf($ticketsDetails->all(), $bordereaux);
 
         return view('camions.revenues_pgf_show', [
             'montantDu' => $montants['montant_du'],
             'montantPaye' => $montants['montant_paye'],
             'resteAPayer' => $montants['reste_a_payer'],
-            'camionsCount' => $montants['camions_count'],
+            'camionsCount' => $vehiculesPgf->count(),
             'vehiculesPgf' => $vehiculesPgf,
-            'camionsDetails' => $camionsDetails,
-            'fiches' => $fiches,
             'tickets' => $ticketsDetails,
             'filtres' => $filtres,
+            'bordereaux' => $bordereaux,
+            'exempleNumeroBordereau' => $this->bordereauPgf->exempleNumero(),
+            'soldeCaisseLocale' => (int) round($this->caisseService->getSolde()),
         ]);
+    }
+
+    public function fichesEligiblesBordereauPgf(Request $request)
+    {
+        $validated = $request->validate([
+            'date_debut' => ['required', 'date'],
+            'date_fin' => ['required', 'date', 'after_or_equal:date_debut'],
+        ]);
+
+        $tickets = $this->ticketsDepuisActivitesPgf($request, [
+            'date_debut' => $validated['date_debut'],
+            'date_fin' => $validated['date_fin'],
+        ]);
+        $fiches = $this->bordereauPgf->lignesEligiblesDepuisTickets($tickets);
+
+        return response()->json([
+            'fiches' => $fiches,
+            'total_montant' => (int) collect($fiches)->sum('montant'),
+            'total_poids' => (float) collect($fiches)->sum('poids'),
+        ]);
+    }
+
+    public function storeBordereauPgf(Request $request)
+    {
+        $validated = $request->validate([
+            'date_debut' => ['required', 'date'],
+            'date_fin' => ['required', 'date', 'after_or_equal:date_debut'],
+            'ticket_ids' => ['required', 'array', 'min:1'],
+            'ticket_ids.*' => ['integer'],
+        ]);
+
+        $tickets = $this->ticketsDepuisActivitesPgf($request, [
+            'date_debut' => $validated['date_debut'],
+            'date_fin' => $validated['date_fin'],
+        ]);
+        $lignesData = $this->bordereauPgf->construireLignesData($validated['ticket_ids'], $tickets);
+
+        if ($lignesData === []) {
+            return back()->withErrors(['error' => 'Aucun ticket valide sélectionné (déjà bordereau ou introuvable).']);
+        }
+
+        $bordereau = BordereauPgf::create([
+            'numero' => $this->bordereauPgf->genererNumero(),
+            'libelle' => 'PGF',
+            'date_generation' => now()->toDateString(),
+            'date_debut' => $validated['date_debut'],
+            'date_fin' => $validated['date_fin'],
+            'montant_total' => collect($lignesData)->sum('montant'),
+            'montant_paye' => 0,
+            'poids_total' => collect($lignesData)->sum('poids'),
+            'fiches_data' => $lignesData,
+        ]);
+
+        $this->bordereauPgf->assignerLignesAuBordereau($bordereau, $lignesData);
+
+        return redirect()
+            ->route('camions.revenues.bordereau.show', ['id' => $bordereau->id])
+            ->with('success', 'Bordereau '.$bordereau->numero.' généré avec succès.');
+    }
+
+    public function showBordereauPgf(int $id)
+    {
+        $bordereau = BordereauPgf::query()->findOrFail($id);
+        $groupesUsine = $this->bordereauPgf->grouperParUsine($bordereau->fiches_data ?? []);
+
+        return view('camions.bordereau_pgf_show', [
+            'bordereau' => $bordereau,
+            'groupesUsine' => $groupesUsine,
+        ]);
+    }
+
+    public function exportBordereauPgfPdf(int $id)
+    {
+        $bordereau = BordereauPgf::query()->findOrFail($id);
+        $groupesUsine = $this->bordereauPgf->grouperParUsine($bordereau->fiches_data ?? []);
+
+        $logoPath = public_path('img/logo/logo.png');
+        if (! file_exists($logoPath)) {
+            $logoPath = null;
+        }
+
+        $pdf = Pdf::loadView('camions.bordereau_pgf_pdf', [
+            'bordereau' => $bordereau,
+            'groupesUsine' => $groupesUsine,
+            'logoPath' => $logoPath,
+            'dateCreation' => ($bordereau->created_at ?? now())->format('d/m/Y \à H:i'),
+        ]);
+
+        $pdf->setPaper('A4', 'portrait');
+        $filename = 'bordereau_'.preg_replace('/[^a-zA-Z0-9_-]+/', '_', $bordereau->numero).'.pdf';
+
+        return $pdf->stream($filename);
+    }
+
+    public function destroyBordereauPgf(int $id)
+    {
+        $bordereau = BordereauPgf::query()->findOrFail($id);
+        $this->bordereauPgf->libererTicketsDuBordereau($bordereau);
+        $bordereau->paiements()->delete();
+        $bordereau->delete();
+
+        return redirect()
+            ->route('camions.revenues.show')
+            ->with('success', 'Bordereau supprimé.');
+    }
+
+    public function storePaiementBordereauPgf(Request $request, int $id)
+    {
+        $bordereau = BordereauPgf::query()->findOrFail($id);
+
+        $request->merge([
+            'montant' => preg_replace('/\s+/u', '', (string) $request->input('montant', '')),
+        ]);
+
+        $validated = $request->validate([
+            'montant' => ['required', 'integer', 'min:1'],
+            'date_paiement' => ['required', 'date'],
+            'mode_paiement' => ['nullable', 'string', 'max:50'],
+            'reference' => ['nullable', 'string', 'max:100'],
+            'commentaire' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $montant = (int) $validated['montant'];
+        $soldeCaisseLocale = (int) round($this->caisseService->getSolde());
+        $resteBordereau = (int) round($bordereau->reste_a_payer);
+        $plafond = $resteBordereau > 0
+            ? min($resteBordereau, max(0, $soldeCaisseLocale))
+            : max(0, $soldeCaisseLocale);
+
+        if ($plafond <= 0) {
+            $message = 'Solde de la caisse locale insuffisant pour effectuer ce paiement.';
+
+            return back()
+                ->withErrors(['montant' => $message])
+                ->with('error', $message)
+                ->withInput();
+        }
+
+        if ($montant > $plafond) {
+            $message = 'Le paiement ne peut pas dépasser le solde de la caisse locale ('
+                .number_format($soldeCaisseLocale, 0, ',', ' ')
+                .' FCFA). Maximum autorisé : '
+                .number_format($plafond, 0, ',', ' ')
+                .' FCFA.';
+
+            return back()
+                ->withErrors(['montant' => $message])
+                ->with('error', $message)
+                ->withInput();
+        }
+
+        $user = $this->resolveOptionalUser($request);
+
+        try {
+            DB::transaction(function () use ($validated, $montant, $bordereau, $user) {
+                PaiementPgf::create([
+                    'id_bordereau' => $bordereau->id,
+                    'montant' => $montant,
+                    'date_paiement' => $validated['date_paiement'],
+                    'mode_paiement' => $validated['mode_paiement'] ?: 'Caisse locale',
+                    'caisse' => 'local',
+                    'reference' => $validated['reference'] ?? null,
+                    'commentaire' => $validated['commentaire'] ?? null,
+                ]);
+
+                $bordereau->update([
+                    'montant_paye' => (float) $bordereau->montant_paye + $montant,
+                ]);
+
+                $this->caisseService->debiter(
+                    $montant,
+                    'Paiement bordereau '.$bordereau->numero,
+                    $user,
+                    'Local',
+                );
+            });
+        } catch (\InvalidArgumentException $e) {
+            return back()
+                ->withErrors(['montant' => $e->getMessage()])
+                ->with('error', $e->getMessage())
+                ->withInput();
+        }
+
+        return back()->with(
+            'success',
+            'Paiement de '.number_format($montant, 0, ',', ' ')
+            .' FCFA enregistré pour le bordereau '.$bordereau->numero.'. Débité de la caisse locale.'
+        );
+    }
+
+    private function resolveOptionalUser(Request $request): ?User
+    {
+        $user = $request->user();
+        if ($user instanceof User) {
+            return $user;
+        }
+
+        try {
+            $chef = app(ChefEquipeSession::class)->chef($request);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if (! $chef) {
+            return null;
+        }
+
+        $idChef = (int) ($chef['id_chef'] ?? 0);
+        $login = trim((string) ($chef['login'] ?? ''));
+
+        $userQuery = User::query();
+        if ($idChef > 0) {
+            $userQuery->where('id_chef', $idChef);
+        }
+        if ($login !== '') {
+            $userQuery->when(
+                $idChef > 0,
+                fn ($q) => $q->orWhere('login', $login),
+                fn ($q) => $q->where('login', $login),
+            );
+        }
+
+        return $userQuery->first();
     }
 
     /**
@@ -755,95 +847,222 @@ class CamionController extends Controller
     }
 
     /**
+     * Même source que camions-pgf/activites : tickets API filtrés camions PGF.
+     *
      * @param  array{vehicule?: string, date_debut?: string|null, date_fin?: string|null}  $filtres
-     * @return array{camions_count: int, montant_du: int, montant_paye: int, reste_a_payer: int}
+     * @return list<array<string, mixed>>
      */
-    private function calculerMontantsPgf(array $filtres = []): array
+    private function ticketsDepuisActivitesPgf(Request $request, array $filtres = []): array
     {
-        $vehiculesPgf = $this->vehiculesPgf();
-        $vehiculeIds = $vehiculesPgf->pluck('vehicule_id')
-            ->map(fn ($id) => (int) $id)
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-        $matricules = $vehiculesPgf->pluck('matricule_vehicule')
-            ->map(fn ($m) => strtoupper(trim((string) $m)))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
+        $mesTickets = app(MesTicketsService::class);
+        try {
+            $allTickets = $mesTickets->fetchAllTickets([], $request);
+        } catch (\Throwable $e) {
+            return [];
+        }
 
         $vehiculeFiltre = trim((string) ($filtres['vehicule'] ?? ''));
-        $dateDebut = $filtres['date_debut'] ?? null;
-        $dateFin = $filtres['date_fin'] ?? null;
+        $filtered = $mesTickets->filterTickets($allTickets, $vehiculeFiltre, '', '');
 
-        $fichesQuery = FicheSortie::query()
-            ->when($vehiculeIds !== [], fn ($q) => $q->whereIn('vehicule_id', $vehiculeIds), fn ($q) => $q->whereRaw('1 = 0'));
-
-        if ($vehiculeFiltre !== '') {
-            $fichesQuery->where(function ($q) use ($vehiculeFiltre) {
-                $q->where('matricule_vehicule', $vehiculeFiltre)
-                    ->orWhere('vehicule_id', (int) $vehiculeFiltre);
-            });
-        }
-        if (! empty($dateDebut)) {
-            $fichesQuery->whereDate('date_chargement', '>=', $dateDebut);
-        }
-        if (! empty($dateFin)) {
-            $fichesQuery->whereDate('date_chargement', '<=', $dateFin);
+        $vehiculesPgf = $this->vehiculesPgf();
+        $idsPgf = [];
+        $matriculesPgf = [];
+        foreach ($vehiculesPgf as $row) {
+            $id = (int) $row->vehicule_id;
+            if ($id > 0) {
+                $idsPgf[$id] = true;
+            }
+            $matricule = strtoupper(trim((string) $row->matricule_vehicule));
+            if ($matricule !== '') {
+                $matriculesPgf[$matricule] = true;
+            }
         }
 
-        $montantDuFiches = (float) (clone $fichesQuery)->sum('montant_camion');
-        $montantPayeFiches = (float) (clone $fichesQuery)->sum('montant_paye_transporteur');
+        $filtered = array_values(array_filter(
+            $filtered,
+            function (array $ticket) use ($idsPgf, $matriculesPgf): bool {
+                $id = (int) ($ticket['vehicule_id'] ?? 0);
+                $matricule = strtoupper(trim((string) ($ticket['matricule_vehicule'] ?? $ticket['matricule'] ?? '')));
 
-        $ticketsQuery = Ticket::query();
-        if ($vehiculeIds !== [] || $matricules !== []) {
-            $ticketsQuery->where(function ($q) use ($vehiculeIds, $matricules) {
-                if ($vehiculeIds !== []) {
-                    $q->whereIn('vehicule_id', $vehiculeIds);
+                return ($id > 0 && isset($idsPgf[$id]))
+                    || ($matricule !== '' && isset($matriculesPgf[$matricule]));
+            }
+        ));
+
+        $dateDebut = trim((string) ($filtres['date_debut'] ?? ''));
+        $dateFin = trim((string) ($filtres['date_fin'] ?? ''));
+        if ($dateDebut !== '' || $dateFin !== '') {
+            $filtered = array_values(array_filter(
+                $filtered,
+                function (array $ticket) use ($dateDebut, $dateFin): bool {
+                    $raw = (string) ($ticket['date_ticket'] ?? '');
+                    if ($raw === '') {
+                        return false;
+                    }
+                    try {
+                        $date = Carbon::parse($raw)->startOfDay();
+                    } catch (\Throwable $e) {
+                        return false;
+                    }
+                    if ($dateDebut !== '') {
+                        try {
+                            if ($date->lt(Carbon::parse($dateDebut)->startOfDay())) {
+                                return false;
+                            }
+                        } catch (\Throwable $e) {
+                        }
+                    }
+                    if ($dateFin !== '') {
+                        try {
+                            if ($date->gt(Carbon::parse($dateFin)->startOfDay())) {
+                                return false;
+                            }
+                        } catch (\Throwable $e) {
+                        }
+                    }
+
+                    return true;
                 }
-                if ($matricules !== []) {
-                    $q->orWhereIn('matricule_vehicule', $matricules);
+            ));
+        }
+
+        usort($filtered, function (array $a, array $b): int {
+            return strcmp((string) ($b['date_ticket'] ?? ''), (string) ($a['date_ticket'] ?? ''));
+        });
+
+        $ids = array_values(array_filter(array_map(
+            static fn (array $t) => (int) ($t['id_ticket'] ?? 0),
+            $filtered
+        )));
+        $numeros = array_values(array_filter(array_map(
+            static fn (array $t) => trim((string) ($t['numero_ticket'] ?? '')),
+            $filtered
+        )));
+
+        $locaux = collect();
+        if ($ids !== [] || $numeros !== []) {
+            $locaux = Ticket::query()
+                ->where(function ($query) use ($ids, $numeros) {
+                    if ($ids !== []) {
+                        $query->whereIn('id_ticket', $ids);
+                    }
+                    if ($numeros !== []) {
+                        if ($ids !== []) {
+                            $query->orWhereIn('numero_ticket', $numeros);
+                        } else {
+                            $query->whereIn('numero_ticket', $numeros);
+                        }
+                    }
+                })
+                ->get();
+        }
+        $byId = $locaux->keyBy(fn ($t) => (int) $t->id_ticket);
+        $byNumero = $locaux->keyBy(fn ($t) => trim((string) $t->numero_ticket));
+
+        $usinesById = Usine::query()
+            ->get(['id_usine', 'nom_usine'])
+            ->pluck('nom_usine', 'id_usine')
+            ->all();
+
+        $fichesByTicketId = FicheSortie::query()
+            ->whereIn('id_ticket', $ids)
+            ->get()
+            ->keyBy('id_ticket');
+
+        $bordereauIds = $locaux
+            ->pluck('bordereau_pgf_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+        $numerosBordereau = $bordereauIds === []
+            ? collect()
+            : BordereauPgf::query()
+                ->whereIn('id', $bordereauIds)
+                ->pluck('numero', 'id');
+
+        $details = [];
+        foreach ($filtered as $ticket) {
+            $idTicket = (int) ($ticket['id_ticket'] ?? 0);
+            $numero = trim((string) ($ticket['numero_ticket'] ?? ''));
+            $local = $byId->get($idTicket) ?? ($numero !== '' ? $byNumero->get($numero) : null);
+            $fiche = $fichesByTicketId->get($idTicket);
+
+            $poids = (float) ($ticket['poids'] ?? 0);
+            $prixManuel = ($local && $local->prix_saisi_manuel)
+                ? (float) $local->prix_unitaire
+                : null;
+            $montantManuel = ($local && $local->prix_saisi_manuel && $local->montant_paie !== null)
+                ? (float) $local->montant_paie
+                : null;
+            if ($montantManuel === null && $prixManuel !== null && $poids > 0) {
+                $montantManuel = $prixManuel * $poids;
+            }
+
+            $bordereauPgfId = $local?->bordereau_pgf_id ? (int) $local->bordereau_pgf_id : null;
+            $numeroBordereau = $bordereauPgfId
+                ? (string) ($numerosBordereau[$bordereauPgfId] ?? '')
+                : '';
+
+            $nomUsine = trim((string) ($ticket['nom_usine'] ?? ''));
+            if ($nomUsine === '' || $nomUsine === '-') {
+                $nomUsine = (string) ($usinesById[(int) ($ticket['id_usine'] ?? 0)] ?? '—');
+            }
+
+            $dateTicket = null;
+            $rawDate = (string) ($ticket['date_ticket'] ?? '');
+            if ($rawDate !== '') {
+                try {
+                    $dateTicket = Carbon::parse($rawDate);
+                } catch (\Throwable $e) {
+                    $dateTicket = null;
                 }
-            });
-        } else {
-            $ticketsQuery->whereRaw('1 = 0');
+            }
+
+            $details[] = [
+                'id_ticket' => $idTicket,
+                'date_ticket' => $dateTicket,
+                'numero_ticket' => $numero,
+                'nom_usine' => $nomUsine !== '' ? $nomUsine : '—',
+                'nom_agent' => trim((string) ($ticket['nom_agent'] ?? $fiche?->nom_agent ?? '')) ?: '—',
+                'nom_pont' => trim((string) ($ticket['nom_pont'] ?? $fiche?->nom_pont ?? $ticket['origine'] ?? '')) ?: '—',
+                'vehicule_id' => (int) ($ticket['vehicule_id'] ?? 0),
+                'matricule_vehicule' => trim((string) ($ticket['matricule_vehicule'] ?? '')) ?: '—',
+                'poids' => $poids,
+                'prix_unitaire' => $prixManuel,
+                'montant' => $montantManuel,
+                'bordereau_pgf_id' => $bordereauPgfId,
+                'numero_bordereau' => $numeroBordereau !== '' ? $numeroBordereau : null,
+            ];
         }
 
-        if ($vehiculeFiltre !== '') {
-            $ticketsQuery->where(function ($q) use ($vehiculeFiltre) {
-                $q->where('matricule_vehicule', $vehiculeFiltre)
-                    ->orWhere('vehicule_id', (int) $vehiculeFiltre);
-            });
-        }
-        if (! empty($dateDebut)) {
-            $ticketsQuery->whereDate('date_ticket', '>=', $dateDebut);
-        }
-        if (! empty($dateFin)) {
-            $ticketsQuery->whereDate('date_ticket', '<=', $dateFin);
+        return $details;
+    }
+
+    /**
+     * Montant dû = tickets avec PU ; montant payé = paiements bordereaux PGF.
+     *
+     * @param  list<array<string, mixed>>  $tickets
+     * @param  \Illuminate\Support\Collection<int, BordereauPgf>|null  $bordereaux
+     * @return array{montant_du: int, montant_paye: int, reste_a_payer: int}
+     */
+    private function calculerMontantsDepuisTicketsPgf(array $tickets, $bordereaux = null): array
+    {
+        $montantDu = 0.0;
+
+        foreach ($tickets as $ticket) {
+            $montant = $ticket['montant'] ?? null;
+            if ($montant === null || (float) $montant <= 0) {
+                continue;
+            }
+            $montantDu += (float) $montant;
         }
 
-        $tickets = $ticketsQuery->get(['montant_paie', 'statut_ticket']);
-        $montantDuTickets = (float) $tickets
-            ->filter(fn ($t) => (float) ($t->montant_paie ?? 0) > 0)
-            ->sum('montant_paie');
-        $montantPayeTickets = (float) $tickets
-            ->filter(function ($t) {
-                $statut = mb_strtolower(trim((string) ($t->statut_ticket ?? '')), 'UTF-8');
-
-                return in_array($statut, ['soldé', 'solde', 'payé', 'paye'], true)
-                    && (float) ($t->montant_paie ?? 0) > 0;
-            })
-            ->sum('montant_paie');
-
-        $montantDu = $montantDuFiches > 0 ? $montantDuFiches : $montantDuTickets;
-        $montantPaye = $montantDuFiches > 0
-            ? ($montantPayeFiches + $montantPayeTickets)
-            : $montantPayeTickets;
+        $bordereaux = $bordereaux ?? BordereauPgf::query()->get();
+        $montantPaye = (float) $bordereaux->sum('montant_paye');
 
         return [
-            'camions_count' => $vehiculesPgf->count(),
             'montant_du' => (int) round($montantDu),
             'montant_paye' => (int) round($montantPaye),
             'reste_a_payer' => (int) round($montantDu - $montantPaye),

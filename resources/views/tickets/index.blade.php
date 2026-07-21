@@ -238,9 +238,10 @@
               @if (!empty($onlyCamionsPgf))
               <th class="text-end">Prix unitaire</th>
               <th class="text-end">Montant</th>
-              <th>Statut</th>
-              @endif
+              <th>N° Bordereau</th>
+              @else
               <th>Actions</th>
+              @endif
             </tr>
           </thead>
           <tbody class="table-border-bottom-0">
@@ -254,6 +255,10 @@
                 if ($montantManuel === null && $prixManuel !== null && $poidsLigne > 0) {
                   $montantManuel = (float) $prixManuel * $poidsLigne;
                 }
+                $surBordereau = !empty($t['bordereau_pgf_id']);
+                $prixAffiche = $prixManuel !== null
+                  ? rtrim(rtrim(number_format((float) $prixManuel, 2, '.', ''), '0'), '.')
+                  : '';
               @endphp
               <tr>
                 <td>
@@ -294,62 +299,37 @@
                     data-ticket-numero="{{ $t['numero_ticket'] ?? '' }}"
                     data-poids="{{ $poidsLigne }}"
                     data-save-url="{{ route('tickets.prix_unitaire', $t['id_ticket']) }}"
-                    data-prix="{{ $prixManuel !== null ? rtrim(rtrim(number_format((float) $prixManuel, 2, '.', ''), '0'), '.') : '' }}">
-                  @if ($prixManuel === null)
+                    data-prix="{{ $prixAffiche }}">
+                  @if ($surBordereau)
+                    @if ($prixManuel !== null)
+                      <span class="badge bg-label-primary" title="Prix figé (ticket déjà sur bordereau)">{{ $prixAffiche }}</span>
+                    @else
+                      <span class="text-muted">—</span>
+                    @endif
+                  @elseif ($prixManuel === null)
                     <button type="button" class="btn btn-sm btn-attente-prix js-open-prix-modal">
                       En attente
                     </button>
                   @else
                     <button type="button" class="btn btn-sm btn-outline-primary btn-prix-saisi js-open-prix-modal" title="Modifier le prix unitaire">
-                      {{ rtrim(rtrim(number_format((float) $prixManuel, 2, '.', ''), '0'), '.') }}
+                      {{ $prixAffiche }}
                     </button>
                   @endif
                 </td>
                 <td class="text-end fw-semibold js-montant-pgf" data-ticket-id="{{ $t['id_ticket'] }}">
                   {{ $montantManuel !== null ? number_format((float) $montantManuel, 0, ',', ' ').' FCFA' : '—' }}
                 </td>
-                @php
-                  $statutRaw = mb_strtolower(trim((string) ($t['statut_ticket'] ?? '')), 'UTF-8');
-                  $estPaye = in_array($statutRaw, ['soldé', 'solde', 'payé', 'paye'], true);
-                  $peutPayer = $prixManuel !== null && $montantManuel !== null && (float) $montantManuel > 0;
-                @endphp
                 <td>
-                  @if ($estPaye)
-                    <span class="badge bg-label-success badge-statut-pgf js-statut-pgf">Payé</span>
+                  @if(!empty($t['numero_bordereau']) && !empty($t['bordereau_pgf_id']))
+                    <a href="{{ route('camions.revenues.bordereau.pdf', ['id' => $t['bordereau_pgf_id']]) }}" target="_blank" rel="noopener" class="fw-semibold text-primary text-decoration-none">
+                      {{ $t['numero_bordereau'] }}
+                    </a>
                   @else
-                    <span class="badge bg-label-warning badge-statut-pgf js-statut-pgf">Non payé</span>
+                    <span class="text-muted">—</span>
                   @endif
                 </td>
-                @endif
+                @else
                 <td class="js-actions-pgf">
-                  @if (!empty($onlyCamionsPgf))
-                    @if ($estPaye)
-                      <button type="button" class="btn btn-sm btn-success" disabled title="Déjà payé">
-                        <i class="bx bx-check"></i> Payé
-                      </button>
-                    @elseif (! $peutPayer)
-                      <button
-                        type="button"
-                        class="btn btn-sm btn-outline-secondary"
-                        disabled
-                        title="Saisissez d’abord le prix unitaire et le montant"
-                      >
-                        <i class="bx bx-money"></i> Payer
-                      </button>
-                    @else
-                      <button
-                        type="button"
-                        class="btn btn-sm btn-outline-success js-payer-ticket-pgf"
-                        title="Marquer comme payé"
-                        data-ticket-id="{{ $t['id_ticket'] }}"
-                        data-ticket-numero="{{ $t['numero_ticket'] ?? '' }}"
-                        data-montant="{{ number_format((float) $montantManuel, 0, ',', ' ').' FCFA' }}"
-                        data-payer-url="{{ route('tickets.payer', $t['id_ticket']) }}"
-                      >
-                        <i class="bx bx-money"></i> Payer
-                      </button>
-                    @endif
-                  @else
                   <a href="{{ route('tickets.pdf', ['id' => $t['id_ticket']]) }}" class="btn btn-sm btn-outline-secondary me-1" target="_blank" rel="noopener" title="Imprimer en PDF">
                     <i class="bx bx-printer"></i>
                   </a>
@@ -363,12 +343,12 @@
                   >
                     <i class="bx bx-check"></i> Valider
                   </button>
-                  @endif
                 </td>
+                @endif
               </tr>
             @empty
               <tr>
-                <td colspan="{{ !empty($onlyCamionsPgf) ? 11 : 9 }}" class="text-center">Aucun ticket</td>
+                <td colspan="{{ !empty($onlyCamionsPgf) ? 10 : 9 }}" class="text-center">Aucun ticket</td>
               </tr>
             @endforelse
           </tbody>
@@ -1514,20 +1494,6 @@ $(document).ready(function() {
       montantCell.textContent = montantTxt;
     }
 
-    // Activer « Payer » seulement une fois prix + montant présents (sauf déjà payé).
-    var actions = row.querySelector('.js-actions-pgf');
-    if (actions && !actions.querySelector('button.btn-success[disabled]')) {
-      var numero = currentCell.getAttribute('data-ticket-numero') || '';
-      var payerUrl = @json(url('/tickets')).replace(/\/$/, '') + '/' + ticketId + '/payer';
-      actions.innerHTML =
-        '<button type="button" class="btn btn-sm btn-outline-success js-payer-ticket-pgf" title="Marquer comme payé"' +
-        ' data-ticket-id="' + ticketId + '"' +
-        ' data-ticket-numero="' + String(numero).replace(/"/g, '&quot;') + '"' +
-        ' data-montant="' + String(montantTxt).replace(/"/g, '&quot;') + '"' +
-        ' data-payer-url="' + payerUrl + '">' +
-        '<i class="bx bx-money"></i> Payer</button>';
-    }
-
     document.getElementById('modalPrixUnitaireSaisiTicket').textContent =
       currentCell.getAttribute('data-ticket-numero') || ('Ticket #' + ticketId);
     document.getElementById('modalPrixUnitaireSaisiDetails').textContent =
@@ -1622,109 +1588,6 @@ $(document).ready(function() {
     if (montantEl) {
       montantEl.textContent = '—';
     }
-  });
-})();
-</script>
-
-{{-- Modal confirmation paiement --}}
-<div class="modal fade" id="modalConfirmerPaiementPgf" tabindex="-1" aria-labelledby="modalConfirmerPaiementPgfLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0 shadow">
-      <div class="modal-header bg-success text-white border-0">
-        <h5 class="modal-title text-white" id="modalConfirmerPaiementPgfLabel">
-          <i class="bx bx-money me-2"></i>Confirmer le paiement
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
-      </div>
-      <div class="modal-body">
-        <p class="mb-2">Marquer ce ticket comme <strong>Payé</strong> ?</p>
-        <div class="small text-muted">Ticket</div>
-        <div class="fw-semibold mb-2" id="modalPayerTicketNumero">—</div>
-        <div class="small text-muted">Montant</div>
-        <div class="fw-semibold" id="modalPayerTicketMontant">—</div>
-      </div>
-      <div class="modal-footer border-0">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-        <button type="button" class="btn btn-success" id="modalPayerConfirmer">
-          <i class="bx bx-check me-1"></i>Confirmer
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-(function () {
-  if (typeof bootstrap === 'undefined') return;
-
-  var csrfToken = @json(csrf_token());
-  var modalEl = document.getElementById('modalConfirmerPaiementPgf');
-  if (!modalEl) return;
-
-  var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-  var numeroEl = document.getElementById('modalPayerTicketNumero');
-  var montantEl = document.getElementById('modalPayerTicketMontant');
-  var confirmerBtn = document.getElementById('modalPayerConfirmer');
-  var currentBtn = null;
-  var paying = false;
-
-  document.addEventListener('click', function (event) {
-    var btn = event.target.closest('.js-payer-ticket-pgf');
-    if (!btn || btn.disabled) return;
-    event.preventDefault();
-    currentBtn = btn;
-    numeroEl.textContent = btn.getAttribute('data-ticket-numero') || ('Ticket #' + btn.getAttribute('data-ticket-id'));
-    montantEl.textContent = btn.getAttribute('data-montant') || '—';
-    modal.show();
-  });
-
-  confirmerBtn.addEventListener('click', function () {
-    if (!currentBtn || paying) return;
-    var url = currentBtn.getAttribute('data-payer-url');
-    paying = true;
-    confirmerBtn.disabled = true;
-    confirmerBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Paiement...';
-
-    fetch(url, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'X-CSRF-TOKEN': csrfToken,
-        'X-Requested-With': 'XMLHttpRequest',
-      },
-    })
-      .then(function (response) {
-        return response.json().then(function (data) {
-          return { ok: response.ok, data: data };
-        });
-      })
-      .then(function (result) {
-        if (!result.ok || !result.data.success) {
-          throw new Error((result.data && result.data.message) || 'Paiement impossible');
-        }
-
-        var row = currentBtn.closest('tr');
-        if (row) {
-          var statut = row.querySelector('.js-statut-pgf');
-          if (statut) {
-            statut.className = 'badge bg-label-success badge-statut-pgf js-statut-pgf';
-            statut.textContent = 'Payé';
-          }
-          var cell = currentBtn.parentElement;
-          cell.innerHTML = '<button type="button" class="btn btn-sm btn-success" disabled title="Déjà payé"><i class="bx bx-check"></i> Payé</button>';
-        }
-
-        modal.hide();
-      })
-      .catch(function (error) {
-        alert(error.message || 'Erreur lors du paiement.');
-      })
-      .finally(function () {
-        paying = false;
-        confirmerBtn.disabled = false;
-        confirmerBtn.innerHTML = '<i class="bx bx-check me-1"></i>Confirmer';
-        currentBtn = null;
-      });
   });
 })();
 </script>

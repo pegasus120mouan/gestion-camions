@@ -35,6 +35,7 @@ class Ticket extends Model
         'numero_bordereau',
         'conformite',
         'bordereau_agent_id',
+        'bordereau_pgf_id',
         'poids_unipalm',
         'date_confirmation_unipalm',
     ];

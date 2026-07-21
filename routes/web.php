@@ -222,6 +222,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/camions-pgf/activites', [TicketController::class, 'index'])->name('camions.activites');
     Route::get('/camions-pgf/revenues', [CamionController::class, 'revenuesPgf'])->name('camions.revenues');
     Route::get('/camions-pgf/revenues/detail', [CamionController::class, 'revenuesPgfShow'])->name('camions.revenues.show');
+    Route::get('/camions-pgf/revenues/bordereaux/fiches-eligibles', [CamionController::class, 'fichesEligiblesBordereauPgf'])->name('camions.revenues.bordereau.fiches');
+    Route::post('/camions-pgf/revenues/bordereaux', [CamionController::class, 'storeBordereauPgf'])->name('camions.revenues.bordereau.store');
+    Route::get('/camions-pgf/revenues/bordereaux/{id}', [CamionController::class, 'showBordereauPgf'])->name('camions.revenues.bordereau.show');
+    Route::get('/camions-pgf/revenues/bordereaux/{id}/pdf', [CamionController::class, 'exportBordereauPgfPdf'])->name('camions.revenues.bordereau.pdf');
+    Route::delete('/camions-pgf/revenues/bordereaux/{id}', [CamionController::class, 'destroyBordereauPgf'])->name('camions.revenues.bordereau.destroy');
+    Route::post('/camions-pgf/revenues/bordereaux/{id}/paiement', [CamionController::class, 'storePaiementBordereauPgf'])->name('camions.revenues.bordereau.paiement.store');
     Route::post('/camions/assigner-groupe', [CamionController::class, 'assignerGroupe'])->name('camions.assigner_groupe');
     Route::post('/camions/assigner-groupe-bulk', [CamionController::class, 'assignerGroupeBulk'])->name('camions.assigner_groupe_bulk');
     Route::delete('/camions/{vehicule_id}/retirer-groupe', [CamionController::class, 'retirerGroupe'])->name('camions.retirer_groupe');
