@@ -86,7 +86,16 @@
     document.addEventListener('submit', function (event) {
       var form = event.target;
       if (!(form instanceof HTMLFormElement) || form.target === '_blank') return;
-      showLoading();
+
+      // Attendre les handlers (ex. preventDefault pour ouvrir un 2e modal)
+      // avant d’afficher l’overlay, sinon le chargement reste bloqué.
+      setTimeout(function () {
+        if (event.defaultPrevented) {
+          hideLoading();
+          return;
+        }
+        showLoading();
+      }, 0);
     }, true);
   })();
 </script>

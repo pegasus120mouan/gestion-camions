@@ -735,7 +735,68 @@ class TicketController extends Controller
             'onlyCamionsPgf' => $onlyCamionsPgf,
             'onlyLocaux' => $onlyLocaux,
             'ticketsIndexRoute' => $ticketsIndexRoute,
+            'vehiculesPgfLookup' => $vehiculesPgfLookup,
+            'fichesDisponiblesAssociation' => $onlyLocaux
+                ? $this->fichesDisponiblesPourAssociation()
+                : collect(),
         ]);
+    }
+
+    /**
+     * Fiches non déchargées encore libres (pour association ticket local PGF).
+     *
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function fichesDisponiblesPourAssociation()
+    {
+        return FicheSortie::query()
+            ->whereNull('date_dechargement')
+            ->where(function ($query) {
+                $query->whereNull('id_ticket')
+                    ->orWhere('id_ticket', 0);
+            })
+            ->orderByDesc('date_chargement')
+            ->orderByDesc('id')
+            ->get([
+                'id',
+                'numero_fiche',
+                'date_chargement',
+                'vehicule_id',
+                'matricule_vehicule',
+                'id_agent',
+                'nom_agent',
+                'id_pont',
+                'nom_pont',
+                'usine',
+                'produit_id',
+                'nom_produit',
+                'poids_pont',
+            ])
+            ->map(static function (FicheSortie $fiche): array {
+                return [
+                    'id' => (int) $fiche->id,
+                    'numero_fiche' => (string) ($fiche->numero_fiche ?? ''),
+                    'date_chargement' => $fiche->date_chargement?->format('d/m/Y'),
+                    'vehicule_id' => (int) ($fiche->vehicule_id ?? 0),
+                    'matricule_vehicule' => strtoupper(trim((string) ($fiche->matricule_vehicule ?? ''))),
+                    'id_agent' => (int) ($fiche->id_agent ?? 0),
+                    'nom_agent' => (string) ($fiche->nom_agent ?? ''),
+                    'id_pont' => (int) ($fiche->id_pont ?? 0),
+                    'nom_pont' => (string) ($fiche->nom_pont ?? ''),
+                    'usine' => (string) ($fiche->usine ?? ''),
+                    'produit_id' => (int) ($fiche->produit_id ?? 0),
+                    'nom_produit' => (string) ($fiche->nom_produit ?? ''),
+                    'poids_pont' => (float) ($fiche->poids_pont ?? 0),
+                    'label' => trim(sprintf(
+                        '%s — %s — %s — %s kg',
+                        $fiche->numero_fiche ?: ('#'.$fiche->id),
+                        $fiche->matricule_vehicule ?: '—',
+                        $fiche->usine ?: '—',
+                        number_format((float) ($fiche->poids_pont ?? 0), 0, ',', ' ')
+                    )),
+                ];
+            })
+            ->values();
     }
 
     /**
@@ -1114,6 +1175,11 @@ class TicketController extends Controller
         $pontGerable = $idPontSaisi
             && PontEtat::where('id_pont', $idPontSaisi)->where('gerable', true)->exists();
 
+        $estCamionPgf = $this->vehiculeEstCamionPgf(
+            (int) $request->input('vehicule_id', 0),
+            (string) $request->input('matricule_vehicule', '')
+        );
+
         $validated = $request->validate([
             'numero_ticket'        => ['required', 'string', 'max:255', Rule::unique('tickets', 'numero_ticket')],
             'date_ticket'          => ['required', 'date'],
@@ -1128,10 +1194,13 @@ class TicketController extends Controller
             'id_pont'              => ['nullable', 'integer', 'min:1'],
             'parc_id'              => [$pontGerable ? 'required' : 'nullable', 'integer', 'min:1'],
             'produit_id'           => [$pontGerable ? 'required' : 'nullable', 'integer', 'min:1'],
+            'fiche_id'             => [$estCamionPgf ? 'required' : 'nullable', 'integer', 'exists:fiches_sortie,id'],
         ], [
             'numero_ticket.unique' => 'Ce N° ticket existe déjà.',
             'parc_id.required' => 'Le parc est obligatoire pour un pont gérable.',
             'produit_id.required' => 'Le produit est obligatoire pour un pont gérable.',
+            'fiche_id.required' => 'Camion PGF : sélectionnez une fiche de sortie à associer.',
+            'fiche_id.exists' => 'La fiche de sortie sélectionnée est introuvable.',
         ]);
 
         if ($pontGerable) {
@@ -1148,6 +1217,50 @@ class TicketController extends Controller
                 return back()->withInput()->withErrors([
                     'parc_id' => 'Parc invalide ou indisponible pour ce pont et ce produit.',
                 ]);
+            }
+        }
+
+        $ficheAAssocier = null;
+        if ($estCamionPgf) {
+            $ficheAAssocier = FicheSortie::query()
+                ->whereNull('date_dechargement')
+                ->where(function ($query) {
+                    $query->whereNull('id_ticket')->orWhere('id_ticket', 0);
+                })
+                ->find((int) $validated['fiche_id']);
+
+            if (! $ficheAAssocier) {
+                return back()->withInput()->withErrors([
+                    'fiche_id' => 'Fiche de sortie introuvable, déjà déchargée ou déjà associée à un ticket.',
+                ]);
+            }
+
+            $matriculeTicket = strtoupper(trim((string) $validated['matricule_vehicule']));
+            $matriculeFiche = strtoupper(trim((string) ($ficheAAssocier->matricule_vehicule ?? '')));
+            $vehiculeIdTicket = (int) ($validated['vehicule_id'] ?? 0);
+            $vehiculeIdFiche = (int) ($ficheAAssocier->vehicule_id ?? 0);
+            $vehiculeOk = ($vehiculeIdTicket > 0 && $vehiculeIdFiche > 0 && $vehiculeIdTicket === $vehiculeIdFiche)
+                || ($matriculeTicket !== '' && $matriculeTicket === $matriculeFiche);
+
+            if (! $vehiculeOk) {
+                return back()->withInput()->withErrors([
+                    'fiche_id' => 'La fiche sélectionnée ne correspond pas au véhicule du ticket.',
+                ]);
+            }
+
+            if (empty($validated['id_usine'])) {
+                $nomUsineFiche = trim((string) ($ficheAAssocier->usine ?? ''));
+                $idUsineFiche = $nomUsineFiche !== ''
+                    ? (int) (\App\Models\Usine::query()
+                        ->whereRaw('LOWER(nom_usine) = ?', [mb_strtolower($nomUsineFiche, 'UTF-8')])
+                        ->value('id_usine') ?? 0)
+                    : 0;
+                if ($idUsineFiche <= 0) {
+                    return back()->withInput()->withErrors([
+                        'fiche_id' => 'Impossible de déterminer l’usine à partir de la fiche sélectionnée.',
+                    ]);
+                }
+                $validated['id_usine'] = $idUsineFiche;
             }
         }
 
@@ -1168,91 +1281,112 @@ class TicketController extends Controller
             $agentsAutorises
         );
 
-        $ticket = Ticket::create([
-            'numero_ticket'       => $validated['numero_ticket'],
-            'date_ticket'         => $validated['date_ticket'],
-            'matricule_vehicule'  => trim($validated['matricule_vehicule']),
-            'vehicule_id'         => $validated['vehicule_id'] ?? null,
-            'poids'               => $validated['poids'] ?? null,
-            'id_usine'            => $validated['id_usine'],
-            'id_agent'            => null,
-            'particulier_agent_id'=> $agent->id,
-            'id_utilisateur'      => Auth::id() ?? 1,
-            'prix_unitaire'       => $validated['prix_unitaire'] ?? 0,
-            'statut_ticket'       => $validated['statut_ticket'] ?? 'non soldé',
-        ]);
-
-        $idPont   = $validated['id_pont'] ?? null;
-        $parcId   = $validated['parc_id'] ?? null;
-        $produitId = $validated['produit_id'] ?? null;
-        $ficheCreee = null;
-        $produit = $produitId ? Produit::find($produitId) : null;
-        $nomAgent = trim($agent->nom . ' ' . $agent->prenoms);
-        $numeroAgent = $agent->numero_agent ?? '';
-        $nomUsine = $this->nomUsinePourTicket((int) $ticket->id_usine);
-
-        if ($idPont && $produitId) {
-            // Trouver le stock ouvert actif pour ce pont + produit (+ parc si fourni)
-            $stockQuery = Stock::where('id_pont', $idPont)
-                ->where('produit_id', $produitId)
-                ->where('type', 'entree')
-                ->where('statut', 'ouvert')
-                ->where(fn ($q) => $q->whereNull('etat')->orWhere('etat', 'actif'));
-
-            if ($parcId) {
-                $stockQuery->where('parc_id', $parcId);
+        [$ticket, $ficheLiee, $transporteurLie] = DB::transaction(function () use ($validated, $agent, $estCamionPgf, $ficheAAssocier) {
+            $poidsTicket = $validated['poids'] ?? null;
+            if ($estCamionPgf && $ficheAAssocier && ((float) ($poidsTicket ?? 0) <= 0)) {
+                $poidsTicket = $ficheAAssocier->poids_pont;
             }
 
-            $stock = $stockQuery->orderBy('id')->first();
+            $ticket = Ticket::create([
+                'numero_ticket'       => $validated['numero_ticket'],
+                'date_ticket'         => $validated['date_ticket'],
+                'matricule_vehicule'  => trim($validated['matricule_vehicule']),
+                'vehicule_id'         => $validated['vehicule_id'] ?? null,
+                'poids'               => $poidsTicket,
+                'id_usine'            => $validated['id_usine'],
+                'id_agent'            => $ficheAAssocier?->id_agent ?: null,
+                'particulier_agent_id'=> $agent->id,
+                'id_utilisateur'      => Auth::id() ?? 1,
+                'prix_unitaire'       => $validated['prix_unitaire'] ?? 0,
+                'statut_ticket'       => $validated['statut_ticket'] ?? 'non soldé',
+            ]);
 
-            if ($stock) {
-                $parc    = $parcId ? Parc::find($parcId) : null;
+            $idPont   = $validated['id_pont'] ?? null;
+            $parcId   = $validated['parc_id'] ?? null;
+            $produitId = $validated['produit_id'] ?? null;
+            $ficheLiee = null;
+            $produit = $produitId ? Produit::find($produitId) : null;
+            $nomAgent = trim($agent->nom . ' ' . $agent->prenoms);
+            $numeroAgent = $agent->numero_agent ?? '';
+            $nomUsine = $this->nomUsinePourTicket((int) $ticket->id_usine);
 
-                // Récupérer infos pont depuis pont_etats
-                $pontEtat = PontEtat::where('id_pont', $idPont)->first();
-                $nomPont  = $pontEtat?->nom_pont ?? '';
-                $codePont = $pontEtat?->code_pont ?? '';
-
-                $numeroFiche = app(FicheSortieNumeroService::class)->generer($nomPont, $idPont);
-
-                $ficheCreee = FicheSortie::create([
-                    'numero_fiche'       => $numeroFiche,
-                    'stock_id'           => $stock->id,
-                    'parc_id'            => $parc?->id,
-                    'nom_parc'           => $parc?->nom ?? '',
-                    'vehicule_id'        => $ticket->vehicule_id ?? 0,
-                    'matricule_vehicule' => $ticket->matricule_vehicule,
-                    'id_pont'            => $idPont,
-                    'nom_pont'           => $nomPont,
-                    'code_pont'          => $codePont,
-                    'id_agent'           => $agent->id_agent ?? 0,
-                    'nom_agent'          => $nomAgent,
-                    'numero_agent'       => $numeroAgent,
-                    'usine'              => $nomUsine,
-                    'produit_id'         => $produit?->id,
-                    'nom_produit'        => $produit?->nom ?? '',
-                    'id_ticket'          => $ticket->id_ticket,
-                    'numero_ticket'      => $ticket->numero_ticket,
-                    'date_chargement'    => $ticket->date_ticket,
-                    'poids_pont'         => $ticket->poids ?? 0,
+            if ($estCamionPgf && $ficheAAssocier) {
+                $ficheAAssocier->update([
+                    'id_ticket' => $ticket->id_ticket,
+                    'numero_ticket' => $ticket->numero_ticket,
                 ]);
-            }
-        }
+                $ficheLiee = $ficheAAssocier->fresh();
+                $produitId = $ficheLiee->produit_id ?: $produitId;
+                $produit = $produitId ? Produit::find($produitId) : $produit;
+                $nomUsine = trim((string) ($ficheLiee->usine ?: $nomUsine));
+                $nomAgent = trim((string) ($ficheLiee->nom_agent ?: $nomAgent));
+                $numeroAgent = trim((string) ($ficheLiee->numero_agent ?: $numeroAgent));
+            } elseif ($idPont && $produitId) {
+                $stockQuery = Stock::where('id_pont', $idPont)
+                    ->where('produit_id', $produitId)
+                    ->where('type', 'entree')
+                    ->where('statut', 'ouvert')
+                    ->where(fn ($q) => $q->whereNull('etat')->orWhere('etat', 'actif'));
 
-        $transporteurLie = app(TicketTransporteurFicheService::class)->synchroniserTicketTransporteur(
-            $ticket,
-            $ficheCreee,
-            [
-                'nom_usine' => $nomUsine ?? null,
-                'produit_id' => $produitId ? (int) $produitId : null,
-                'nom_produit' => $produit?->nom ?? '',
-                'id_agent' => $agent->id_agent ?? null,
-                'nom_agent' => $nomAgent ?? '',
-                'numero_agent' => $numeroAgent ?? '',
-            ]
-        );
+                if ($parcId) {
+                    $stockQuery->where('parc_id', $parcId);
+                }
+
+                $stock = $stockQuery->orderBy('id')->first();
+
+                if ($stock) {
+                    $parc    = $parcId ? Parc::find($parcId) : null;
+                    $pontEtat = PontEtat::where('id_pont', $idPont)->first();
+                    $nomPont  = $pontEtat?->nom_pont ?? '';
+                    $codePont = $pontEtat?->code_pont ?? '';
+                    $numeroFiche = app(FicheSortieNumeroService::class)->generer($nomPont, $idPont);
+
+                    $ficheLiee = FicheSortie::create([
+                        'numero_fiche'       => $numeroFiche,
+                        'stock_id'           => $stock->id,
+                        'parc_id'            => $parc?->id,
+                        'nom_parc'           => $parc?->nom ?? '',
+                        'vehicule_id'        => $ticket->vehicule_id ?? 0,
+                        'matricule_vehicule' => $ticket->matricule_vehicule,
+                        'id_pont'            => $idPont,
+                        'nom_pont'           => $nomPont,
+                        'code_pont'          => $codePont,
+                        'id_agent'           => $agent->id_agent ?? 0,
+                        'nom_agent'          => $nomAgent,
+                        'numero_agent'       => $numeroAgent,
+                        'usine'              => $nomUsine,
+                        'produit_id'         => $produit?->id,
+                        'nom_produit'        => $produit?->nom ?? '',
+                        'id_ticket'          => $ticket->id_ticket,
+                        'numero_ticket'      => $ticket->numero_ticket,
+                        'date_chargement'    => $ticket->date_ticket,
+                        'poids_pont'         => $ticket->poids ?? 0,
+                    ]);
+                }
+            }
+
+            $transporteurLie = app(TicketTransporteurFicheService::class)->synchroniserTicketTransporteur(
+                $ticket,
+                $ficheLiee,
+                [
+                    'nom_usine' => $nomUsine ?? null,
+                    'produit_id' => $produitId ? (int) $produitId : null,
+                    'nom_produit' => $produit?->nom ?? ($ficheLiee?->nom_produit ?? ''),
+                    'id_agent' => $ficheLiee?->id_agent ?: ($agent->id_agent ?? null),
+                    'nom_agent' => $nomAgent ?? '',
+                    'numero_agent' => $numeroAgent ?? '',
+                ]
+            );
+
+            return [$ticket, $ficheLiee, $transporteurLie];
+        });
 
         $message = 'Ticket créé avec succès.';
+        if ($ficheLiee) {
+            $message .= $estCamionPgf
+                ? ' Associé à la fiche de sortie '.$ficheLiee->numero_fiche.'.'
+                : ' Fiche de sortie '.$ficheLiee->numero_fiche.' générée.';
+        }
         if ($transporteurLie) {
             $message .= ' Les informations ont été transmises au transporteur '
                 . $transporteurLie->code . ' (' . $transporteurLie->nom . ' ' . $transporteurLie->prenoms . ').';

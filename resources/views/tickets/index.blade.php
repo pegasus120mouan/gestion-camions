@@ -74,7 +74,7 @@
           <small class="text-muted">Tickets créés localement (hors API Unipalm)</small>
         @endif
       </div>
-      @if (empty($onlyCamionsPgf))
+      @if (!empty($onlyLocaux))
       <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalAddTicket">
         <i class="bx bx-plus me-1"></i>Ajouter un ticket
       </button>
@@ -750,6 +750,14 @@
       <form method="POST" action="{{ route('tickets.store') }}">
         @csrf
         <div class="modal-body">
+          <div id="ticket_fiche_pgf_hint" class="alert alert-info d-none py-2 mb-3" role="alert">
+            <i class="bx bx-info-circle me-1"></i>
+            <strong>Camion PGF :</strong> après Enregistrer, vous choisirez une fiche de sortie à associer puis validerez.
+          </div>
+          @error('fiche_id')
+            <div class="alert alert-danger py-2 mb-3">{{ $message }}</div>
+          @enderror
+          <input type="hidden" name="fiche_id" id="ticket_fiche_id" value="{{ old('fiche_id') }}" />
           {{-- Ligne 1 : Date Ticket + N° Ticket --}}
           <div class="row">
             <div class="col-md-6 mb-3">
@@ -779,7 +787,7 @@
             </div>
           </div>
           {{-- Ligne 3 : Pont --}}
-          <div class="row">
+          <div class="row" id="row_pont_ticket">
             <div class="col-md-12 mb-3">
               <label class="form-label">Pont</label>
               <select name="id_pont" id="ticket_id_pont" class="form-select">
@@ -811,13 +819,14 @@
               <div class="invalid-feedback">Le parc est obligatoire pour un pont gérable.</div>
             </div>
           </div>
-          {{-- Ligne 5 : Usine (filtrée par produit) --}}
-          <div class="row">
+          {{-- Ligne 5 : Usine (filtrée par produit ; optionnelle si fiche PGF associée) --}}
+          <div class="row" id="row_usine_ticket">
             <div class="col-md-12 mb-3">
-              <label class="form-label">Usine <span class="text-danger">*</span></label>
+              <label class="form-label">Usine <span class="text-danger" id="ticket_usine_required">*</span></label>
               <select name="id_usine" id="ticket_id_usine" class="form-select" required>
                 <option value="">-- Sélectionner d'abord un produit --</option>
               </select>
+              <small class="text-muted d-none" id="ticket_usine_pgf_hint">Camion PGF : après Enregistrer, vous associerez une fiche de sortie.</small>
             </div>
           </div>
           {{-- Ligne 6 : Groupe + Agent --}}
@@ -852,6 +861,52 @@
   </div>
 </div>
 
+{{-- Étape 2 : association fiche de sortie (camion PGF) après Enregistrer --}}
+<div class="modal fade" id="modalAssocierFicheTicket" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title text-white">
+          <i class="bx bx-link me-2"></i>Associer une fiche de sortie
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-light border mb-3" id="assocFicheTicketResume"></div>
+        <p class="text-muted small mb-3">
+          <i class="bx bx-info-circle me-1"></i>Camion PGF — sélectionnez une fiche de sortie non déchargée du même véhicule, puis validez.
+        </p>
+        <div id="assocFicheTicketEmpty" class="alert alert-warning d-none mb-0">
+          Aucune fiche de sortie non déchargée ne correspond à ce véhicule.
+        </div>
+        <div id="assocFicheTicketTableWrap" class="table-responsive d-none">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th style="width: 40px;"></th>
+                <th>N° Fiche</th>
+                <th>Date chargement</th>
+                <th>Véhicule</th>
+                <th>Agent</th>
+                <th>Pont</th>
+                <th>Usine</th>
+                <th>Poids parc</th>
+              </tr>
+            </thead>
+            <tbody id="assocFicheTicketTbody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Retour</button>
+        <button type="button" class="btn btn-success" id="btnValiderAssocFicheTicket" disabled>
+          <i class="bx bx-check me-1"></i>Valider
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script>
@@ -881,12 +936,123 @@ var vehiculesTicketMap = {};
 vehiculesTicket.forEach(function(v) {
   vehiculesTicketMap[v.matricule] = v.id;
 });
+var vehiculesPgfLookup = @json($vehiculesPgfLookup ?? ['ids' => [], 'matricules' => []]);
+var fichesDisponiblesAssociation = @json(($fichesDisponiblesAssociation ?? collect())->values());
+var oldFicheId = @json(old('fiche_id'));
+var ticketPgfForceSubmit = false;
+var vehiculesPgfIds = vehiculesPgfLookup.ids || {};
+var vehiculesPgfMatricules = {};
+Object.keys(vehiculesPgfLookup.matricules || {}).forEach(function(m) {
+  vehiculesPgfMatricules[String(m).toUpperCase()] = true;
+});
+
+function vehiculeSelectionneEstPgf() {
+  var matricule = $('#ticket_vehicule_search').val().trim();
+  var vehiculeId = parseInt(vehiculesTicketMap[matricule] || $('#ticket_vehicule_id').val() || 0, 10);
+  if (vehiculeId > 0 && vehiculesPgfIds[vehiculeId]) {
+    return true;
+  }
+  var key = matricule.toUpperCase();
+  return key !== '' && !!vehiculesPgfMatricules[key];
+}
+
+function fichesPourVehiculeSelectionne() {
+  var matricule = ($('#ticket_vehicule_search').val() || '').trim().toUpperCase();
+  var vehiculeId = parseInt(vehiculesTicketMap[$('#ticket_vehicule_search').val().trim()] || $('#ticket_vehicule_id').val() || 0, 10);
+  return (fichesDisponiblesAssociation || []).filter(function(f) {
+    if (vehiculeId > 0 && parseInt(f.vehicule_id || 0, 10) === vehiculeId) {
+      return true;
+    }
+    return matricule !== '' && String(f.matricule_vehicule || '').toUpperCase() === matricule;
+  });
+}
+
+function syncFichePgfObligatoire() {
+  var estPgf = vehiculeSelectionneEstPgf();
+  $('#ticket_fiche_pgf_hint').toggleClass('d-none', !estPgf);
+  // Pont / produit / usine restent saisissables ; la fiche s’associe après Enregistrer.
+  $('#row_pont_ticket, #col_produit').show();
+  $('#ticket_usine_required').removeClass('d-none');
+  $('#ticket_usine_pgf_hint').toggleClass('d-none', !estPgf);
+  $('#ticket_id_usine').prop('required', true);
+  if (!estPgf) {
+    $('#ticket_fiche_id').val('');
+  } else if (!oldFicheId) {
+    $('#ticket_fiche_id').val('');
+  }
+  syncParcColumnVisibility();
+  syncParcObligatoire();
+}
+
+function masquerChargementPage() {
+  var overlay = document.getElementById('page-loading-overlay');
+  if (overlay) {
+    overlay.classList.add('is-hidden');
+  }
+}
+
+function ouvrirModalAssocierFicheTicket() {
+  masquerChargementPage();
+  var fiches = fichesPourVehiculeSelectionne();
+  var numero = $('input[name="numero_ticket"]').val() || '—';
+  var matricule = $('#ticket_vehicule_search').val() || '—';
+  var poids = $('input[name="poids"]').val() || '—';
+  var agent = $('#ticket_agent_search').val() || '—';
+
+  $('#assocFicheTicketResume').html(
+    '<div class="row g-2">' +
+      '<div class="col-md-3"><strong>Ticket :</strong> ' + $('<div>').text(numero).html() + '</div>' +
+      '<div class="col-md-3"><strong>Véhicule :</strong> ' + $('<div>').text(matricule).html() + '</div>' +
+      '<div class="col-md-3"><strong>Agent :</strong> ' + $('<div>').text(agent).html() + '</div>' +
+      '<div class="col-md-3"><strong>Poids :</strong> ' + $('<div>').text(poids).html() + ' kg</div>' +
+    '</div>'
+  );
+
+  var $tbody = $('#assocFicheTicketTbody').empty();
+  var selected = oldFicheId || $('#ticket_fiche_id').val() || '';
+  if (fiches.length === 0) {
+    $('#assocFicheTicketEmpty').removeClass('d-none');
+    $('#assocFicheTicketTableWrap').addClass('d-none');
+    $('#btnValiderAssocFicheTicket').prop('disabled', true);
+  } else {
+    $('#assocFicheTicketEmpty').addClass('d-none');
+    $('#assocFicheTicketTableWrap').removeClass('d-none');
+    fiches.forEach(function(f, idx) {
+      var checked = (selected && String(selected) === String(f.id)) || (!selected && idx === 0);
+      var poidsTxt = f.poids_pont
+        ? Number(f.poids_pont).toLocaleString('fr-FR', { maximumFractionDigits: 0 }) + ' kg'
+        : '—';
+      $tbody.append(
+        '<tr>' +
+          '<td><input type="radio" name="assoc_fiche_radio" class="form-check-input" value="' + f.id + '"' + (checked ? ' checked' : '') + ' /></td>' +
+          '<td>' + $('<div>').text(f.numero_fiche || ('#' + f.id)).html() + '</td>' +
+          '<td>' + $('<div>').text(f.date_chargement || '—').html() + '</td>' +
+          '<td>' + $('<div>').text(f.matricule_vehicule || '—').html() + '</td>' +
+          '<td>' + $('<div>').text(f.nom_agent || '—').html() + '</td>' +
+          '<td>' + $('<div>').text(f.nom_pont || '—').html() + '</td>' +
+          '<td>' + $('<div>').text(f.usine || '—').html() + '</td>' +
+          '<td>' + poidsTxt + '</td>' +
+        '</tr>'
+      );
+    });
+    $('#btnValiderAssocFicheTicket').prop('disabled', !$('input[name="assoc_fiche_radio"]:checked').length);
+  }
+
+  var addModalEl = document.getElementById('modalAddTicket');
+  var assocModalEl = document.getElementById('modalAssocierFicheTicket');
+  var addModal = bootstrap.Modal.getInstance(addModalEl) || new bootstrap.Modal(addModalEl);
+  var assocModal = bootstrap.Modal.getOrCreateInstance(assocModalEl);
+  addModal.hide();
+  assocModal.show();
+  oldFicheId = null;
+}
 
 function syncVehiculeTicketHiddenFields() {
   var matricule = $('#ticket_vehicule_search').val().trim();
   var vehiculeId = vehiculesTicketMap[matricule] || '';
   $('#ticket_matricule_vehicule').val(matricule);
   $('#ticket_vehicule_id').val(vehiculeId);
+  syncFichePgfObligatoire();
 }
 
 function selectVehiculeTicket(matricule, vehiculeId) {
@@ -894,6 +1060,7 @@ function selectVehiculeTicket(matricule, vehiculeId) {
   $('#ticket_matricule_vehicule').val(matricule);
   $('#ticket_vehicule_id').val(vehiculeId);
   $('#ticket_vehicule_dropdown').hide();
+  syncFichePgfObligatoire();
   syncTicketSubmitButton();
 }
 
@@ -940,6 +1107,7 @@ function initVehiculeTicketAutocomplete() {
       $('#ticket_vehicule_id').val(vehiculesTicketMap[oldMatriculeVehicule]);
     }
   }
+  syncFichePgfObligatoire();
 }
 
 function agentLabelParRef(agentRef) {
@@ -1145,9 +1313,56 @@ $(document).ready(function() {
     }
     $('#ticket_agent_search').removeClass('is-invalid');
 
-    if (!validerParcGerable()) {
+    if (vehiculeSelectionneEstPgf()) {
+      if (!ticketPgfForceSubmit) {
+        e.preventDefault();
+        ouvrirModalAssocierFicheTicket();
+        return false;
+      }
+      if (!$('#ticket_fiche_id').val()) {
+        e.preventDefault();
+        ticketPgfForceSubmit = false;
+        ouvrirModalAssocierFicheTicket();
+        return false;
+      }
+    } else if (!validerParcGerable()) {
       e.preventDefault();
       return false;
+    }
+  });
+
+  $(document).on('change', 'input[name="assoc_fiche_radio"]', function() {
+    $('#btnValiderAssocFicheTicket').prop('disabled', !$(this).val());
+  });
+
+  $('#btnValiderAssocFicheTicket').on('click', function() {
+    var ficheId = $('input[name="assoc_fiche_radio"]:checked').val();
+    if (!ficheId) {
+      alert('Sélectionnez une fiche de sortie.');
+      return;
+    }
+    var fiche = (fichesDisponiblesAssociation || []).find(function(f) {
+      return String(f.id) === String(ficheId);
+    });
+    $('#ticket_fiche_id').val(ficheId);
+    if (fiche && fiche.poids_pont && !$('input[name="poids"]').val()) {
+      $('input[name="poids"]').val(fiche.poids_pont);
+    }
+    ticketPgfForceSubmit = true;
+    var assocModal = bootstrap.Modal.getInstance(document.getElementById('modalAssocierFicheTicket'));
+    if (assocModal) {
+      assocModal.hide();
+    }
+    $('#modalAddTicket form').trigger('submit');
+  });
+
+  $('#modalAssocierFicheTicket').on('hidden.bs.modal', function() {
+    if (!ticketPgfForceSubmit) {
+      var addModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAddTicket'));
+      addModal.show();
+      $('#modalAddTicket form button[type="submit"]')
+        .prop('disabled', !formulaireTicketComplet())
+        .html('<i class="bx bx-check me-1"></i>Enregistrer');
     }
   });
 
@@ -1167,6 +1382,10 @@ $(document).ready(function() {
   });
 
   $('#modalAddTicket form').on('submit', function(e) {
+    if (e.isDefaultPrevented()) {
+      return false;
+    }
+
     var matricule = $('#ticket_vehicule_search').val().trim();
     var vehiculeId = vehiculesTicketMap[matricule];
 
@@ -1180,8 +1399,13 @@ $(document).ready(function() {
     $('#ticket_matricule_vehicule').val(matricule);
     $('#ticket_vehicule_id').val(vehiculeId);
 
+    // Étape association PGF : ne pas bloquer / spinner tant que la fiche n'est pas choisie.
+    if (vehiculeSelectionneEstPgf() && !ticketPgfForceSubmit) {
+      return false;
+    }
+
     var $submitBtn = $(this).find('button[type="submit"]');
-    if ($submitBtn.prop('disabled')) {
+    if ($submitBtn.prop('disabled') && !ticketPgfForceSubmit) {
       e.preventDefault();
       return false;
     }
@@ -1274,6 +1498,7 @@ $(document).ready(function() {
     $('#ticket_produit_required').toggleClass('d-none', !gerable);
     var $parc = $('#ticket_parc_id');
     $parc.prop('required', gerable && !$parc.prop('disabled'));
+    $('#ticket_produit_id').prop('required', gerable);
     syncTicketSubmitButton();
   }
 
@@ -1361,6 +1586,13 @@ $(document).ready(function() {
   @if($errors->any() && !$errors->has('numero_ticket'))
     var modalAddTicket = new bootstrap.Modal(document.getElementById('modalAddTicket'));
     modalAddTicket.show();
+    @if($errors->has('fiche_id') || old('fiche_id'))
+      setTimeout(function() {
+        if (vehiculeSelectionneEstPgf()) {
+          ouvrirModalAssocierFicheTicket();
+        }
+      }, 400);
+    @endif
   @endif
 });
 </script>
