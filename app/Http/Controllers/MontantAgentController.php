@@ -38,7 +38,8 @@ class MontantAgentController extends Controller
         $filtres = $this->reporting->filtresDepuisRequest($request);
         $options = $this->reporting->optionsFiltres();
         $search = trim((string) $request->query('q', ''));
-        $agents = $this->fetchAgentsFromApi($search !== '' ? $search : null);
+        $horsPgf = $request->boolean('hors_pgf');
+        $agents = $this->fetchAgentsFromApi($search !== '' ? $search : null, $horsPgf);
         $data = [];
 
         if ($agents === null) {
@@ -51,6 +52,7 @@ class MontantAgentController extends Controller
                 'filtresActifs' => false,
                 'produits' => $options['produits'],
                 'usines' => $options['usines'],
+                'horsPgf' => $horsPgf,
             ]);
         }
 
@@ -139,6 +141,7 @@ class MontantAgentController extends Controller
             'filtresActifs' => $this->reporting->filtresActifs($filtres),
             'produits' => $options['produits'],
             'usines' => $options['usines'],
+            'horsPgf' => $horsPgf,
         ]);
     }
 
@@ -167,11 +170,14 @@ class MontantAgentController extends Controller
     /**
      * @return array<int, array<string, mixed>>|null
      */
-    private function fetchAgentsFromApi(?string $search = null): ?array
+    private function fetchAgentsFromApi(?string $search = null, bool $horsPgf = false): ?array
     {
         $params = ['per_page' => 100];
         if ($search !== null && $search !== '') {
             $params['search'] = $search;
+        }
+        if ($horsPgf) {
+            $params['hors_pgf'] = true;
         }
 
         $agents = $this->mesAgentsService->fetchAllAgents($params);
@@ -185,13 +191,45 @@ class MontantAgentController extends Controller
         return $agents;
     }
 
+    /**
+     * @return array<string, int>
+     */
+    private function horsPgfQuery(Request $request, ?array $agent = null): array
+    {
+        $horsPgf = $request->boolean('hors_pgf');
+        if (! $horsPgf && $agent !== null) {
+            $horsPgf = $this->agentEstHorsPgf($agent);
+        }
+
+        return $horsPgf ? ['hors_pgf' => 1] : [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $agent
+     */
+    private function agentEstHorsPgf(array $agent): bool
+    {
+        $login = strtolower(trim((string) ($agent['chef_equipe']['login'] ?? '')));
+        $nomChef = trim((string) ($agent['chef_equipe']['nom_complet']
+            ?? trim(($agent['chef_equipe']['nom'] ?? '').' '.($agent['chef_equipe']['prenoms'] ?? ''))));
+
+        if ($login === 'pgf') {
+            return false;
+        }
+
+        return $nomChef === '' || stripos($nomChef, 'PGF') === false;
+    }
+
     public function show(Request $request, int $id_agent)
     {
         $agent = $this->findAgentById($id_agent);
         if (!$agent) {
-            return redirect()->route('gestionfinanciere.montant_agent')
+            return redirect()
+                ->route('gestionfinanciere.montant_agent', $this->horsPgfQuery($request))
                 ->withErrors(['error' => 'Agent non trouvé.']);
         }
+
+        $horsPgfQuery = $this->horsPgfQuery($request, $agent);
 
         $filtres = $this->reporting->filtresDepuisRequest($request);
         $filtres['id_agent'] = $id_agent;
@@ -277,6 +315,7 @@ class MontantAgentController extends Controller
 
         return view('gestion_financiere.agent_financier_detail', [
             'agent' => $agent,
+            'horsPgf' => ($horsPgfQuery['hors_pgf'] ?? null) === 1,
             'exempleNumeroBordereau' => $this->bordereauAgent->exempleNumero(
                 $agent['numero_agent'] ?? null,
                 $nomComplet
@@ -299,7 +338,10 @@ class MontantAgentController extends Controller
             'filtresActifs' => $this->reporting->filtresActifs($filtres),
             'produits' => $options['produits'],
             'usines' => $options['usines'],
-            'queryFiltres' => $this->reporting->filtresPourUrl($filtres),
+            'queryFiltres' => array_merge(
+                $this->reporting->filtresPourUrl($filtres),
+                $horsPgfQuery
+            ),
         ]);
     }
 
@@ -342,7 +384,8 @@ class MontantAgentController extends Controller
     public function updateProduitTicket(Request $request, int $id_agent, int $id_ticket)
     {
         if (! $this->findAgentById($id_agent)) {
-            return redirect()->route('gestionfinanciere.montant_agent')
+            return redirect()
+                ->route('gestionfinanciere.montant_agent', $this->horsPgfQuery($request))
                 ->withErrors(['error' => 'Agent non trouvé.']);
         }
 
@@ -387,7 +430,8 @@ class MontantAgentController extends Controller
     {
         $agent = $this->findAgentById($id_agent);
         if (! $agent) {
-            return redirect()->route('gestionfinanciere.montant_agent')
+            return redirect()
+                ->route('gestionfinanciere.montant_agent', $this->horsPgfQuery($request))
                 ->withErrors(['error' => 'Agent non trouvé.']);
         }
 
@@ -427,7 +471,10 @@ class MontantAgentController extends Controller
             ]);
 
             return redirect()
-                ->route('gestionfinanciere.agent.show', ['id_agent' => $id_agent])
+                ->route('gestionfinanciere.agent.show', array_merge(
+                    ['id_agent' => $id_agent],
+                    $this->horsPgfQuery($request, $agent)
+                ))
                 ->with(
                     'success',
                     'Demande d\'avance de '.number_format($montant, 0, ',', ' ')
@@ -502,7 +549,10 @@ class MontantAgentController extends Controller
         }
 
         return redirect()
-            ->route('gestionfinanciere.agent.show', ['id_agent' => $id_agent])
+            ->route('gestionfinanciere.agent.show', array_merge(
+                ['id_agent' => $id_agent],
+                $this->horsPgfQuery($request, $agent)
+            ))
             ->with(
                 'success',
                 'Avance de '.number_format($montant, 0, ',', ' ')
@@ -521,7 +571,8 @@ class MontantAgentController extends Controller
     public function storePaiementBordereau(Request $request, int $id_agent, int $id)
     {
         if (!$this->findAgentById($id_agent)) {
-            return redirect()->route('gestionfinanciere.montant_agent')
+            return redirect()
+                ->route('gestionfinanciere.montant_agent', $this->horsPgfQuery($request))
                 ->withErrors(['error' => 'Agent non trouvé.']);
         }
 
@@ -722,7 +773,8 @@ class MontantAgentController extends Controller
     {
         $agent = $this->findAgentById($id_agent);
         if (!$agent) {
-            return redirect()->route('gestionfinanciere.montant_agent')
+            return redirect()
+                ->route('gestionfinanciere.montant_agent', $this->horsPgfQuery($request))
                 ->withErrors(['error' => 'Agent non trouvé.']);
         }
 
@@ -765,20 +817,22 @@ class MontantAgentController extends Controller
 
         $this->bordereauAgent->assignerLignesAuBordereau($bordereau, $lignesData);
 
-        return redirect()->route('gestionfinanciere.agent.bordereau.show', [
+        return redirect()->route('gestionfinanciere.agent.bordereau.show', array_merge([
             'id_agent' => $id_agent,
             'id' => $bordereau->id,
-        ])->with('success', 'Bordereau ' . $bordereau->numero . ' généré avec succès.');
+        ], $this->horsPgfQuery($request, $agent)))->with('success', 'Bordereau ' . $bordereau->numero . ' généré avec succès.');
     }
 
-    public function showBordereau(int $id_agent, int $id)
+    public function showBordereau(Request $request, int $id_agent, int $id)
     {
         $agent = $this->findAgentById($id_agent);
         if (!$agent) {
-            return redirect()->route('gestionfinanciere.montant_agent')
+            return redirect()
+                ->route('gestionfinanciere.montant_agent', $this->horsPgfQuery($request))
                 ->withErrors(['error' => 'Agent non trouvé.']);
         }
 
+        $horsPgfQuery = $this->horsPgfQuery($request, $agent);
         $bordereau = BordereauAgent::where('id_agent', $id_agent)->findOrFail($id);
         $groupesUsine = $this->bordereauAgent->grouperParUsine($bordereau->fiches_data ?? []);
 
@@ -786,6 +840,8 @@ class MontantAgentController extends Controller
             'agent' => $agent,
             'bordereau' => $bordereau,
             'groupesUsine' => $groupesUsine,
+            'horsPgf' => ($horsPgfQuery['hors_pgf'] ?? null) === 1,
+            'horsPgfQuery' => $horsPgfQuery,
         ]);
     }
 
@@ -825,13 +881,17 @@ class MontantAgentController extends Controller
         return $pdf->stream($filename);
     }
 
-    public function destroyBordereau(int $id_agent, int $id)
+    public function destroyBordereau(Request $request, int $id_agent, int $id)
     {
         $bordereau = BordereauAgent::where('id_agent', $id_agent)->findOrFail($id);
         $this->bordereauAgent->libererFichesDuBordereau($bordereau);
         $bordereau->delete();
 
-        return redirect()->route('gestionfinanciere.agent.show', ['id_agent' => $id_agent])
-            ->with('success', 'Bordereau supprimé.');
+        $agent = $this->findAgentById($id_agent);
+
+        return redirect()->route('gestionfinanciere.agent.show', array_merge(
+            ['id_agent' => $id_agent],
+            $this->horsPgfQuery($request, $agent)
+        ))->with('success', 'Bordereau supprimé.');
     }
 }

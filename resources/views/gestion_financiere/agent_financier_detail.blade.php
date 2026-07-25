@@ -6,6 +6,8 @@
     @php
       $nomComplet = $agent['nom_complet'] ?? trim(($agent['nom_agent'] ?? '') . ' ' . ($agent['prenom_agent'] ?? ''));
       $idAgent = (int) ($agent['id_agent'] ?? 0);
+      $horsPgf = !empty($horsPgf);
+      $queryHorsPgf = $horsPgf ? ['hors_pgf' => 1] : [];
     @endphp
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
@@ -47,12 +49,13 @@
     @endif
 
     @include('gestion_financiere._filtres_montant_agent', [
-      'actionRoute' => route('gestionfinanciere.agent.show', ['id_agent' => $idAgent]),
+      'actionRoute' => route('gestionfinanciere.agent.show', array_merge(['id_agent' => $idAgent], $queryHorsPgf)),
       'filtres' => $filtres,
       'filtresActifs' => $filtresActifs,
       'produits' => $produits,
       'usines' => $usines,
       'showAvanceButton' => true,
+      'horsPgf' => $horsPgf,
     ])
 
     <div class="row mb-3">

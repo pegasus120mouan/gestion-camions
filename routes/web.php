@@ -263,8 +263,9 @@ Route::middleware('auth')->group(function () {
     Route::delete('/commis/{commi}', [CommisController::class, 'destroy'])->name('commis.destroy');
 
     Route::get('/tickets', [TicketController::class, 'index'])->name('tickets.index');
-    Route::get('/tickets/{id}/pdf', [TicketController::class, 'exportBordereauPdf'])->name('tickets.pdf');
+    Route::get('/tickets/locaux', [TicketController::class, 'locaux'])->name('tickets.locaux');
     Route::get('/tickets/unipalm', [TicketController::class, 'unipalm'])->name('tickets.unipalm');
+    Route::get('/tickets/{id}/pdf', [TicketController::class, 'exportBordereauPdf'])->name('tickets.pdf');
     Route::post('/tickets/associer-fiche', [TicketController::class, 'associerFiche'])->name('tickets.associer_fiche');
     Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
     Route::put('/tickets/{id}', [TicketController::class, 'update'])->name('tickets.update');

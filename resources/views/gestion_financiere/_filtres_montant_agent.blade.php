@@ -8,6 +8,9 @@
   </div>
   <div class="card-body">
     <form method="GET" action="{{ $actionRoute }}" class="row g-3 align-items-end">
+      @if(!empty($horsPgf))
+        <input type="hidden" name="hors_pgf" value="1" />
+      @endif
       @if(!empty($showSearch))
         <div class="col-md-3">
           <label class="form-label">Recherche agent</label>

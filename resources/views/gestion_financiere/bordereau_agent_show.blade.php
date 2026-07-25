@@ -5,11 +5,12 @@
     @php
       $idAgent = (int) ($agent['id_agent'] ?? 0);
       $nomComplet = $agent['nom_complet'] ?? trim(($agent['nom_agent'] ?? '') . ' ' . ($agent['prenom_agent'] ?? ''));
+      $horsPgfQuery = $horsPgfQuery ?? (!empty($horsPgf) ? ['hors_pgf' => 1] : []);
     @endphp
 
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
-        <a href="{{ route('gestionfinanciere.agent.show', ['id_agent' => $idAgent]) }}" class="text-muted mb-2 d-inline-block">
+        <a href="{{ route('gestionfinanciere.agent.show', array_merge(['id_agent' => $idAgent], $horsPgfQuery)) }}" class="text-muted mb-2 d-inline-block">
           <i class="bx bx-arrow-back me-1"></i> Retour à l'agent
         </a>
         <h4 class="mb-0">Bordereau {{ $bordereau->numero }}</h4>

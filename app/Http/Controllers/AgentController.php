@@ -152,18 +152,26 @@ class AgentController extends Controller
         if (! in_array($sousGroupe, ['particulier', 'professionnel'], true)) {
             $sousGroupe = '';
         }
+        $horsPgf = $request->boolean('hors_pgf');
+        if ($horsPgf) {
+            // Liste « Autres pisteurs » : agents API hors groupe PGF (tous chefs sauf PGF).
+            $sousGroupe = '';
+        }
 
         $result = $this->mesAgentsService->listAgents([
-            'token' => $token,
+            // En mode hors_pgf, le token chef courant ne doit pas limiter la liste.
+            'token' => $horsPgf ? '' : $token,
             'id_chef' => $idChef,
             'search' => $search,
             'sous_groupe' => $sousGroupe,
+            'hors_pgf' => $horsPgf,
             'page' => $page,
         ]);
 
-        $titre = match ($sousGroupe) {
-            'particulier' => 'Pisteurs particuliers',
-            'professionnel' => 'Pisteurs professionnels',
+        $titre = match (true) {
+            $horsPgf => 'Autres pisteurs (hors PGF)',
+            $sousGroupe === 'particulier' => 'Pisteurs particuliers',
+            $sousGroupe === 'professionnel' => 'Pisteurs professionnels',
             default => 'Liste des agents',
         };
 
@@ -175,6 +183,7 @@ class AgentController extends Controller
             'chefToken' => $token,
             'chefActif' => $chef,
             'sousGroupe' => $sousGroupe,
+            'horsPgf' => $horsPgf,
             'titre' => $titre,
         ]);
     }
@@ -210,8 +219,15 @@ class AgentController extends Controller
         $agent = $this->mesAgentsService->findAgentById($id_agent);
 
         if (!$agent) {
-            return redirect()->route('agents.index')->withErrors(['error' => 'Agent non trouvé.']);
+            return redirect()
+                ->route('agents.index', array_filter([
+                    'hors_pgf' => $request->boolean('hors_pgf') ? 1 : null,
+                ]))
+                ->withErrors(['error' => 'Agent non trouvé.']);
         }
+
+        $horsPgf = $request->boolean('hors_pgf')
+            || $this->agentEstHorsPgf($agent);
 
         $produits = Produit::orderBy('nom')->get();
         $usinesParProduit = $this->usinesParProduitService->usinesParProduitPourSelect();
@@ -246,6 +262,7 @@ class AgentController extends Controller
 
         return view('agents.show', [
             'agent' => $agent,
+            'horsPgf' => $horsPgf,
             'produits' => $produits,
             'usinesParProduit' => $usinesParProduit,
             'codesTransporteurs' => $codesTransporteurs,
@@ -257,6 +274,22 @@ class AgentController extends Controller
             'prixPgf' => $prixPgf,
             'prixAutreCamion' => $prixAutreCamion,
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $agent
+     */
+    private function agentEstHorsPgf(array $agent): bool
+    {
+        $login = strtolower(trim((string) ($agent['chef_equipe']['login'] ?? '')));
+        $nomChef = trim((string) ($agent['chef_equipe']['nom_complet']
+            ?? trim(($agent['chef_equipe']['nom'] ?? '').' '.($agent['chef_equipe']['prenoms'] ?? ''))));
+
+        if ($login === 'pgf') {
+            return false;
+        }
+
+        return $nomChef === '' || stripos($nomChef, 'PGF') === false;
     }
 
     public function storePrix(Request $request, int $id_agent)

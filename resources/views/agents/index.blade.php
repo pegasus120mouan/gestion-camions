@@ -18,6 +18,9 @@
           @if(!empty($sousGroupe))
             <input type="hidden" name="sous_groupe" value="{{ $sousGroupe }}">
           @endif
+          @if(!empty($horsPgf))
+            <input type="hidden" name="hors_pgf" value="1">
+          @endif
           <div class="col-md-4">
             <label class="form-label">Rechercher</label>
             <input type="text" name="search" class="form-control" placeholder="Nom, prenom, numero..." value="{{ request('search') }}" />
@@ -35,7 +38,10 @@
           </div>
           <div class="col-md-4 d-flex align-items-end">
             <button type="submit" class="btn btn-primary me-2">Rechercher</button>
-            <a href="{{ route('agents.index', array_filter(['sous_groupe' => $sousGroupe ?? null])) }}" class="btn btn-outline-secondary">Reinitialiser</a>
+            <a href="{{ route('agents.index', array_filter([
+              'sous_groupe' => $sousGroupe ?? null,
+              'hors_pgf' => !empty($horsPgf) ? 1 : null,
+            ])) }}" class="btn btn-outline-secondary">Reinitialiser</a>
           </div>
         </form>
       </div>
@@ -62,7 +68,10 @@
               <tr>
                 <td><strong>{{ $agent['numero_agent'] ?? '' }}</strong></td>
                 <td>
-                  <a href="{{ route('agents.show', ['id_agent' => $agent['id_agent'] ?? 0]) }}" class="text-primary fw-bold text-decoration-none">
+                  <a href="{{ route('agents.show', array_filter([
+                    'id_agent' => $agent['id_agent'] ?? 0,
+                    'hors_pgf' => !empty($horsPgf) ? 1 : null,
+                  ])) }}" class="text-primary fw-bold text-decoration-none">
                     {{ $agent['nom_complet'] ?? '' }}
                   </a>
                 </td>

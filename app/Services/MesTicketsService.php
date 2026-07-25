@@ -561,9 +561,16 @@ class MesTicketsService
      * @param  list<array<string, mixed>>  $tickets
      * @return list<array<string, mixed>>
      */
-    public function filterTickets(array $tickets, string $vehicule, string $usine, string $agent): array
+    public function filterTickets(array $tickets, string $vehicule, string $usine, string $agent, string $numero = ''): array
     {
-        return array_values(array_filter($tickets, function (array $t) use ($vehicule, $usine, $agent) {
+        return array_values(array_filter($tickets, function (array $t) use ($vehicule, $usine, $agent, $numero) {
+            if ($numero !== '') {
+                $numeroTicket = mb_strtolower((string) ($t['numero_ticket'] ?? ''), 'UTF-8');
+                if (! str_contains($numeroTicket, mb_strtolower($numero, 'UTF-8'))) {
+                    return false;
+                }
+            }
+
             if ($vehicule !== '') {
                 $matricule = mb_strtolower((string) ($t['matricule_vehicule'] ?? ''), 'UTF-8');
                 if (!str_contains($matricule, mb_strtolower($vehicule, 'UTF-8'))) {

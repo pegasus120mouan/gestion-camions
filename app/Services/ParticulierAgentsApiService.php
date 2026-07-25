@@ -72,18 +72,7 @@ class ParticulierAgentsApiService
                 $agents = $this->filtrerPourGroupe($groupe->nom_groupe, $agentsApi);
                 $result[$groupe->id] = [
                     'source' => 'api',
-                    'agents' => array_map(function (array $a) {
-                        $numero = trim((string) ($a['numero_agent'] ?? ''));
-                        $nom = trim((string) ($a['nom_complet'] ?? ''));
-                        $label = $numero !== '' && $nom !== ''
-                            ? $numero . ' — ' . $nom
-                            : ($nom !== '' ? $nom : $numero);
-
-                        return [
-                            'id' => 'api:' . (int) ($a['id_agent'] ?? 0),
-                            'label' => $label,
-                        ];
-                    }, $agents),
+                    'agents' => $this->mapAgentsApiPourSelect($agents),
                 ];
             } else {
                 $result[$groupe->id] = [
@@ -109,6 +98,123 @@ class ParticulierAgentsApiService
         }
 
         return $result;
+    }
+
+    /**
+     * Options Groupe du modal ticket : PGF / Autres.
+     *
+     * @param  list<array<string, mixed>>  $agentsPgf
+     * @param  list<array<string, mixed>>  $agentsAutres
+     * @return array{pgf: array{source: string, agents: list<array{id: string, label: string}>}, autres: array{source: string, agents: list<array{id: string, label: string}>}}
+     */
+    public function agentsParTypePourSelect(array $agentsPgf, array $agentsAutres): array
+    {
+        return [
+            'pgf' => [
+                'source' => 'api',
+                'agents' => $this->mapAgentsApiPourSelect($agentsPgf),
+            ],
+            'autres' => [
+                'source' => 'api',
+                'agents' => $this->mapAgentsApiPourSelect($agentsAutres),
+            ],
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $agents
+     * @return list<array{id: string, label: string}>
+     */
+    public function mapAgentsApiPourSelect(array $agents): array
+    {
+        usort($agents, fn (array $a, array $b) => strcasecmp(
+            (string) ($a['numero_agent'] ?? ''),
+            (string) ($b['numero_agent'] ?? '')
+        ));
+
+        return array_values(array_map(function (array $a) {
+            $numero = trim((string) ($a['numero_agent'] ?? ''));
+            $nom = trim((string) ($a['nom_complet'] ?? ''));
+            $label = $numero !== '' && $nom !== ''
+                ? $numero.' — '.$nom
+                : ($nom !== '' ? $nom : $numero);
+
+            return [
+                'id' => 'api:'.(int) ($a['id_agent'] ?? 0),
+                'label' => $label,
+            ];
+        }, $agents));
+    }
+
+    public function agentEstPgf(array $agent): bool
+    {
+        $login = strtolower(trim((string) ($agent['chef_equipe']['login'] ?? '')));
+        $nomChef = trim(
+            (string) ($agent['chef_equipe']['nom'] ?? '').' '.
+            (string) ($agent['chef_equipe']['prenoms'] ?? $agent['chef_equipe']['nom_complet'] ?? '')
+        );
+
+        if ($login === 'pgf') {
+            return true;
+        }
+
+        return $nomChef !== '' && stripos($nomChef, 'PGF') !== false;
+    }
+
+    public function findOrCreateGroupeType(string $type): ParticulierGroupe
+    {
+        $nom = $type === 'autres' ? 'Autres' : 'PGF';
+
+        return ParticulierGroupe::query()->firstOrCreate(
+            ['nom_groupe' => $nom],
+            ['nom_groupe' => $nom]
+        );
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $agentsAutorises
+     */
+    public function resolveAgentForType(string $type, string $agentRef, array $agentsAutorises): ParticulierAgent
+    {
+        if (! in_array($type, ['pgf', 'autres'], true)) {
+            throw ValidationException::withMessages([
+                'groupe_type' => 'Groupe invalide.',
+            ]);
+        }
+
+        if (! preg_match('/^api:(\d+)$/', $agentRef, $matches)) {
+            throw ValidationException::withMessages([
+                'agent_ref' => 'Sélection d’agent invalide.',
+            ]);
+        }
+
+        $idAgentApi = (int) $matches[1];
+        $autorise = collect($agentsAutorises)
+            ->contains(fn (array $a) => (int) ($a['id_agent'] ?? 0) === $idAgentApi);
+
+        if (! $autorise) {
+            throw ValidationException::withMessages([
+                'agent_ref' => $type === 'pgf'
+                    ? 'Cet agent n’appartient pas au groupe PGF.'
+                    : 'Cet agent n’appartient pas aux Autres pisteurs.',
+            ]);
+        }
+
+        $groupe = $this->findOrCreateGroupeType($type);
+
+        $existing = ParticulierAgent::query()
+            ->where('id_agent', $idAgentApi)
+            ->first();
+
+        if ($existing) {
+            if ((int) ($existing->particulier_groupe_id ?? 0) !== (int) $groupe->id) {
+                $existing->update(['particulier_groupe_id' => $groupe->id]);
+            }
+
+            return $existing->fresh(['groupe']) ?? $existing;
+        }
+
+        return $this->resolveAgentForGroupe($groupe->id, $idAgentApi, $agentsAutorises);
     }
 
     public function resolveAgentForTicket(int $groupeId, string $agentRef, array $agentsApi): ParticulierAgent
@@ -192,10 +298,20 @@ class ParticulierAgentsApiService
             ]);
         }
 
-        if (empty($this->filtrerPourGroupe($groupe->nom_groupe, [$apiAgent]))) {
+        $nomGroupe = (string) $groupe->nom_groupe;
+        $estTypePgfAutres = in_array($nomGroupe, ['PGF', 'Autres'], true);
+        if (! $estTypePgfAutres && empty($this->filtrerPourGroupe($nomGroupe, [$apiAgent]))) {
             throw ValidationException::withMessages([
                 'agent_ref' => 'Cet agent n’appartient pas au groupe sélectionné.',
             ]);
+        }
+        if ($estTypePgfAutres) {
+            $estPgf = $this->agentEstPgf($apiAgent);
+            if (($nomGroupe === 'PGF' && ! $estPgf) || ($nomGroupe === 'Autres' && $estPgf)) {
+                throw ValidationException::withMessages([
+                    'agent_ref' => 'Cet agent n’appartient pas au groupe sélectionné.',
+                ]);
+            }
         }
 
         $nomComplet = trim((string) ($apiAgent['nom_complet'] ?? ''));

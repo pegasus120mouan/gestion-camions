@@ -2,8 +2,13 @@
 @section('content')
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
+    @php
+      $horsPgf = !empty($horsPgf);
+      $queryHorsPgf = $horsPgf ? ['hors_pgf' => 1] : [];
+      $titreMontant = $horsPgf ? 'Montant Autres Pisteurs' : 'Montant Pisteur PGF';
+    @endphp
     <h4 class="fw-bold py-3 mb-4">
-      <span class="text-muted fw-light">Gestion financière /</span> Montant Pisteur
+      <span class="text-muted fw-light">Gestion financière /</span> {{ $titreMontant }}
     </h4>
 
     @if(!empty($external_error))
@@ -32,7 +37,7 @@
     @endif
 
     @include('gestion_financiere._filtres_montant_agent', [
-      'actionRoute' => route('gestionfinanciere.montant_agent'),
+      'actionRoute' => route('gestionfinanciere.montant_agent', $queryHorsPgf),
       'filtres' => $filtres,
       'filtresActifs' => $filtresActifs,
       'produits' => $produits,
@@ -40,11 +45,12 @@
       'showSearch' => true,
       'search' => $search,
       'agentNoms' => $agentNoms,
+      'horsPgf' => $horsPgf,
     ])
 
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="mb-0"><i class="bx bx-user-check me-2"></i>Liste des agents @if(count($data) > 0)<span class="badge bg-label-primary ms-2">{{ count($data) }}</span>@endif</h5>
+        <h5 class="mb-0"><i class="bx bx-user-check me-2"></i>{{ $horsPgf ? 'Liste des autres pisteurs' : 'Liste des agents PGF' }} @if(count($data) > 0)<span class="badge bg-label-primary ms-2">{{ count($data) }}</span>@endif</h5>
       </div>
       <div class="table-responsive text-nowrap">
         <table class="table table-hover">
@@ -68,12 +74,13 @@
                 $idAgent = $item['agent']['id_agent'] ?? 0;
                 $nomComplet = $item['agent']['nom_complet'] ?? (($item['agent']['nom_agent'] ?? '') . ' ' . ($item['agent']['prenom_agent'] ?? ''));
                 $numeroAgent = $item['agent']['numero_agent'] ?? '';
-                $lienAgent = route('gestionfinanciere.agent.show', array_merge(['id_agent' => $idAgent], array_filter([
+                $lienAgent = route('gestionfinanciere.agent.show', array_merge(['id_agent' => $idAgent], $queryHorsPgf, array_filter([
                   'produit_id' => $filtres['produit_id'] ?? null,
                   'usine' => $filtres['usine'] ?? null,
                   'date_debut' => $filtres['date_debut'] ?? null,
                   'date_fin' => $filtres['date_fin'] ?? null,
                 ])));
+                $lienFicheAgent = route('agents.show', array_merge(['id_agent' => $idAgent], $queryHorsPgf));
               @endphp
               <tr>
                 <td>
@@ -103,7 +110,7 @@
                   <a href="{{ $lienAgent }}" class="btn btn-sm btn-outline-success" title="Paiements via bordereaux">
                     <i class="bx bx-money"></i> Bordereaux
                   </a>
-                  <a href="{{ route('agents.show', ['id_agent' => $idAgent]) }}" class="btn btn-sm btn-outline-primary" title="Fiche agent et tarifs">
+                  <a href="{{ $lienFicheAgent }}" class="btn btn-sm btn-outline-primary" title="Fiche agent et tarifs">
                     <i class="bx bx-show"></i>
                   </a>
                 </td>

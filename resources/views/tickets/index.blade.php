@@ -50,8 +50,8 @@
 @php
   $ticketsIndexRoute = $ticketsIndexRoute ?? 'tickets.index';
   $ticketsQueryBase = !empty($onlyCamionsPgf)
-    ? request()->only(['vehicule', 'agent', 'statut', 'date_debut', 'date_fin'])
-    : request()->only(['vehicule', 'usine', 'agent', 'statut']);
+    ? request()->only(['vehicule', 'agent', 'statut', 'date_debut', 'date_fin', 'numero'])
+    : request()->only(['vehicule', 'usine', 'agent', 'statut', 'numero']);
 @endphp
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
@@ -60,14 +60,18 @@
         <h4 class="mb-0">
           @if (!empty($onlyCamionsPgf))
             Activités camions PGF
+          @elseif (!empty($onlyLocaux))
+            Mes tickets locaux
           @elseif (!empty($enAttenteOnly))
             Mes tickets en attente
           @else
-            Mes Tickets
+            Mes tickets Unipalm
           @endif
         </h4>
         @if (!empty($onlyCamionsPgf))
           <small class="text-muted">Tickets liés aux véhicules du groupe PGF</small>
+        @elseif (!empty($onlyLocaux))
+          <small class="text-muted">Tickets créés localement (hors API Unipalm)</small>
         @endif
       </div>
       @if (empty($onlyCamionsPgf))
@@ -104,7 +108,7 @@
 
     @if (!empty($onlyCamionsPgf))
     @php
-      $filtreActif = collect(['vehicule', 'agent', 'statut', 'date_debut', 'date_fin'])
+      $filtreActif = collect(['numero', 'vehicule', 'agent', 'statut', 'date_debut', 'date_fin'])
         ->contains(fn ($key) => filled(request($key)));
     @endphp
     <div class="card mb-4 border-0 shadow-sm">
@@ -138,6 +142,13 @@
             <div class="input-group input-group-merge">
               <span class="input-group-text"><i class="bx bx-calendar"></i></span>
               <input type="date" name="date_fin" id="filtre_date_fin" class="form-control" value="{{ request('date_fin') }}">
+            </div>
+          </div>
+          <div class="col-md-3 col-lg-2">
+            <label class="form-label small text-uppercase text-muted mb-1" for="filtre_numero">N° ticket</label>
+            <div class="input-group input-group-merge">
+              <span class="input-group-text"><i class="bx bx-barcode"></i></span>
+              <input type="text" name="numero" id="filtre_numero" class="form-control" placeholder="N° ticket..." value="{{ request('numero') }}" autocomplete="off" />
             </div>
           </div>
           <div class="col-md-3 col-lg-2">
@@ -190,7 +201,11 @@
           @if(!empty($enAttenteOnly))
             <input type="hidden" name="statut" value="en_attente" />
           @endif
-          <div class="col-md-3">
+          <div class="col-md-2">
+            <label class="form-label">N° ticket</label>
+            <input type="text" name="numero" class="form-control" placeholder="N° ticket..." value="{{ request('numero') }}" autocomplete="off" />
+          </div>
+          <div class="col-md-2">
             <label class="form-label">Vehicule</label>
             <input type="text" name="vehicule" id="vehicule_input" class="form-control" placeholder="Matricule..." value="{{ request('vehicule') }}" list="vehicules_list" autocomplete="off" />
             <datalist id="vehicules_list">
@@ -199,15 +214,15 @@
               @endforeach
             </datalist>
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label class="form-label">Usine</label>
             <input type="text" name="usine" class="form-control" placeholder="Nom usine..." value="{{ request('usine') }}" />
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
             <label class="form-label">Agent</label>
             <input type="text" name="agent" class="form-control" placeholder="Nom agent..." value="{{ request('agent') }}" />
           </div>
-          <div class="col-md-3 d-flex align-items-end gap-2">
+          <div class="col-md-4 d-flex align-items-end gap-2">
             <button type="submit" class="btn btn-primary">Rechercher</button>
             <a href="{{ route($ticketsIndexRoute, !empty($enAttenteOnly) ? ['statut' => 'en_attente'] : []) }}" class="btn btn-outline-secondary">Reinitialiser</a>
           </div>
@@ -333,16 +348,27 @@
                   <a href="{{ route('tickets.pdf', ['id' => $t['id_ticket']]) }}" class="btn btn-sm btn-outline-secondary me-1" target="_blank" rel="noopener" title="Imprimer en PDF">
                     <i class="bx bx-printer"></i>
                   </a>
-                  <button
-                    type="button"
-                    class="btn btn-sm {{ $ticketValide ? 'btn-secondary' : 'btn-outline-success' }}"
-                    title="{{ $ticketValide ? 'Ticket déjà validé' : ($estCamionPgf ? 'Valider avec fiche de sortie' : 'Valider le ticket') }}"
-                    data-bs-toggle="modal"
-                    data-bs-target="#modalValiderTicket{{ $loop->index }}"
-                    @if($ticketValide) disabled @endif
-                  >
-                    <i class="bx bx-check"></i> Valider
-                  </button>
+                  @if (!empty($onlyLocaux))
+                    <span class="badge bg-label-info me-1">Local</span>
+                    <form method="POST" action="{{ route('tickets.destroy', $t['id_ticket']) }}" class="d-inline" onsubmit="return confirm('Supprimer ce ticket local ?');">
+                      @csrf
+                      @method('DELETE')
+                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer">
+                        <i class="bx bx-trash"></i>
+                      </button>
+                    </form>
+                  @else
+                    <button
+                      type="button"
+                      class="btn btn-sm {{ $ticketValide ? 'btn-secondary' : 'btn-outline-success' }}"
+                      title="{{ $ticketValide ? 'Ticket déjà validé' : ($estCamionPgf ? 'Valider avec fiche de sortie' : 'Valider le ticket') }}"
+                      data-bs-toggle="modal"
+                      data-bs-target="#modalValiderTicket{{ $loop->index }}"
+                      @if($ticketValide) disabled @endif
+                    >
+                      <i class="bx bx-check"></i> Valider
+                    </button>
+                  @endif
                 </td>
                 @endif
               </tr>
@@ -798,11 +824,10 @@
           <div class="row">
             <div class="col-md-6 mb-3">
               <label class="form-label">Groupe <span class="text-danger">*</span></label>
-              <select name="particulier_groupe_id" id="ticket_particulier_groupe_id" class="form-select" required>
+              <select name="groupe_type" id="ticket_groupe_type" class="form-select" required>
                 <option value="">-- Sélectionner un groupe --</option>
-                @foreach($groupesParticuliers ?? [] as $groupeItem)
-                  <option value="{{ $groupeItem->id }}" @selected(old('particulier_groupe_id') == $groupeItem->id)>{{ $groupeItem->nom_groupe }}</option>
-                @endforeach
+                <option value="pgf" @selected(old('groupe_type') === 'pgf')>PGF</option>
+                <option value="autres" @selected(old('groupe_type') === 'autres')>Autres</option>
               </select>
             </div>
             <div class="col-md-6 mb-3">
@@ -832,7 +857,7 @@
 <script>
 var agentsParGroupe = @json($agentsParGroupe ?? []);
 var agentsTicketCourants = [];
-var oldParticulierGroupeId = @json(old('particulier_groupe_id'));
+var oldGroupeType = @json(old('groupe_type'));
 var oldAgentRef = @json(old('agent_ref'));
 var oldMatriculeVehicule = @json(old('matricule_vehicule'));
 var oldVehiculeId = @json(old('vehicule_id'));
@@ -1011,7 +1036,7 @@ function remplirAgentsTicket(groupeId, selectedAgentRef) {
 }
 
 function initAgentTicketAutocomplete() {
-  var groupeInit = oldParticulierGroupeId || $('#ticket_particulier_groupe_id').val();
+  var groupeInit = oldGroupeType || $('#ticket_groupe_type').val();
   if (groupeInit) {
     remplirAgentsTicket(groupeInit, oldAgentRef || $('#ticket_agent_ref').val());
   }
@@ -1022,8 +1047,8 @@ $(document).ready(function() {
     if ($('#ticket_id_usine').hasClass('select2-hidden-accessible')) {
       $('#ticket_id_usine').select2('destroy');
     }
-    if ($('#ticket_particulier_groupe_id').hasClass('select2-hidden-accessible')) {
-      $('#ticket_particulier_groupe_id').select2('destroy');
+    if ($('#ticket_groupe_type').hasClass('select2-hidden-accessible')) {
+      $('#ticket_groupe_type').select2('destroy');
     }
 
     initVehiculeTicketAutocomplete();
@@ -1069,7 +1094,7 @@ $(document).ready(function() {
       width: '100%'
     });
 
-    $('#ticket_particulier_groupe_id').select2({
+    $('#ticket_groupe_type').select2({
       theme: 'bootstrap-5',
       dropdownParent: $('#modalAddTicket .modal-body'),
       placeholder: '-- Sélectionner un groupe --',
@@ -1088,7 +1113,7 @@ $(document).ready(function() {
     syncTicketSubmitButton();
   });
 
-  $('#ticket_particulier_groupe_id').on('change', function() {
+  $('#ticket_groupe_type').on('change', function() {
     remplirAgentsTicket($(this).val(), null);
   });
 
@@ -1207,7 +1232,7 @@ $(document).ready(function() {
     var matricule = $('#ticket_vehicule_search').val().trim();
     var vehiculeOk = !!(matricule && vehiculesTicketMap[matricule]);
     var usineOk = !!$('#ticket_id_usine').val();
-    var groupeOk = !!$('#ticket_particulier_groupe_id').val();
+    var groupeOk = !!$('#ticket_groupe_type').val();
     var agentOk = !!$('#ticket_agent_ref').val();
     var gerable = pontEstGerable();
     var produitOk = !gerable || !!$('#ticket_produit_id').val();
@@ -1325,7 +1350,7 @@ $(document).ready(function() {
   });
 
   $('#modalAddTicket').on('input change', 'input, select', syncTicketSubmitButton);
-  $('#ticket_id_usine, #ticket_particulier_groupe_id').on('change select2:select select2:clear', syncTicketSubmitButton);
+  $('#ticket_id_usine, #ticket_groupe_type').on('change select2:select select2:clear', syncTicketSubmitButton);
 
   $('#ticket_id_pont').on('change select2:select', onPontChange);
   $('#ticket_produit_id').on('change', function() {

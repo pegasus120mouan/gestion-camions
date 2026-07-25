@@ -5,6 +5,7 @@ namespace App\Services;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 
 class MesAgentsService
 {
@@ -19,7 +20,7 @@ class MesAgentsService
     }
 
     /**
-     * @param  array{token?: string, id_chef?: int, search?: string, sous_groupe?: string, page?: int, per_page?: int}  $params
+     * @param  array{token?: string, id_chef?: int, search?: string, sous_groupe?: string, hors_pgf?: bool, page?: int, per_page?: int}  $params
      * @return array{agents: list<array<string, mixed>>, pagination: array<string, int>|null, chefs: list<array<string, mixed>>, error: string|null}
      */
     public function listAgents(array $params = [], ?Request $request = null): array
@@ -30,8 +31,14 @@ class MesAgentsService
         $idChef = (int) ($params['id_chef'] ?? 0);
         $search = trim((string) ($params['search'] ?? ''));
         $sousGroupe = $this->normalizeSousGroupe((string) ($params['sous_groupe'] ?? ''));
+        $horsPgf = filter_var($params['hors_pgf'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $page = max(1, (int) ($params['page'] ?? 1));
         $perPage = max(1, min(100, (int) ($params['per_page'] ?? 15)));
+
+        // Autres pisteurs : agents API/DB Unipalm hors chef/groupe PGF (pas les groupes locaux gest-camions).
+        if ($horsPgf) {
+            return $this->listAgentsHorsPgf($idChef, $search, $page, $perPage);
+        }
 
         if ($token === '' && $idChef <= 0) {
             $chefParams = $this->chefContext->apiQueryParams($request);
@@ -50,7 +57,15 @@ class MesAgentsService
         }
 
         if ($dbConnection !== null && (! $this->databaseResolver->usesApi() || $sousGroupe !== '')) {
-            return $this->fetchFromDatabase($token, $idChef, $search, $page, $perPage, $sousGroupe, $dbConnection);
+            return $this->fetchFromDatabase(
+                $token,
+                $idChef,
+                $search,
+                $page,
+                $perPage,
+                $sousGroupe,
+                $dbConnection
+            );
         }
 
         if ($this->databaseResolver->usesApi()) {
@@ -62,6 +77,37 @@ class MesAgentsService
         }
 
         return $this->fetchFromExternalApi($token, $idChef, $search, $page, $perPage);
+    }
+
+    /**
+     * Agents de tous les chefs/groupes Unipalm sauf PGF (login pgf / nom contenant PGF).
+     *
+     * @return array{agents: list<array<string, mixed>>, pagination: array<string, int>|null, chefs: list<array<string, mixed>>, error: string|null}
+     */
+    private function listAgentsHorsPgf(int $idChef, string $search, int $page, int $perPage): array
+    {
+        $dbConnection = $this->databaseResolver->connection()
+            ?? $this->databaseResolver->connectionForAuth();
+
+        if ($dbConnection !== null && ! $this->databaseResolver->usesApi()) {
+            return $this->fetchFromDatabaseHorsPgf($idChef, $search, $page, $perPage, $dbConnection);
+        }
+
+        if ($this->databaseResolver->usesApi() || $dbConnection === null) {
+            $apiResult = $this->fetchFromExternalApiHorsPgf($idChef, $search, $page, $perPage);
+            if ($apiResult['error'] === null) {
+                return $apiResult;
+            }
+
+            // Secours : même source Unipalm en lecture DB si l’API distant n’accepte pas encore hors_pgf.
+            if ($dbConnection !== null) {
+                return $this->fetchFromDatabaseHorsPgf($idChef, $search, $page, $perPage, $dbConnection);
+            }
+
+            return $apiResult;
+        }
+
+        return $this->fetchFromDatabaseHorsPgf($idChef, $search, $page, $perPage, $dbConnection);
     }
 
     private function normalizeSousGroupe(string $value): string
@@ -115,7 +161,10 @@ class MesAgentsService
             return $this->cachedAgentsById[$idAgent];
         }
 
-        $connection = $this->databaseResolver->connection();
+        // Lecture directe Unipalm (tous chefs), même si CAMIONS_DATA_SOURCE=api.
+        $connection = $this->databaseResolver->connection()
+            ?? $this->databaseResolver->connectionForAuth();
+
         if ($connection !== null) {
             try {
                 $row = DB::connection($connection)->selectOne(
@@ -142,7 +191,7 @@ class MesAgentsService
 
                 return $this->cachedAgentsById[$idAgent] = $agent;
             } catch (\Throwable $e) {
-                return $this->cachedAgentsById[$idAgent] = null;
+                // Fallback API ci-dessous.
             }
         }
 
@@ -284,6 +333,191 @@ class MesAgentsService
         }
     }
 
+    /**
+     * @return array{agents: list<array<string, mixed>>, pagination: array<string, int>|null, chefs: list<array<string, mixed>>, error: string|null}
+     */
+    private function fetchFromExternalApiHorsPgf(
+        int $idChef,
+        string $search,
+        int $page,
+        int $perPage
+    ): array {
+        $url = (string) config('services.external_auth.mes_agents_url', '');
+        if ($url === '') {
+            return $this->emptyResult('URL API mes_agents non configurée.');
+        }
+
+        $queryParams = [
+            'hors_pgf' => 1,
+            'page' => $page,
+            'per_page' => $perPage,
+        ];
+        if ($search !== '') {
+            $queryParams['search'] = $search;
+        }
+        if ($idChef > 0) {
+            $queryParams['id_chef'] = $idChef;
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout((int) config('services.external_auth.timeout', 10))
+                ->get($url, $queryParams);
+        } catch (\Throwable $e) {
+            return $this->emptyResult('Impossible de joindre le service agents.');
+        }
+
+        if (! $response->successful()) {
+            return $this->emptyResult((string) ($response->json('error') ?? 'Erreur API agents.'));
+        }
+
+        $agents = $response->json('agents');
+        if (! is_array($agents)) {
+            $agents = [];
+        }
+
+        $chefs = $response->json('chefs');
+        if (! is_array($chefs)) {
+            $chefs = [];
+        }
+
+        return [
+            'agents' => $agents,
+            'pagination' => is_array($response->json('pagination')) ? $response->json('pagination') : null,
+            'chefs' => $chefs,
+            'error' => null,
+        ];
+    }
+
+    /**
+     * @return array{agents: list<array<string, mixed>>, pagination: array<string, int>|null, chefs: list<array<string, mixed>>, error: string|null}
+     */
+    private function fetchFromDatabaseHorsPgf(
+        int $idChef,
+        string $search,
+        int $page,
+        int $perPage,
+        string $connection
+    ): array {
+        try {
+            $bindings = [];
+            $where = [
+                'a.date_suppression IS NULL',
+                $this->sqlExcludeChefPgf($connection, $bindings),
+            ];
+
+            if ($idChef > 0) {
+                $where[] = 'a.id_chef = ?';
+                $bindings[] = $idChef;
+            }
+
+            if ($search !== '') {
+                $term = '%' . $search . '%';
+                $where[] = '(a.nom LIKE ? OR a.prenom LIKE ? OR a.numero_agent LIKE ? OR CONCAT(a.nom, \' \', a.prenom) LIKE ?)';
+                array_push($bindings, $term, $term, $term, $term);
+            }
+
+            $whereSql = implode(' AND ', $where);
+
+            $countRow = DB::connection($connection)->selectOne(
+                "SELECT COUNT(*) AS total
+                FROM agents a
+                INNER JOIN chef_equipe ce ON ce.id_chef = a.id_chef
+                WHERE {$whereSql}",
+                $bindings
+            );
+            $total = (int) ($countRow->total ?? 0);
+            $lastPage = max(1, (int) ceil($total / $perPage));
+            $page = min(max(1, $page), $lastPage);
+            $offset = ($page - 1) * $perPage;
+
+            $rows = DB::connection($connection)->select(
+                "SELECT
+                    a.id_agent,
+                    a.numero_agent,
+                    a.nom,
+                    a.prenom,
+                    a.contact,
+                    a.date_ajout,
+                    a.id_chef,
+                    ce.nom AS chef_nom,
+                    ce.prenoms AS chef_prenoms,
+                    ce.token AS chef_token
+                FROM agents a
+                INNER JOIN chef_equipe ce ON ce.id_chef = a.id_chef
+                WHERE {$whereSql}
+                ORDER BY a.nom ASC, a.prenom ASC, a.id_agent DESC
+                LIMIT {$perPage} OFFSET {$offset}",
+                $bindings
+            );
+
+            $agents = array_map(
+                fn ($row) => $this->normalizeAgentRow((array) $row),
+                $rows
+            );
+
+            return [
+                'agents' => $agents,
+                'pagination' => [
+                    'current_page' => $page,
+                    'last_page' => $lastPage,
+                    'per_page' => $perPage,
+                    'total' => $total,
+                ],
+                'chefs' => $this->listChefsHorsPgf($connection),
+                'error' => null,
+            ];
+        } catch (\Throwable $e) {
+            return $this->emptyResult('Erreur lors de la lecture des agents : ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * @param  list<mixed>  $bindings
+     */
+    private function sqlExcludeChefPgf(string $connection, array &$bindings): string
+    {
+        $hasLogin = Schema::connection($connection)->hasColumn('chef_equipe', 'login');
+        if ($hasLogin) {
+            $bindings[] = '%PGF%';
+
+            return "(LOWER(TRIM(COALESCE(ce.login, ''))) <> 'pgf'
+                AND CONCAT(COALESCE(ce.nom, ''), ' ', COALESCE(ce.prenoms, '')) NOT LIKE ?)";
+        }
+
+        $bindings[] = '%PGF%';
+
+        return "CONCAT(COALESCE(ce.nom, ''), ' ', COALESCE(ce.prenoms, '')) NOT LIKE ?";
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function listChefsHorsPgf(string $connection): array
+    {
+        try {
+            $bindings = [];
+            $where = [$this->sqlExcludeChefPgf($connection, $bindings)];
+            $whereSql = implode(' AND ', $where);
+
+            $rows = DB::connection($connection)->select(
+                "SELECT id_chef, nom, prenoms, token
+                FROM chef_equipe ce
+                WHERE {$whereSql}
+                ORDER BY nom ASC, prenoms ASC",
+                $bindings
+            );
+
+            return array_map(
+                fn ($row) => $this->normalizeChefRow((array) $row),
+                $rows
+            );
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     private function fetchFromDatabase(
         string $token,
         int $idChef,
@@ -321,7 +555,7 @@ class MesAgentsService
             }
 
             if ($sousGroupe !== '') {
-                $hasSousGroupe = \Illuminate\Support\Facades\Schema::connection($connection)
+                $hasSousGroupe = Schema::connection($connection)
                     ->hasColumn('agents', 'sous_groupe');
 
                 if ($hasSousGroupe) {
@@ -475,7 +709,15 @@ class MesAgentsService
     {
         $request ??= request();
 
+        // 1) Agents du chef courant (ex. PGF)
         foreach ($this->fetchAllAgents([], $request) as $agent) {
+            if ((int) ($agent['id_agent'] ?? 0) === $idAgent) {
+                return $agent;
+            }
+        }
+
+        // 2) Agents hors PGF (autres chefs / groupes Unipalm)
+        foreach ($this->fetchAllAgents(['hors_pgf' => true], $request) as $agent) {
             if ((int) ($agent['id_agent'] ?? 0) === $idAgent) {
                 return $agent;
             }

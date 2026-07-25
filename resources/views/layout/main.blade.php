@@ -203,18 +203,23 @@
               </a>
 
               <ul class="menu-sub">
-                <li class="menu-item">
+                <li class="menu-item {{ request()->routeIs('tickets.index') && request('statut') !== 'en_attente' ? 'active' : '' }}">
                   <a href="{{ route('tickets.index') }}" class="menu-link">
-                    <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets</div>
+                    <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets Unipalm</div>
                   </a>
                 </li>
-                <li class="menu-item">
+                <li class="menu-item {{ request()->routeIs('tickets.locaux') ? 'active' : '' }}">
+                  <a href="{{ route('tickets.locaux') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets locaux</div>
+                  </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('tickets.index') && request('statut') === 'en_attente' ? 'active' : '' }}">
                   <a href="{{ route('tickets.index', ['statut' => 'en_attente']) }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets en attente</div>
                     <span class="badge rounded-pill bg-danger ms-auto">{{ $ticketsEnAttenteCount ?? 0 }}</span>
                   </a>
                 </li>
-                <li class="menu-item">
+                <li class="menu-item {{ request()->routeIs('tickets.unipalm') ? 'active' : '' }}">
                   <a href="{{ route('tickets.unipalm') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Weighbridges list">Mes Tickets Unipalm</div>
                   </a>
@@ -311,9 +316,15 @@
                     <div class="text-truncate" data-i18n="Accordion">Token chef d'équipe</div>
                   </a>
                 </li>-->
-              <li class="menu-item">
+              <li class="menu-item {{ request()->routeIs('gestionfinanciere.montant_agent', 'gestionfinanciere.agent.*') && ! request()->boolean('hors_pgf') ? 'active' : '' }}">
                   <a href="{{ route('gestionfinanciere.montant_agent') }}" class="menu-link">
-                    <div class="text-truncate" data-i18n="Accordion">Montant Pisteur</div>
+                    <div class="text-truncate" data-i18n="Accordion">Montant Pisteur PGF</div>
+                  </a>
+                </li>
+
+                <li class="menu-item {{ request()->routeIs('gestionfinanciere.montant_agent', 'gestionfinanciere.agent.*') && request()->boolean('hors_pgf') ? 'active' : '' }}">
+                  <a href="{{ route('gestionfinanciere.montant_agent', ['hors_pgf' => 1]) }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Accordion">Montant Autres Pisteurs</div>
                   </a>
                 </li>
 
@@ -604,20 +615,36 @@
 
 
 
-            <li class="menu-item {{ request()->routeIs('agents.index') && in_array(request('sous_groupe'), ['professionnel', 'particulier'], true) ? 'open active' : '' }}">
+            <li class="menu-item {{ request()->routeIs('agents.index') && ! request()->boolean('hors_pgf') && in_array(request('sous_groupe'), ['professionnel', 'particulier'], true) ? 'open active' : '' }}">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-lock-open-alt" style="color: #7367f0;"></i>
-                <div class="text-truncate" data-i18n="Authentications">Gestion des Pisteurs</div>
+                <div class="text-truncate" data-i18n="Authentications">Gestion des Pisteurs PGF</div>
               </a>
               <ul class="menu-sub">
-                <li class="menu-item {{ request()->routeIs('agents.index') && request('sous_groupe') === 'professionnel' ? 'active' : '' }}">
+                <li class="menu-item {{ request()->routeIs('agents.index') && ! request()->boolean('hors_pgf') && request('sous_groupe') === 'professionnel' ? 'active' : '' }}">
                   <a href="{{ route('agents.index', ['sous_groupe' => 'professionnel']) }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Basic">Professionnels</div>
                   </a>
                 </li>
-                <li class="menu-item {{ request()->routeIs('agents.index') && request('sous_groupe') === 'particulier' ? 'active' : '' }}">
+                <li class="menu-item {{ request()->routeIs('agents.index') && ! request()->boolean('hors_pgf') && request('sous_groupe') === 'particulier' ? 'active' : '' }}">
                   <a href="{{ route('agents.index', ['sous_groupe' => 'particulier']) }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Basic">Particuliers</div>
+                  </a>
+                </li>
+              </ul>
+            </li>
+
+
+
+            <li class="menu-item {{ request()->routeIs('agents.index') && request()->boolean('hors_pgf') ? 'open active' : '' }}">
+              <a href="javascript:void(0);" class="menu-link menu-toggle">
+                <i class="menu-icon tf-icons bx bx-group" style="color: #28c76f;"></i>
+                <div class="text-truncate" data-i18n="Authentications">Gestion Autres Pisteurs</div>
+              </a>
+              <ul class="menu-sub">
+                <li class="menu-item {{ request()->routeIs('agents.index') && request()->boolean('hors_pgf') ? 'active' : '' }}">
+                  <a href="{{ route('agents.index', ['hors_pgf' => 1]) }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Basic">Liste des Autres Pisteurs</div>
                   </a>
                 </li>
               </ul>

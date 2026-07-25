@@ -4,7 +4,7 @@
   <div class="container-xxl flex-grow-1 container-p-y">
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
-        <a href="{{ route('agents.index') }}" class="text-muted mb-2 d-inline-block">
+        <a href="{{ route('agents.index', array_filter(['hors_pgf' => !empty($horsPgf) ? 1 : null])) }}" class="text-muted mb-2 d-inline-block">
           <i class="bx bx-arrow-back me-1"></i> Retour à la liste
         </a>
         <h4 class="mb-0">

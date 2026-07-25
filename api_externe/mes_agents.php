@@ -7,6 +7,7 @@ declare(strict_types=1);
  * Agents rattachés au chef d'équipe connecté.
  * GET ?token=BAEB3101&search=nom&page=1
  * GET ?id_chef=12&search=nom&page=1
+ * GET ?hors_pgf=1&search=nom&page=1  → tous les agents hors groupe/chef PGF
  */
 
 header('Content-Type: application/json; charset=utf-8');
@@ -37,6 +38,7 @@ function normalizeChef(array $row): array
         'prenoms' => $prenoms,
         'nom_complet' => trim($nom . ' ' . $prenoms),
         'token' => (string) ($row['token'] ?? ''),
+        'login' => (string) ($row['login'] ?? ''),
     ];
 }
 
@@ -59,8 +61,14 @@ function normalizeAgent(array $row): array
             'nom' => $row['chef_nom'] ?? '',
             'prenoms' => $row['chef_prenoms'] ?? '',
             'token' => $row['chef_token'] ?? '',
+            'login' => $row['chef_login'] ?? '',
         ]),
     ];
+}
+
+function isTruthy(mixed $value): bool
+{
+    return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
 }
 
 try {
@@ -73,10 +81,11 @@ try {
     $token = trim((string) ($_GET['token'] ?? ''));
     $idChef = (int) ($_GET['id_chef'] ?? 0);
     $search = trim((string) ($_GET['search'] ?? ''));
+    $horsPgf = isTruthy($_GET['hors_pgf'] ?? '');
     $page = max(1, (int) ($_GET['page'] ?? 1));
     $perPage = max(1, min(100, (int) ($_GET['per_page'] ?? 15)));
 
-    if ($token === '' && $idChef <= 0) {
+    if (! $horsPgf && $token === '' && $idChef <= 0) {
         jsonOut(422, [
             'success' => false,
             'error' => 'Le paramètre token ou id_chef est requis.',
@@ -86,7 +95,17 @@ try {
     $where = ['a.date_suppression IS NULL'];
     $bindings = [];
 
-    if ($token !== '') {
+    if ($horsPgf) {
+        // Exclure le groupe / chef PGF (login pgf ou nom contenant PGF).
+        $where[] = "(LOWER(TRIM(COALESCE(ce.login, ''))) <> 'pgf'
+            AND CONCAT(COALESCE(ce.nom, ''), ' ', COALESCE(ce.prenoms, '')) NOT LIKE :hors_pgf_nom)";
+        $bindings['hors_pgf_nom'] = '%PGF%';
+
+        if ($idChef > 0) {
+            $where[] = 'a.id_chef = :id_chef';
+            $bindings['id_chef'] = $idChef;
+        }
+    } elseif ($token !== '') {
         $where[] = 'ce.token = :token';
         $bindings['token'] = $token;
     } else {
@@ -127,7 +146,8 @@ try {
             a.id_chef,
             ce.nom AS chef_nom,
             ce.prenoms AS chef_prenoms,
-            ce.token AS chef_token
+            ce.token AS chef_token,
+            ce.login AS chef_login
         FROM agents a
         INNER JOIN chef_equipe ce ON ce.id_chef = a.id_chef
         WHERE {$whereSql}
@@ -138,20 +158,33 @@ try {
     $stmt->execute($bindings);
     $agents = array_map('normalizeAgent', $stmt->fetchAll(PDO::FETCH_ASSOC));
 
+    $chefs = [];
     $chef = null;
-    if ($token !== '') {
-        $chefStmt = $conn->prepare('SELECT id_chef, nom, prenoms, token FROM chef_equipe WHERE token = :token LIMIT 1');
+
+    if ($horsPgf) {
+        $chefsStmt = $conn->query(
+            "SELECT id_chef, nom, prenoms, token, login
+            FROM chef_equipe
+            WHERE LOWER(TRIM(COALESCE(login, ''))) <> 'pgf'
+              AND CONCAT(COALESCE(nom, ''), ' ', COALESCE(prenoms, '')) NOT LIKE '%PGF%'
+            ORDER BY nom ASC, prenoms ASC"
+        );
+        $chefs = array_map('normalizeChef', $chefsStmt ? $chefsStmt->fetchAll(PDO::FETCH_ASSOC) : []);
+    } elseif ($token !== '') {
+        $chefStmt = $conn->prepare('SELECT id_chef, nom, prenoms, token, login FROM chef_equipe WHERE token = :token LIMIT 1');
         $chefStmt->execute(['token' => $token]);
         $chefRow = $chefStmt->fetch(PDO::FETCH_ASSOC);
         if ($chefRow) {
             $chef = normalizeChef($chefRow);
+            $chefs = [$chef];
         }
     } elseif ($idChef > 0) {
-        $chefStmt = $conn->prepare('SELECT id_chef, nom, prenoms, token FROM chef_equipe WHERE id_chef = :id_chef LIMIT 1');
+        $chefStmt = $conn->prepare('SELECT id_chef, nom, prenoms, token, login FROM chef_equipe WHERE id_chef = :id_chef LIMIT 1');
         $chefStmt->execute(['id_chef' => $idChef]);
         $chefRow = $chefStmt->fetch(PDO::FETCH_ASSOC);
         if ($chefRow) {
             $chef = normalizeChef($chefRow);
+            $chefs = [$chef];
         }
     }
 
@@ -159,7 +192,7 @@ try {
         'success' => true,
         'chef' => $chef,
         'agents' => $agents,
-        'chefs' => $chef ? [$chef] : [],
+        'chefs' => $chefs,
         'pagination' => [
             'current_page' => $page,
             'per_page' => $perPage,

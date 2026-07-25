@@ -46,22 +46,29 @@ class TicketController extends Controller
         private FicheSortieTicketCorrespondanceService $ficheTicketCorrespondance,
     ) {}
 
+    public function locaux(Request $request)
+    {
+        return $this->index($request);
+    }
+
     public function index(Request $request)
     {
         $vehicule = trim((string) $request->query('vehicule', ''));
         $usine = trim((string) $request->query('usine', ''));
         $agent = trim((string) $request->query('agent', ''));
+        $numero = trim((string) $request->query('numero', ''));
         $dateDebut = trim((string) $request->query('date_debut', ''));
         $dateFin = trim((string) $request->query('date_fin', ''));
         $statutPaiement = trim((string) $request->query('statut', ''));
         $enAttenteOnly = $statutPaiement === 'en_attente';
+        $onlyLocaux = $request->routeIs('tickets.locaux');
         $onlyCamionsPgf = $request->routeIs('camions.activites') || $request->boolean('camion_pgf');
         if ($onlyCamionsPgf && ! in_array($statutPaiement, ['', 'paye', 'non_paye'], true)) {
             $statutPaiement = '';
         }
         $page = max(1, (int) $request->query('page', 1));
         $perPage = 20;
-        $hasFilters = $vehicule !== '' || $usine !== '' || $agent !== ''
+        $hasFilters = $vehicule !== '' || $usine !== '' || $agent !== '' || $numero !== ''
             || $dateDebut !== '' || $dateFin !== ''
             || ($onlyCamionsPgf && in_array($statutPaiement, ['paye', 'non_paye'], true));
 
@@ -69,125 +76,122 @@ class TicketController extends Controller
         $externalError = null;
         $filteredTickets = null;
 
-        if ($onlyCamionsPgf || $hasFilters || $enAttenteOnly) {
+        if ($onlyLocaux) {
+            // Uniquement les tickets de la base locale (créés via « Ajouter un ticket »).
+            $allTickets = $this->mergeLocalTicketsIntoList([]);
+        } else {
             $allTickets = $this->mesTicketsService->fetchAllTickets([], $request);
-            $filteredTickets = $this->mesTicketsService->filterTickets($allTickets, $vehicule, $usine, $agent);
-            if ($enAttenteOnly) {
-                $filteredTickets = $this->mesTicketsService->filterTicketsNonValides($filteredTickets);
+            if ($allTickets === []) {
+                $probe = $this->mesTicketsService->listTickets(['page' => 1, 'per_page' => 1], $request);
+                $externalError = $probe['error'] ?? null;
             }
-            if ($onlyCamionsPgf) {
-                $vehiculesPgfLookupEarly = $this->vehiculesPgfLookup();
+        }
+        $filteredTickets = $this->mesTicketsService->filterTickets($allTickets, $vehicule, $usine, $agent, $numero);
+        if ($enAttenteOnly) {
+            $filteredTickets = $this->mesTicketsService->filterTicketsNonValides($filteredTickets);
+        }
+        if ($onlyCamionsPgf) {
+            $vehiculesPgfLookupEarly = $this->vehiculesPgfLookup();
+            $filteredTickets = array_values(array_filter(
+                $filteredTickets,
+                function (array $ticket) use ($vehiculesPgfLookupEarly): bool {
+                    return $this->vehiculeEstCamionPgf(
+                        (int) ($ticket['vehicule_id'] ?? 0),
+                        (string) ($ticket['matricule_vehicule'] ?? $ticket['matricule'] ?? ''),
+                        $vehiculesPgfLookupEarly
+                    );
+                }
+            ));
+
+            if ($dateDebut !== '' || $dateFin !== '') {
                 $filteredTickets = array_values(array_filter(
                     $filteredTickets,
-                    function (array $ticket) use ($vehiculesPgfLookupEarly): bool {
-                        return $this->vehiculeEstCamionPgf(
-                            (int) ($ticket['vehicule_id'] ?? 0),
-                            (string) ($ticket['matricule_vehicule'] ?? $ticket['matricule'] ?? ''),
-                            $vehiculesPgfLookupEarly
-                        );
+                    function (array $ticket) use ($dateDebut, $dateFin): bool {
+                        $raw = (string) ($ticket['date_ticket'] ?? '');
+                        if ($raw === '') {
+                            return false;
+                        }
+                        try {
+                            $date = \Carbon\Carbon::parse($raw)->startOfDay();
+                        } catch (\Throwable $e) {
+                            return false;
+                        }
+                        if ($dateDebut !== '') {
+                            try {
+                                if ($date->lt(\Carbon\Carbon::parse($dateDebut)->startOfDay())) {
+                                    return false;
+                                }
+                            } catch (\Throwable $e) {
+                            }
+                        }
+                        if ($dateFin !== '') {
+                            try {
+                                if ($date->gt(\Carbon\Carbon::parse($dateFin)->startOfDay())) {
+                                    return false;
+                                }
+                            } catch (\Throwable $e) {
+                            }
+                        }
+
+                        return true;
                     }
                 ));
-
-                if ($dateDebut !== '' || $dateFin !== '') {
-                    $filteredTickets = array_values(array_filter(
-                        $filteredTickets,
-                        function (array $ticket) use ($dateDebut, $dateFin): bool {
-                            $raw = (string) ($ticket['date_ticket'] ?? '');
-                            if ($raw === '') {
-                                return false;
-                            }
-                            try {
-                                $date = \Carbon\Carbon::parse($raw)->startOfDay();
-                            } catch (\Throwable $e) {
-                                return false;
-                            }
-                            if ($dateDebut !== '') {
-                                try {
-                                    if ($date->lt(\Carbon\Carbon::parse($dateDebut)->startOfDay())) {
-                                        return false;
-                                    }
-                                } catch (\Throwable $e) {
-                                }
-                            }
-                            if ($dateFin !== '') {
-                                try {
-                                    if ($date->gt(\Carbon\Carbon::parse($dateFin)->startOfDay())) {
-                                        return false;
-                                    }
-                                } catch (\Throwable $e) {
-                                }
-                            }
-
-                            return true;
-                        }
-                    ));
-                }
-
-                if (in_array($statutPaiement, ['paye', 'non_paye'], true)) {
-                    $ids = array_values(array_filter(array_map(
-                        static fn (array $t) => (int) ($t['id_ticket'] ?? 0),
-                        $filteredTickets
-                    )));
-                    $numeros = array_values(array_filter(array_map(
-                        static fn (array $t) => trim((string) ($t['numero_ticket'] ?? '')),
-                        $filteredTickets
-                    )));
-
-                    $locaux = collect();
-                    if ($ids !== [] || $numeros !== []) {
-                        $locaux = Ticket::query()
-                            ->where(function ($query) use ($ids, $numeros) {
-                                if ($ids !== []) {
-                                    $query->whereIn('id_ticket', $ids);
-                                }
-                                if ($numeros !== []) {
-                                    if ($ids !== []) {
-                                        $query->orWhereIn('numero_ticket', $numeros);
-                                    } else {
-                                        $query->whereIn('numero_ticket', $numeros);
-                                    }
-                                }
-                            })
-                            ->get(['id_ticket', 'numero_ticket', 'statut_ticket']);
-                    }
-                    $byId = $locaux->keyBy(fn ($t) => (int) $t->id_ticket);
-                    $byNumero = $locaux->keyBy(fn ($t) => trim((string) $t->numero_ticket));
-
-                    $filteredTickets = array_values(array_filter(
-                        $filteredTickets,
-                        function (array $ticket) use ($statutPaiement, $byId, $byNumero): bool {
-                            $id = (int) ($ticket['id_ticket'] ?? 0);
-                            $numero = trim((string) ($ticket['numero_ticket'] ?? ''));
-                            $local = $byId->get($id) ?? ($numero !== '' ? $byNumero->get($numero) : null);
-                            $raw = mb_strtolower(trim((string) ($local?->statut_ticket ?? $ticket['statut_ticket'] ?? 'non soldé')), 'UTF-8');
-                            $estPaye = in_array($raw, ['soldé', 'solde', 'payé', 'paye'], true);
-
-                            return $statutPaiement === 'paye' ? $estPaye : ! $estPaye;
-                        }
-                    ));
-                }
             }
-            $total = count($filteredTickets);
-            $lastPage = max(1, (int) ceil($total / $perPage));
-            $page = min($page, $lastPage);
-            $ticketsApi = array_slice($filteredTickets, ($page - 1) * $perPage, $perPage);
-            $pagination = [
-                'current_page' => $page,
-                'per_page' => $perPage,
-                'total' => $total,
-                'last_page' => $lastPage,
-            ];
-        } else {
-            $result = $this->mesTicketsService->listTickets(['page' => $page, 'per_page' => $perPage], $request);
-            $ticketsApi = $result['tickets'];
-            $pagination = $result['pagination'] ?? [
-                'current_page' => $page,
-                'per_page' => $perPage,
-                'total' => count($ticketsApi),
-                'last_page' => 1,
-            ];
-            $externalError = $result['error'];
+
+            if (in_array($statutPaiement, ['paye', 'non_paye'], true)) {
+                $ids = array_values(array_filter(array_map(
+                    static fn (array $t) => (int) ($t['id_ticket'] ?? 0),
+                    $filteredTickets
+                )));
+                $numeros = array_values(array_filter(array_map(
+                    static fn (array $t) => trim((string) ($t['numero_ticket'] ?? '')),
+                    $filteredTickets
+                )));
+
+                $locaux = collect();
+                if ($ids !== [] || $numeros !== []) {
+                    $locaux = Ticket::query()
+                        ->where(function ($query) use ($ids, $numeros) {
+                            if ($ids !== []) {
+                                $query->whereIn('id_ticket', $ids);
+                            }
+                            if ($numeros !== []) {
+                                if ($ids !== []) {
+                                    $query->orWhereIn('numero_ticket', $numeros);
+                                } else {
+                                    $query->whereIn('numero_ticket', $numeros);
+                                }
+                            }
+                        })
+                        ->get(['id_ticket', 'numero_ticket', 'statut_ticket']);
+                }
+                $byId = $locaux->keyBy(fn ($t) => (int) $t->id_ticket);
+                $byNumero = $locaux->keyBy(fn ($t) => trim((string) $t->numero_ticket));
+
+                $filteredTickets = array_values(array_filter(
+                    $filteredTickets,
+                    function (array $ticket) use ($statutPaiement, $byId, $byNumero): bool {
+                        $id = (int) ($ticket['id_ticket'] ?? 0);
+                        $numeroTicket = trim((string) ($ticket['numero_ticket'] ?? ''));
+                        $local = $byId->get($id) ?? ($numeroTicket !== '' ? $byNumero->get($numeroTicket) : null);
+                        $raw = mb_strtolower(trim((string) ($local?->statut_ticket ?? $ticket['statut_ticket'] ?? 'non soldé')), 'UTF-8');
+                        $estPaye = in_array($raw, ['soldé', 'solde', 'payé', 'paye'], true);
+
+                        return $statutPaiement === 'paye' ? $estPaye : ! $estPaye;
+                    }
+                ));
+            }
         }
+        $total = count($filteredTickets);
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $page = min($page, $lastPage);
+        $ticketsApi = array_slice($filteredTickets, ($page - 1) * $perPage, $perPage);
+        $pagination = [
+            'current_page' => $page,
+            'per_page' => $perPage,
+            'total' => $total,
+            'last_page' => $lastPage,
+        ];
 
         // Usines : base locale d'abord, complément API mis en cache 5 min
         $timeout = 10;
@@ -342,12 +346,33 @@ class TicketController extends Controller
             ->all();
 
         // Récupérer les fiches de sortie associées aux tickets
-        $ticketIds = array_column($ticketsArray, 'id_ticket');
+        $ticketIds = array_values(array_filter(array_map(
+            static fn (array $t) => (int) ($t['id_ticket'] ?? 0),
+            $ticketsArray
+        )));
+        $numerosPourFiches = array_values(array_filter(array_map(
+            static fn (array $t) => trim((string) ($t['numero_ticket'] ?? '')),
+            $ticketsArray
+        )));
         $fichesSortie = [];
-        if (!empty($ticketIds)) {
-            $fiches = FicheSortie::whereIn('id_ticket', $ticketIds)->get()->keyBy('id_ticket');
-            foreach ($fiches as $idTicket => $fiche) {
-                $fichesSortie[$idTicket] = [
+        if ($ticketIds !== [] || $numerosPourFiches !== []) {
+            $fiches = FicheSortie::query()
+                ->where(function ($query) use ($ticketIds, $numerosPourFiches) {
+                    if ($ticketIds !== []) {
+                        $query->whereIn('id_ticket', $ticketIds);
+                    }
+                    if ($numerosPourFiches !== []) {
+                        if ($ticketIds !== []) {
+                            $query->orWhereIn('numero_ticket', $numerosPourFiches);
+                        } else {
+                            $query->whereIn('numero_ticket', $numerosPourFiches);
+                        }
+                    }
+                })
+                ->get();
+
+            $mapFiche = static function (FicheSortie $fiche): array {
+                return [
                     'fiche_id' => $fiche->id,
                     'origine' => $fiche->nom_pont,
                     'date_chargement' => $fiche->date_chargement ? $fiche->date_chargement->format('d-m-Y') : '',
@@ -359,6 +384,31 @@ class TicketController extends Controller
                     'id_agent' => $fiche->id_agent,
                     'nom_agent' => $fiche->nom_agent,
                 ];
+            };
+
+            foreach ($fiches as $fiche) {
+                $idTicketFiche = (int) ($fiche->id_ticket ?? 0);
+                if ($idTicketFiche > 0) {
+                    $fichesSortie[$idTicketFiche] = $mapFiche($fiche);
+                }
+            }
+
+            // Fiches liées seulement par N° ticket (id_ticket null) → rattacher au ticket local.
+            foreach ($ticketsArray as $t) {
+                $idTicket = (int) ($t['id_ticket'] ?? 0);
+                if ($idTicket > 0 && isset($fichesSortie[$idTicket])) {
+                    continue;
+                }
+                $numero = mb_strtolower(trim((string) ($t['numero_ticket'] ?? '')), 'UTF-8');
+                if ($numero === '') {
+                    continue;
+                }
+                $fiche = $fiches->first(function (FicheSortie $f) use ($numero) {
+                    return mb_strtolower(trim((string) $f->numero_ticket), 'UTF-8') === $numero;
+                });
+                if ($fiche && $idTicket > 0) {
+                    $fichesSortie[$idTicket] = $mapFiche($fiche);
+                }
             }
         }
 
@@ -556,9 +606,19 @@ class TicketController extends Controller
             ->orderBy('nom_groupe')
             ->get();
 
-        $agentsParGroupe = $this->particulierAgentsApiService->agentsParGroupePourSelect(
-            $groupesParticuliers,
-            $agentsApi
+        // Modal ticket : Groupe = PGF | Autres (agents API).
+        $agentsPgfPourTicket = array_values(array_filter(
+            $agentsApi,
+            fn (array $a) => $this->particulierAgentsApiService->agentEstPgf($a)
+        ));
+        if ($agentsPgfPourTicket === []) {
+            // Session chef PGF : la liste API courante est déjà limitée à ce chef.
+            $agentsPgfPourTicket = $agentsApi;
+        }
+        $agentsAutresPourTicket = $this->mesAgentsService->fetchAllAgents(['hors_pgf' => true], $request);
+        $agentsParGroupe = $this->particulierAgentsApiService->agentsParTypePourSelect(
+            $agentsPgfPourTicket,
+            $agentsAutresPourTicket
         );
 
         // Ponts gérables (depuis pont_etats)
@@ -647,6 +707,13 @@ class TicketController extends Controller
             ];
         }
 
+        $ticketsIndexRoute = 'tickets.index';
+        if ($onlyCamionsPgf) {
+            $ticketsIndexRoute = 'camions.activites';
+        } elseif ($onlyLocaux) {
+            $ticketsIndexRoute = 'tickets.locaux';
+        }
+
         return view('tickets.index', [
             'tickets' => $ticketsArray,
             'pagination' => $pagination,
@@ -666,7 +733,8 @@ class TicketController extends Controller
             'external_error' => $externalError,
             'enAttenteOnly' => $enAttenteOnly,
             'onlyCamionsPgf' => $onlyCamionsPgf,
-            'ticketsIndexRoute' => $onlyCamionsPgf ? 'camions.activites' : 'tickets.index',
+            'onlyLocaux' => $onlyLocaux,
+            'ticketsIndexRoute' => $ticketsIndexRoute,
         ]);
     }
 
@@ -1053,8 +1121,8 @@ class TicketController extends Controller
             'vehicule_id'          => ['nullable', 'integer', 'min:1'],
             'poids'                => ['nullable', 'numeric', 'min:0'],
             'id_usine'             => ['required', 'integer', 'min:1'],
-            'particulier_groupe_id'=> ['required', 'exists:particulier_groupes,id'],
-            'agent_ref'            => ['required', 'string', 'regex:/^(api|local):\d+$/'],
+            'groupe_type'          => ['required', 'in:pgf,autres'],
+            'agent_ref'            => ['required', 'string', 'regex:/^api:\d+$/'],
             'prix_unitaire'        => ['nullable', 'numeric', 'min:0'],
             'statut_ticket'        => ['nullable', 'in:soldé,non soldé'],
             'id_pont'              => ['nullable', 'integer', 'min:1'],
@@ -1083,11 +1151,21 @@ class TicketController extends Controller
             }
         }
 
-        $agentsApi = $this->particulierAgentsApiService->fetchAll($request);
-        $agent = $this->particulierAgentsApiService->resolveAgentForTicket(
-            (int) $validated['particulier_groupe_id'],
+        $groupeType = (string) $validated['groupe_type'];
+        $agentsAutorises = $groupeType === 'autres'
+            ? $this->mesAgentsService->fetchAllAgents(['hors_pgf' => true], $request)
+            : array_values(array_filter(
+                $this->particulierAgentsApiService->fetchAll($request),
+                fn (array $a) => $this->particulierAgentsApiService->agentEstPgf($a)
+            ));
+        if ($groupeType === 'pgf' && $agentsAutorises === []) {
+            $agentsAutorises = $this->particulierAgentsApiService->fetchAll($request);
+        }
+
+        $agent = $this->particulierAgentsApiService->resolveAgentForType(
+            $groupeType,
             (string) $validated['agent_ref'],
-            $agentsApi
+            $agentsAutorises
         );
 
         $ticket = Ticket::create([
@@ -1180,7 +1258,7 @@ class TicketController extends Controller
                 . $transporteurLie->code . ' (' . $transporteurLie->nom . ' ' . $transporteurLie->prenoms . ').';
         }
 
-        return redirect()->route('tickets.index')
+        return redirect()->route('tickets.locaux')
             ->with('success', $message);
     }
 
@@ -1190,6 +1268,12 @@ class TicketController extends Controller
         $apiTicket = $this->mesTicketsService->findTicketById($id, $request);
 
         if (!$apiTicket) {
+            $localTicket = $this->findTicketLocal($id);
+            if ($localTicket) {
+                return redirect()->route('tickets.locaux')
+                    ->with('error', 'Ce ticket local ne peut pas être validé via Unipalm. Il est déjà enregistré en base.');
+            }
+
             return redirect()->route('tickets.index')
                 ->with('error', 'Ticket introuvable pour votre équipe.');
         }
@@ -1674,7 +1758,11 @@ class TicketController extends Controller
 
         $ticket->delete();
 
-        return redirect()->route('tickets.index')
+        $redirectRoute = str_contains((string) url()->previous(), '/tickets/locaux')
+            ? 'tickets.locaux'
+            : 'tickets.index';
+
+        return redirect()->route($redirectRoute)
             ->with('success', 'Ticket supprimé avec succès.');
     }
 
@@ -1821,6 +1909,111 @@ class TicketController extends Controller
      * @param  array<string, mixed>  $ticketApi
      * @param  array<int, string>  $agentsById
      */
+    /**
+     * Ajoute les tickets créés localement (absents de l’API Unipalm) à la liste affichée / filtrée.
+     *
+     * @param  list<array<string, mixed>>  $apiTickets
+     * @return list<array<string, mixed>>
+     */
+    private function mergeLocalTicketsIntoList(array $apiTickets): array
+    {
+        $knownIds = [];
+        $knownNumeros = [];
+        foreach ($apiTickets as $ticket) {
+            $id = (int) ($ticket['id_ticket'] ?? 0);
+            if ($id > 0) {
+                $knownIds[$id] = true;
+            }
+            $numero = mb_strtolower(trim((string) ($ticket['numero_ticket'] ?? '')), 'UTF-8');
+            if ($numero !== '') {
+                $knownNumeros[$numero] = true;
+            }
+        }
+
+        $locaux = Ticket::query()
+            ->with(['particulierAgent', 'validation'])
+            ->orderByDesc('date_ticket')
+            ->orderByDesc('id_ticket')
+            ->get();
+
+        if ($locaux->isEmpty()) {
+            return $apiTickets;
+        }
+
+        $numerosLocaux = $locaux->pluck('numero_ticket')
+            ->map(static fn ($n) => trim((string) $n))
+            ->filter()
+            ->values()
+            ->all();
+        $fichesParNumero = $numerosLocaux === []
+            ? collect()
+            : FicheSortie::query()
+                ->whereIn('numero_ticket', $numerosLocaux)
+                ->get()
+                ->keyBy(fn (FicheSortie $fiche) => mb_strtolower(trim((string) $fiche->numero_ticket), 'UTF-8'));
+
+        foreach ($locaux as $ticket) {
+            $id = (int) $ticket->id_ticket;
+            $numero = trim((string) $ticket->numero_ticket);
+            $numeroKey = mb_strtolower($numero, 'UTF-8');
+            if (($id > 0 && isset($knownIds[$id])) || ($numeroKey !== '' && isset($knownNumeros[$numeroKey]))) {
+                continue;
+            }
+
+            $fiche = $numeroKey !== '' ? $fichesParNumero->get($numeroKey) : null;
+            $apiTickets[] = $this->localTicketToApiArray($ticket, $fiche);
+            if ($id > 0) {
+                $knownIds[$id] = true;
+            }
+            if ($numeroKey !== '') {
+                $knownNumeros[$numeroKey] = true;
+            }
+        }
+
+        return $apiTickets;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function localTicketToApiArray(Ticket $ticket, ?FicheSortie $fiche = null): array
+    {
+        $nomUsine = trim((string) ($fiche?->usine ?? $fiche?->nom_usine ?? ''));
+        if ($nomUsine === '') {
+            $nomUsine = $this->nomUsinePourTicket((int) ($ticket->id_usine ?? 0));
+        }
+
+        $nomAgent = $this->resolveNomAgentPourTicketLocal(
+            $ticket,
+            $fiche?->nom_agent
+        );
+
+        return [
+            'id_ticket' => (int) $ticket->id_ticket,
+            'numero_ticket' => (string) ($ticket->numero_ticket ?? ''),
+            'date_ticket' => optional($ticket->date_ticket)->format('Y-m-d')
+                ?? optional($fiche?->date_chargement)->format('Y-m-d'),
+            'matricule_vehicule' => (string) ($ticket->matricule_vehicule ?? $fiche?->matricule_vehicule ?? ''),
+            'vehicule_id' => (int) ($ticket->vehicule_id ?? 0),
+            'poids' => (float) ($ticket->poids ?? $fiche?->poids_pont ?? $fiche?->poids_usine ?? 0),
+            'id_usine' => (int) ($ticket->id_usine ?? 0),
+            'nom_usine' => $nomUsine !== '' ? $nomUsine : '-',
+            'id_pont' => (int) ($fiche?->id_pont ?? 0),
+            'nom_pont' => (string) ($fiche?->nom_pont ?? ''),
+            'id_agent' => (int) ($ticket->id_agent ?? $fiche?->id_agent ?? 0),
+            'nom_agent' => $nomAgent !== '' ? $nomAgent : '-',
+            'prix_unitaire' => $ticket->prix_unitaire,
+            'montant_paie' => $ticket->montant_paie,
+            'statut_ticket' => $ticket->statut_ticket ?? 'non soldé',
+            'created_at' => optional($ticket->created_at)->format('Y-m-d H:i:s'),
+            'conformite' => $ticket->estValide() ? 'valide' : null,
+            'nom_groupe' => '-',
+            'particulier_agent_id' => $ticket->particulier_agent_id,
+            'prix_unitaire_agent' => null,
+            'montant_calcule' => null,
+        ];
+    }
+
     private function resolveNomAgentPourAffichage(array $ticketApi, ?Ticket $local, array $agentsById): string
     {
         $apiNom = trim((string) ($ticketApi['nom_agent'] ?? ''));
