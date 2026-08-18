@@ -315,7 +315,11 @@ class TicketController extends Controller
                 'vehicule_id' => (int) ($ticket['vehicule_id'] ?? 0),
                 'poids' => $ticket['poids'] ?? 0,
                 'id_usine' => (int) ($ticket['id_usine'] ?? 0),
-                'nom_usine' => $ticket['nom_usine'] ?: ($usinesById[$ticket['id_usine'] ?? 0] ?? '-'),
+                'nom_usine' => $this->nomUsineAffichage(
+                    (string) ($ticket['nom_usine'] ?? ''),
+                    (int) ($ticket['id_usine'] ?? 0),
+                    $usinesById
+                ),
                 'id_pont' => (int) ($ticket['id_pont'] ?? 0),
                 'nom_pont' => (string) ($ticket['nom_pont'] ?? ''),
                 'id_agent' => (int) ($ticket['id_agent'] ?? 0),
@@ -424,6 +428,9 @@ class TicketController extends Controller
             if ($idTicket && isset($fichesSortie[$idTicket])) {
                 $ticket['fiche_id'] = $fichesSortie[$idTicket]['fiche_id'];
                 $ticket['origine'] = $fichesSortie[$idTicket]['origine'];
+                if (trim((string) ($ticket['nom_pont'] ?? '')) === '' && ! empty($fichesSortie[$idTicket]['origine'])) {
+                    $ticket['nom_pont'] = $fichesSortie[$idTicket]['origine'];
+                }
                 $ticket['date_chargement_fiche'] = $fichesSortie[$idTicket]['date_chargement'];
                 $ticket['poids_parc'] = $fichesSortie[$idTicket]['poids_parc'];
                 $ticket['prix_unitaire_transport'] = $fichesSortie[$idTicket]['prix_unitaire_transport'];
@@ -547,9 +554,33 @@ class TicketController extends Controller
                 if ($nomUsineTicket === '' || $nomUsineTicket === '-') {
                     $ticket['nom_usine'] = $usinesById[$ticket['id_usine'] ?? 0] ?? '';
                 }
-                $ticket['fiches_correspondantes'] = $this->ficheTicketCorrespondance
-                    ->filtrer($fichesNonDechargees, $this->ficheTicketCorrespondance->ticketDepuisApi($ticket))
-                    ->all();
+                $ticketPourFiches = $this->ficheTicketCorrespondance->ticketDepuisApi($ticket);
+                $fichesOk = $this->ficheTicketCorrespondance
+                    ->filtrer($fichesNonDechargees, $ticketPourFiches);
+
+                // Tickets locaux : agent/pont souvent absents → fallback sur le véhicule (+ usine).
+                if ($onlyLocaux && $fichesOk->isEmpty()) {
+                    $vehiculeId = (int) ($ticket['vehicule_id'] ?? 0);
+                    $matricule = strtoupper(preg_replace('/\s+/', '', trim((string) ($ticket['matricule_vehicule'] ?? ''))) ?? '');
+                    $usineNorm = mb_strtolower(trim((string) ($ticket['nom_usine'] ?? '')), 'UTF-8');
+                    $fichesOk = $fichesNonDechargees->filter(function (FicheSortie $fiche) use ($vehiculeId, $matricule, $usineNorm) {
+                        $ficheVehiculeId = (int) ($fiche->vehicule_id ?? 0);
+                        $ficheMatricule = strtoupper(preg_replace('/\s+/', '', trim((string) ($fiche->matricule_vehicule ?? ''))) ?? '');
+                        $vehiculeOk = ($vehiculeId > 0 && $ficheVehiculeId > 0 && $vehiculeId === $ficheVehiculeId)
+                            || ($matricule !== '' && $matricule === $ficheMatricule);
+                        if (! $vehiculeOk) {
+                            return false;
+                        }
+                        if ($usineNorm === '' || $usineNorm === '-') {
+                            return true;
+                        }
+                        $ficheUsine = mb_strtolower(trim((string) ($fiche->usine ?? '')), 'UTF-8');
+
+                        return $ficheUsine !== '' && $ficheUsine === $usineNorm;
+                    })->values();
+                }
+
+                $ticket['fiches_correspondantes'] = $fichesOk->all();
             } else {
                 $ticket['fiches_correspondantes'] = [];
             }
@@ -661,12 +692,24 @@ class TicketController extends Controller
 
         foreach ($ticketsArray as &$ticket) {
             $nomPont = trim((string) ($ticket['nom_pont'] ?? ''));
+            $origine = trim((string) ($ticket['origine'] ?? ''));
+            // « Usine » = fiche synthétique (pas un vrai pont sélectionné).
+            if ($this->estNomPontPlaceholder($nomPont)) {
+                $nomPont = '';
+            }
+            if ($this->estNomPontPlaceholder($origine)) {
+                $origine = '';
+                $ticket['origine'] = '';
+            }
+
+            $idPont = (int) ($ticket['id_pont'] ?? 0);
             if ($nomPont === '' || $nomPont === '-') {
-                $idPont = (int) ($ticket['id_pont'] ?? 0);
                 if ($idPont > 0 && ($pontsById[$idPont] ?? '') !== '') {
                     $ticket['nom_pont'] = $pontsById[$idPont];
-                } elseif (! empty($ticket['origine'])) {
-                    $ticket['nom_pont'] = (string) $ticket['origine'];
+                } elseif ($origine !== '') {
+                    $ticket['nom_pont'] = $origine;
+                } else {
+                    $ticket['nom_pont'] = '';
                 }
             }
         }
@@ -752,8 +795,7 @@ class TicketController extends Controller
         return FicheSortie::query()
             ->whereNull('date_dechargement')
             ->where(function ($query) {
-                $query->whereNull('id_ticket')
-                    ->orWhere('id_ticket', 0);
+                $query->whereNull('id_ticket')->orWhere('id_ticket', 0);
             })
             ->orderByDesc('date_chargement')
             ->orderByDesc('id')
@@ -1224,14 +1266,18 @@ class TicketController extends Controller
         if ($estCamionPgf) {
             $ficheAAssocier = FicheSortie::query()
                 ->whereNull('date_dechargement')
-                ->where(function ($query) {
-                    $query->whereNull('id_ticket')->orWhere('id_ticket', 0);
-                })
                 ->find((int) $validated['fiche_id']);
 
             if (! $ficheAAssocier) {
                 return back()->withInput()->withErrors([
-                    'fiche_id' => 'Fiche de sortie introuvable, déjà déchargée ou déjà associée à un ticket.',
+                    'fiche_id' => 'Fiche de sortie introuvable ou déjà déchargée.',
+                ]);
+            }
+
+            $idTicketLie = (int) ($ficheAAssocier->id_ticket ?? 0);
+            if ($idTicketLie > 0 && Ticket::query()->where('id_ticket', $idTicketLie)->exists()) {
+                return back()->withInput()->withErrors([
+                    'fiche_id' => 'Cette fiche est déjà associée à un autre ticket.',
                 ]);
             }
 
@@ -1281,10 +1327,32 @@ class TicketController extends Controller
             $agentsAutorises
         );
 
-        [$ticket, $ficheLiee, $transporteurLie] = DB::transaction(function () use ($validated, $agent, $estCamionPgf, $ficheAAssocier) {
+        try {
+            [$ticket, $ficheLiee, $transporteurLie, $ficheDechargee] = DB::transaction(function () use ($validated, $agent, $estCamionPgf, $ficheAAssocier) {
             $poidsTicket = $validated['poids'] ?? null;
             if ($estCamionPgf && $ficheAAssocier && ((float) ($poidsTicket ?? 0) <= 0)) {
                 $poidsTicket = $ficheAAssocier->poids_pont;
+            }
+
+            $idPont = isset($validated['id_pont']) ? (int) $validated['id_pont'] : null;
+            if ($idPont <= 0 && $ficheAAssocier) {
+                $idPont = (int) ($ficheAAssocier->id_pont ?? 0) ?: null;
+            }
+            $nomPont = $idPont ? $this->nomPontPourId($idPont) : '';
+            if ($this->estNomPontPlaceholder($nomPont)) {
+                $nomPont = '';
+            }
+            if ($nomPont === '' && $ficheAAssocier) {
+                $nomFiche = trim((string) ($ficheAAssocier->nom_pont ?? ''));
+                if (! $this->estNomPontPlaceholder($nomFiche)) {
+                    $nomPont = $nomFiche;
+                }
+                if (! $idPont) {
+                    $idPont = (int) ($ficheAAssocier->id_pont ?? 0) ?: null;
+                    if ($idPont && $nomPont === '') {
+                        $nomPont = $this->nomPontPourId($idPont);
+                    }
+                }
             }
 
             $ticket = Ticket::create([
@@ -1294,33 +1362,81 @@ class TicketController extends Controller
                 'vehicule_id'         => $validated['vehicule_id'] ?? null,
                 'poids'               => $poidsTicket,
                 'id_usine'            => $validated['id_usine'],
-                'id_agent'            => $ficheAAssocier?->id_agent ?: null,
+                'id_pont'             => $idPont,
+                'nom_pont'            => $nomPont !== '' ? $nomPont : null,
+                'id_agent'            => $ficheAAssocier?->id_agent ?: ($agent->id_agent ?: null),
                 'particulier_agent_id'=> $agent->id,
                 'id_utilisateur'      => Auth::id() ?? 1,
                 'prix_unitaire'       => $validated['prix_unitaire'] ?? 0,
                 'statut_ticket'       => $validated['statut_ticket'] ?? 'non soldé',
             ]);
 
-            $idPont   = $validated['id_pont'] ?? null;
+            if (! (int) $ticket->id_ticket) {
+                $ticket = Ticket::query()
+                    ->where('numero_ticket', $validated['numero_ticket'])
+                    ->orderByDesc('id_ticket')
+                    ->firstOrFail();
+            }
+
             $parcId   = $validated['parc_id'] ?? null;
             $produitId = $validated['produit_id'] ?? null;
             $ficheLiee = null;
+            $ficheDechargee = false;
             $produit = $produitId ? Produit::find($produitId) : null;
             $nomAgent = trim($agent->nom . ' ' . $agent->prenoms);
             $numeroAgent = $agent->numero_agent ?? '';
             $nomUsine = $this->nomUsinePourTicket((int) $ticket->id_usine);
 
             if ($estCamionPgf && $ficheAAssocier) {
-                $ficheAAssocier->update([
-                    'id_ticket' => $ticket->id_ticket,
-                    'numero_ticket' => $ticket->numero_ticket,
-                ]);
+                $poidsDecharge = (float) ($ticket->poids ?? 0);
+                if ($poidsDecharge <= 0) {
+                    $poidsDecharge = (float) ($ficheAAssocier->poids_pont ?? 0);
+                }
+                $dateDechargement = $ticket->date_ticket
+                    ? $ticket->date_ticket->format('Y-m-d')
+                    : (string) $validated['date_ticket'];
+
+                app(FicheSortieDechargementService::class)->decharger(
+                    $ficheAAssocier,
+                    (string) $ticket->numero_ticket,
+                    $dateDechargement,
+                    $poidsDecharge,
+                    (int) $ticket->id_ticket,
+                    $nomUsine !== '' ? $nomUsine : null,
+                    $parcId ? (int) $parcId : null,
+                );
+
+                TicketValidation::updateOrCreate(
+                    ['id_ticket' => $ticket->id_ticket],
+                    [
+                        'numero_ticket' => (string) $ticket->numero_ticket,
+                        'validated_at' => now(),
+                        'validated_by' => Auth::id(),
+                    ]
+                );
+
                 $ficheLiee = $ficheAAssocier->fresh();
+                $ficheDechargee = $ficheLiee?->date_dechargement !== null;
                 $produitId = $ficheLiee->produit_id ?: $produitId;
                 $produit = $produitId ? Produit::find($produitId) : $produit;
                 $nomUsine = trim((string) ($ficheLiee->usine ?: $nomUsine));
                 $nomAgent = trim((string) ($ficheLiee->nom_agent ?: $nomAgent));
                 $numeroAgent = trim((string) ($ficheLiee->numero_agent ?: $numeroAgent));
+
+                $pontFicheId = (int) ($ficheLiee->id_pont ?? 0);
+                $pontFicheNom = trim((string) ($ficheLiee->nom_pont ?? ''));
+                if ($this->estNomPontPlaceholder($pontFicheNom)) {
+                    $pontFicheNom = '';
+                }
+                if ($pontFicheId > 0 || $pontFicheNom !== '') {
+                    $ticket->id_pont = $pontFicheId > 0 ? $pontFicheId : $ticket->id_pont;
+                    if ($pontFicheNom !== '') {
+                        $ticket->nom_pont = $pontFicheNom;
+                    } elseif ($pontFicheId > 0 && trim((string) ($ticket->nom_pont ?? '')) === '') {
+                        $ticket->nom_pont = $this->nomPontPourId($pontFicheId) ?: $ticket->nom_pont;
+                    }
+                    $ticket->save();
+                }
             } elseif ($idPont && $produitId) {
                 $stockQuery = Stock::where('id_pont', $idPont)
                     ->where('produit_id', $produitId)
@@ -1378,14 +1494,29 @@ class TicketController extends Controller
                 ]
             );
 
-            return [$ticket, $ficheLiee, $transporteurLie];
-        });
+            return [$ticket, $ficheLiee, $transporteurLie, $ficheDechargee];
+            });
+        } catch (\InvalidArgumentException $e) {
+            return back()->withInput()->withErrors(['fiche_id' => $e->getMessage()]);
+        } catch (UniqueConstraintViolationException $e) {
+            return back()->withInput()->withErrors([
+                'numero_ticket' => 'Ce N° ticket existe déjà. Choisissez un autre numéro.',
+            ]);
+        }
 
         $message = 'Ticket créé avec succès.';
         if ($ficheLiee) {
-            $message .= $estCamionPgf
-                ? ' Associé à la fiche de sortie '.$ficheLiee->numero_fiche.'.'
-                : ' Fiche de sortie '.$ficheLiee->numero_fiche.' générée.';
+            if ($estCamionPgf) {
+                $message .= ' Associé à la fiche de sortie '.$ficheLiee->numero_fiche.'.';
+                if (! empty($ficheDechargee)) {
+                    $message .= ' La fiche a été déchargée.';
+                    if (app(FicheSortieDechargementService::class)->pontEstGerable((int) $ficheLiee->id_pont)) {
+                        $message .= ' Le stock du parc a été déduit.';
+                    }
+                }
+            } else {
+                $message .= ' Fiche de sortie '.$ficheLiee->numero_fiche.' générée.';
+            }
         }
         if ($transporteurLie) {
             $message .= ' Les informations ont été transmises au transporteur '
@@ -1404,8 +1535,7 @@ class TicketController extends Controller
         if (!$apiTicket) {
             $localTicket = $this->findTicketLocal($id);
             if ($localTicket) {
-                return redirect()->route('tickets.locaux')
-                    ->with('error', 'Ce ticket local ne peut pas être validé via Unipalm. Il est déjà enregistré en base.');
+                return $this->validerTicketLocal($request, $localTicket, $dechargementService, $chefAgentIds);
             }
 
             return redirect()->route('tickets.index')
@@ -1636,6 +1766,262 @@ class TicketController extends Controller
             ->with('success', $message);
     }
 
+    /**
+     * Validation d’un ticket créé localement (hors API Unipalm).
+     *
+     * @param  list<int>  $chefAgentIds
+     */
+    private function validerTicketLocal(
+        Request $request,
+        Ticket $ticket,
+        FicheSortieDechargementService $dechargementService,
+        array $chefAgentIds
+    ) {
+        $redirectRoute = $request->input('from') === 'locaux' ? 'tickets.locaux' : 'tickets.index';
+        $id = (int) $ticket->id_ticket;
+        $numeroTicket = trim((string) $ticket->numero_ticket);
+
+        if ($this->ticketEstDejaValide($ticket, $id, $numeroTicket)) {
+            return redirect()->route($redirectRoute)
+                ->with('error', 'Ce ticket est déjà validé.');
+        }
+
+        $estCamionPgf = $this->vehiculeEstCamionPgf(
+            (int) ($ticket->vehicule_id ?? 0),
+            (string) ($ticket->matricule_vehicule ?? '')
+        );
+
+        $rules = [
+            'parc_id' => ['nullable', 'integer', 'exists:parcs,id'],
+        ];
+        if ($estCamionPgf) {
+            $rules['fiche_id'] = ['required', 'integer', 'exists:fiches_sortie,id'];
+        }
+
+        $validated = $request->validate($rules, [
+            'fiche_id.required' => 'Sélectionnez une fiche de sortie pour ce camion PGF.',
+        ]);
+
+        if (! $request->boolean('confirm_validation')) {
+            return redirect()->route($redirectRoute)
+                ->with('error', 'Validation refusée : action non confirmée.');
+        }
+
+        $fiche = null;
+        if ($estCamionPgf) {
+            $fiche = FicheSortie::query()
+                ->whereNull('date_dechargement')
+                ->whereIn('id_agent', $chefAgentIds ?: [-1])
+                ->find($validated['fiche_id']);
+
+            if (! $fiche) {
+                return redirect()->route($redirectRoute)
+                    ->with('error', 'Fiche de sortie introuvable ou déjà déchargée.');
+            }
+
+            $ticketApiLike = $this->localTicketToApiArray($ticket);
+            $raison = $this->ficheTicketCorrespondance->raisonNonCorrespondance(
+                $this->ficheTicketCorrespondance->ticketDepuisApi($ticketApiLike),
+                $fiche
+            );
+
+            // Ticket local : agent/pont souvent absents avant liaison → contrôler au moins le véhicule.
+            if ($raison !== null) {
+                $matriculeTicket = strtoupper(trim((string) ($ticket->matricule_vehicule ?? '')));
+                $matriculeFiche = strtoupper(trim((string) ($fiche->matricule_vehicule ?? '')));
+                $vehiculeIdTicket = (int) ($ticket->vehicule_id ?? 0);
+                $vehiculeIdFiche = (int) ($fiche->vehicule_id ?? 0);
+                $vehiculeOk = ($vehiculeIdTicket > 0 && $vehiculeIdFiche > 0 && $vehiculeIdTicket === $vehiculeIdFiche)
+                    || ($matriculeTicket !== '' && $matriculeTicket === $matriculeFiche);
+
+                if (! $vehiculeOk) {
+                    return redirect()->route($redirectRoute)
+                        ->with('error', 'Le véhicule de la fiche ne correspond pas au ticket.');
+                }
+            }
+
+            if ((int) ($fiche->id_agent ?? 0) > 0) {
+                $ticket->id_agent = (int) $fiche->id_agent;
+            }
+        }
+
+        $dateTicket = $ticket->date_ticket
+            ? $ticket->date_ticket->format('Y-m-d')
+            : now()->format('Y-m-d');
+        $poidsTicket = (float) ($ticket->poids ?? 0);
+        if ($estCamionPgf && $fiche && $poidsTicket <= 0) {
+            $poidsTicket = (float) ($fiche->poids_pont ?? 0);
+            $ticket->poids = $poidsTicket;
+        }
+
+        $idUsine = (int) ($ticket->id_usine ?? 0) ?: null;
+        $nomUsine = $this->nomUsinePourTicket((int) ($ticket->id_usine ?? 0));
+        if ($nomUsine === '' && $fiche) {
+            $nomUsine = trim((string) ($fiche->usine ?? ''));
+        }
+
+        $produitInfo = app(UsinesParProduitService::class)->produitPourUsine(
+            $idUsine,
+            $nomUsine !== '' ? $nomUsine : null
+        );
+        $produitId = $fiche?->produit_id
+            ? (int) $fiche->produit_id
+            : ($produitInfo ? (int) $produitInfo['produit_id'] : null);
+
+        $idAgent = (int) ($ticket->id_agent ?? 0);
+        if ($idAgent <= 0 && $fiche) {
+            $idAgent = (int) ($fiche->id_agent ?? 0);
+        }
+        if ($idAgent <= 0) {
+            $ticket->loadMissing('particulierAgent');
+            $idAgent = (int) ($ticket->particulierAgent?->id_agent ?? 0);
+        }
+        if ($idAgent > 0) {
+            $ticket->id_agent = $idAgent;
+        }
+
+        $prixUnitaire = $this->ticketPrixService->prixUnitairePourTicket(
+            $ticket,
+            $produitId,
+            $dateTicket,
+            null,
+            $idAgent > 0 ? $idAgent : null,
+            $nomUsine !== '' ? $nomUsine : null,
+        );
+        $montantPaie = ($prixUnitaire !== null && $poidsTicket > 0)
+            ? round($prixUnitaire * $poidsTicket, 2)
+            : null;
+
+        if ($prixUnitaire !== null) {
+            $ticket->prix_unitaire = $prixUnitaire;
+        }
+        if ($montantPaie !== null) {
+            $ticket->montant_paie = $montantPaie;
+        }
+
+        try {
+            DB::transaction(function () use (
+                $ticket,
+                $dechargementService,
+                $fiche,
+                $dateTicket,
+                $poidsTicket,
+                $id,
+                $validated,
+                $numeroTicket,
+                $nomUsine
+            ) {
+                $ticket->save();
+
+                TicketValidation::updateOrCreate(
+                    ['id_ticket' => $id],
+                    [
+                        'numero_ticket' => $numeroTicket !== '' ? $numeroTicket : (string) $id,
+                        'validated_at' => now(),
+                        'validated_by' => Auth::id(),
+                    ]
+                );
+
+                if ($fiche) {
+                    $dechargementService->decharger(
+                        $fiche,
+                        $numeroTicket,
+                        $dateTicket,
+                        $poidsTicket,
+                        $id,
+                        $nomUsine !== '' ? $nomUsine : null,
+                        isset($validated['parc_id']) ? (int) $validated['parc_id'] : null,
+                    );
+
+                    $fiche->refresh();
+                    $pontFicheId = (int) ($fiche->id_pont ?? 0);
+                    $pontFicheNom = trim((string) ($fiche->nom_pont ?? ''));
+                    if ($this->estNomPontPlaceholder($pontFicheNom)) {
+                        $pontFicheNom = '';
+                    }
+                    if ($pontFicheId > 0 || $pontFicheNom !== '') {
+                        $ticket->id_pont = $pontFicheId > 0 ? $pontFicheId : $ticket->id_pont;
+                        if ($pontFicheNom !== '') {
+                            $ticket->nom_pont = $pontFicheNom;
+                        } elseif ($pontFicheId > 0 && trim((string) ($ticket->nom_pont ?? '')) === '') {
+                            $ticket->nom_pont = $this->nomPontPourId($pontFicheId) ?: $ticket->nom_pont;
+                        }
+                        $ticket->save();
+                    }
+                }
+            });
+        } catch (UniqueConstraintViolationException) {
+            return redirect()->route($redirectRoute)
+                ->with('error', 'Ce ticket est déjà validé ou existe déjà dans le système.');
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->route($redirectRoute)
+                ->with('error', $e->getMessage());
+        }
+
+        $ticket->refresh();
+
+        $ficheTransporteur = $fiche;
+        if ($estCamionPgf && $ficheTransporteur) {
+            $ficheTransporteur->refresh();
+            app(TicketTransporteurFicheService::class)->synchroniserDonneesTicketSurFiche($ficheTransporteur);
+        } else {
+            app(MontantAgentFicheService::class)->assurerFichePourTicketAgent($ticket, $produitInfo);
+            $ficheTransporteur = FicheSortie::query()
+                ->where('id_ticket', $ticket->id_ticket)
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        $transporteurLie = app(TicketTransporteurFicheService::class)->synchroniserTicketTransporteur(
+            $ticket,
+            $ficheTransporteur,
+            [
+                'nom_usine' => $nomUsine !== '' ? $nomUsine : null,
+                'produit_id' => $produitId,
+                'nom_produit' => $ficheTransporteur?->nom_produit ?? ($produitInfo['nom'] ?? ''),
+                'id_agent' => $idAgent > 0 ? $idAgent : null,
+                'nom_agent' => $ficheTransporteur?->nom_agent ?? '',
+                'numero_agent' => $ficheTransporteur?->numero_agent ?? '',
+            ]
+        );
+
+        if ($idAgent > 0) {
+            Cache::forget('agent_tickets_sync:' . $idAgent);
+            Cache::forget('montant_agent_index:' . $idAgent . ':' . md5(json_encode(['id_agent' => $idAgent])));
+        }
+        $this->mesTicketsService->forgetEnAttenteCountCache($request);
+
+        if ($fiche) {
+            $fiche->refresh();
+            $stockMsg = $dechargementService->pontEstGerable((int) $fiche->id_pont)
+                ? ' Le stock du parc a été déduit.'
+                : '';
+
+            $message = 'Ticket « ' . ($numeroTicket !== '' ? $numeroTicket : $id) . ' » validé et associé à la fiche '
+                . ($fiche->numero_fiche ?? $fiche->id) . '.';
+            if ($produitInfo && ! $fiche->produit_id) {
+                $message .= ' Produit : ' . $produitInfo['nom'] . '.';
+            }
+            if ($transporteurLie) {
+                $message .= ' Transmis au transporteur ' . $transporteurLie->code . '.';
+            }
+
+            return redirect()->route($redirectRoute)
+                ->with('success', $message . $stockMsg);
+        }
+
+        $message = 'Ticket « ' . ($numeroTicket !== '' ? $numeroTicket : $id) . ' » validé avec succès.';
+        if ($produitInfo) {
+            $message .= ' Produit : ' . $produitInfo['nom'] . '.';
+        }
+        if ($transporteurLie) {
+            $message .= ' Les informations ont été transmises au transporteur ' . $transporteurLie->code . '.';
+        }
+
+        return redirect()->route($redirectRoute)
+            ->with('success', $message);
+    }
+
     public function confirmUnipalm(Request $request, int $id, ChefEquipeContext $chefContext)
     {
         $ticket = Ticket::findOrFail($id);
@@ -1811,22 +2197,136 @@ class TicketController extends Controller
         return $pdf->stream($filename);
     }
 
+    private function estNomPontPlaceholder(?string $nomPont): bool
+    {
+        $nom = mb_strtolower(trim((string) $nomPont), 'UTF-8');
+
+        return $nom === '' || $nom === '-' || $nom === '—' || $nom === 'usine';
+    }
+
+    private function nomPontPourId(?int $idPont): string
+    {
+        if (! $idPont) {
+            return '';
+        }
+
+        $local = trim((string) (PontEtat::query()->where('id_pont', $idPont)->value('nom_pont') ?? ''));
+        if ($local !== '' && ! $this->estNomPontPlaceholder($local)) {
+            return $local;
+        }
+
+        try {
+            $mesPontsUrl = (string) config('services.external_auth.mes_ponts_url');
+            if ($mesPontsUrl === '') {
+                return $local;
+            }
+
+            $pontsApi = Cache::remember('mes_ponts_api_noms', 300, function () use ($mesPontsUrl) {
+                $response = Http::acceptJson()
+                    ->withoutVerifying()
+                    ->timeout(10)
+                    ->get($mesPontsUrl);
+
+                if (! $response->successful()) {
+                    return [];
+                }
+
+                $map = [];
+                foreach ($response->json('ponts') ?? [] as $pont) {
+                    $id = (int) ($pont['id_pont'] ?? 0);
+                    $nom = trim((string) ($pont['nom_pont'] ?? ''));
+                    if ($id > 0 && $nom !== '') {
+                        $map[$id] = $nom;
+                    }
+                }
+
+                return $map;
+            });
+
+            $fromApi = trim((string) ($pontsApi[$idPont] ?? ''));
+            if ($fromApi !== '' && ! $this->estNomPontPlaceholder($fromApi)) {
+                return $fromApi;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        return $local;
+    }
+
+    /**
+     * @param  array<int|string, string>  $usinesById
+     */
+    private function nomUsineAffichage(string $nomUsine, int $idUsine, array $usinesById): string
+    {
+        $nomUsine = trim($nomUsine);
+        $placeholder = $idUsine > 0 && preg_match('/^Usine\s*#\s*' . $idUsine . '$/i', $nomUsine);
+
+        if ($nomUsine !== '' && $nomUsine !== '-' && $nomUsine !== '—' && ! $placeholder) {
+            return $nomUsine;
+        }
+
+        $fromMap = trim((string) ($usinesById[$idUsine] ?? ''));
+        if ($fromMap !== '') {
+            return $fromMap;
+        }
+
+        return $nomUsine !== '' ? $nomUsine : '-';
+    }
+
     private function nomUsinePourTicket(?int $idUsine): string
     {
         if (!$idUsine) {
             return '—';
         }
 
-        try {
-            $response = Http::acceptJson()
-                ->withoutVerifying()
-                ->timeout(10)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_usines.php');
+        $local = trim((string) (\App\Models\Usine::query()
+            ->where('id_usine', $idUsine)
+            ->value('nom_usine') ?? ''));
+        if ($local !== '') {
+            return $local;
+        }
 
-            if ($response->successful()) {
-                foreach ($response->json('usines') ?? [] as $usine) {
-                    if ((int) ($usine['id_usine'] ?? 0) === $idUsine) {
-                        return (string) ($usine['nom_usine'] ?? '—');
+        try {
+            $usinesUrl = (string) config(
+                'services.external_auth.mes_usines_url',
+                'https://api.objetombrepegasus.online/api/camions/mes_usines.php'
+            );
+            $usinesApi = Cache::remember('mes_usines_api', 300, function () use ($usinesUrl) {
+                $all = [];
+                $pageU = 1;
+                $hasMoreU = true;
+
+                while ($hasMoreU && $pageU <= 20) {
+                    $response = Http::acceptJson()
+                        ->withoutVerifying()
+                        ->timeout(10)
+                        ->get($usinesUrl, ['page' => $pageU]);
+
+                    if (! $response->successful()) {
+                        break;
+                    }
+
+                    $pageUsines = $response->json('usines') ?? [];
+                    if ($pageUsines === []) {
+                        break;
+                    }
+
+                    $all = array_merge($all, $pageUsines);
+                    $paginationU = $response->json('pagination');
+                    $currentPageU = (int) ($paginationU['current_page'] ?? $pageU);
+                    $lastPageU = (int) ($paginationU['last_page'] ?? 1);
+                    $hasMoreU = $currentPageU < $lastPageU;
+                    $pageU++;
+                }
+
+                return $all;
+            });
+
+            foreach ($usinesApi as $usine) {
+                if ((int) ($usine['id_usine'] ?? 0) === $idUsine) {
+                    $nom = trim((string) ($usine['nom_usine'] ?? ''));
+                    if ($nom !== '') {
+                        return $nom;
                     }
                 }
             }
@@ -2079,12 +2579,28 @@ class TicketController extends Controller
             ->filter()
             ->values()
             ->all();
-        $fichesParNumero = $numerosLocaux === []
+        $idsLocaux = $locaux->pluck('id_ticket')->map(static fn ($id) => (int) $id)->filter()->values()->all();
+        $fichesLiees = ($numerosLocaux === [] && $idsLocaux === [])
             ? collect()
             : FicheSortie::query()
-                ->whereIn('numero_ticket', $numerosLocaux)
-                ->get()
-                ->keyBy(fn (FicheSortie $fiche) => mb_strtolower(trim((string) $fiche->numero_ticket), 'UTF-8'));
+                ->where(function ($query) use ($numerosLocaux, $idsLocaux) {
+                    if ($idsLocaux !== []) {
+                        $query->whereIn('id_ticket', $idsLocaux);
+                    }
+                    if ($numerosLocaux !== []) {
+                        $idsLocaux !== []
+                            ? $query->orWhereIn('numero_ticket', $numerosLocaux)
+                            : $query->whereIn('numero_ticket', $numerosLocaux);
+                    }
+                })
+                ->orderByDesc('id')
+                ->get();
+        $fichesParIdTicket = $fichesLiees
+            ->filter(static fn (FicheSortie $f) => (int) ($f->id_ticket ?? 0) > 0)
+            ->keyBy(static fn (FicheSortie $f) => (int) $f->id_ticket);
+        $fichesParNumero = $fichesLiees
+            ->filter(static fn (FicheSortie $f) => trim((string) ($f->numero_ticket ?? '')) !== '')
+            ->keyBy(fn (FicheSortie $fiche) => mb_strtolower(trim((string) $fiche->numero_ticket), 'UTF-8'));
 
         foreach ($locaux as $ticket) {
             $id = (int) $ticket->id_ticket;
@@ -2094,7 +2610,8 @@ class TicketController extends Controller
                 continue;
             }
 
-            $fiche = $numeroKey !== '' ? $fichesParNumero->get($numeroKey) : null;
+            $fiche = ($id > 0 ? $fichesParIdTicket->get($id) : null)
+                ?? ($numeroKey !== '' ? $fichesParNumero->get($numeroKey) : null);
             $apiTickets[] = $this->localTicketToApiArray($ticket, $fiche);
             if ($id > 0) {
                 $knownIds[$id] = true;
@@ -2122,6 +2639,24 @@ class TicketController extends Controller
             $fiche?->nom_agent
         );
 
+        $idPont = (int) ($ticket->id_pont ?? 0);
+        if ($idPont <= 0) {
+            $idPont = (int) ($fiche?->id_pont ?? 0);
+        }
+        $nomPont = trim((string) ($ticket->nom_pont ?? ''));
+        if ($this->estNomPontPlaceholder($nomPont)) {
+            $nomPont = '';
+        }
+        if ($nomPont === '') {
+            $nomFiche = trim((string) ($fiche?->nom_pont ?? ''));
+            if (! $this->estNomPontPlaceholder($nomFiche)) {
+                $nomPont = $nomFiche;
+            }
+        }
+        if ($nomPont === '' && $idPont > 0) {
+            $nomPont = $this->nomPontPourId($idPont);
+        }
+
         return [
             'id_ticket' => (int) $ticket->id_ticket,
             'numero_ticket' => (string) ($ticket->numero_ticket ?? ''),
@@ -2132,8 +2667,8 @@ class TicketController extends Controller
             'poids' => (float) ($ticket->poids ?? $fiche?->poids_pont ?? $fiche?->poids_usine ?? 0),
             'id_usine' => (int) ($ticket->id_usine ?? 0),
             'nom_usine' => $nomUsine !== '' ? $nomUsine : '-',
-            'id_pont' => (int) ($fiche?->id_pont ?? 0),
-            'nom_pont' => (string) ($fiche?->nom_pont ?? ''),
+            'id_pont' => $idPont,
+            'nom_pont' => $nomPont,
             'id_agent' => (int) ($ticket->id_agent ?? $fiche?->id_agent ?? 0),
             'nom_agent' => $nomAgent !== '' ? $nomAgent : '-',
             'prix_unitaire' => $ticket->prix_unitaire,

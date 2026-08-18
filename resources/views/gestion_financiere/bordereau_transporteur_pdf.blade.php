@@ -4,102 +4,186 @@
     <meta charset="UTF-8">
     <title>Bordereau transporteur - {{ $bordereau->numero }}</title>
     <style>
-        @page { margin: 14mm 16mm; size: A4 portrait; }
+        @page {
+            margin: 12mm 12mm 14mm 12mm;
+            size: A4 portrait;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'DejaVu Sans', Arial, sans-serif; font-size: 11px; color: #222; line-height: 1.4; }
-        .header-table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
-        .header-table td { vertical-align: middle; border: none; padding: 0; }
-        .logo-cell { width: 110px; }
-        .logo { max-width: 95px; max-height: 95px; }
-        .company-name { color: #006400; font-size: 22px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
-        .company-subtitle { color: #228B22; font-size: 10px; font-style: italic; margin-top: 4px; }
-        .doc-title { text-align: center; font-size: 13px; font-weight: bold; text-transform: uppercase; margin-bottom: 18px; letter-spacing: 0.5px; }
-        .info-box { width: 100%; border-collapse: collapse; margin-bottom: 22px; border: 1px solid #333; }
-        .info-box td { border: 1px solid #333; padding: 8px 12px; vertical-align: middle; }
-        .info-box-header { background: #1e3a6e; color: #fff; font-weight: bold; font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; text-align: center; padding: 9px 12px !important; }
-        .info-label { font-weight: bold; font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; color: #333; background: #f9f9f9; }
-        .info-value { font-size: 11px; }
-        .info-value.poids { color: #006400; font-weight: bold; font-size: 12px; }
-        .info-value.montant { color: #c0392b; font-weight: bold; font-size: 12px; }
-        .info-center { text-align: center; }
-        table.data { width: 100%; border-collapse: collapse; margin-bottom: 0; }
-        table.data th, table.data td { border: 1px solid #333; padding: 7px 8px; font-size: 10px; }
-        table.data thead th { background: #d6eaf8; font-weight: bold; text-align: center; font-size: 9px; text-transform: uppercase; }
-        table.data tbody td { vertical-align: middle; }
-        .subtotal-row td { font-style: italic; background: #fafafa; }
-        .subtotal-label { text-align: right; padding-right: 12px !important; }
-        .total-row td { background: #d6eaf8; font-weight: bold; font-size: 10px; }
-        .total-label { text-align: right; padding-right: 12px !important; }
+        body {
+            font-family: 'DejaVu Sans', Arial, sans-serif;
+            font-size: 11px;
+            color: #222;
+            line-height: 1.45;
+        }
+        .page-frame {
+            border: 1.5px solid #222;
+            padding: 20px;
+            min-height: 255mm;
+        }
+
+        .header {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 22px;
+        }
+        .header td {
+            border: none;
+            vertical-align: middle;
+            padding: 0;
+        }
+        .logo {
+            max-width: 120px;
+            max-height: 90px;
+        }
+        .company-name {
+            color: #006400;
+            font-size: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .company-subtitle {
+            color: #228B22;
+            font-size: 11px;
+            font-style: italic;
+            margin-top: 4px;
+        }
+
+        .doc-title {
+            text-align: center;
+            font-size: 15px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            margin: 8px 0 18px 0;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #222;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .meta {
+            margin-bottom: 16px;
+            font-size: 12px;
+        }
+        .meta strong {
+            font-weight: bold;
+        }
+        .meta-line {
+            margin-bottom: 4px;
+        }
+
+        .usine-title {
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 10px 0 12px 0;
+        }
+
+        table.data {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6px;
+        }
+        table.data th,
+        table.data td {
+            border: 1px solid #222;
+            padding: 7px 8px;
+            font-size: 10.5px;
+        }
+        table.data thead th {
+            background: #e8e8e8;
+            font-weight: bold;
+            text-align: center;
+            font-size: 10px;
+            text-transform: none;
+        }
+        table.data tbody td {
+            vertical-align: middle;
+        }
+        .subtotal-row td {
+            font-style: italic;
+            background: #f7f7f7;
+        }
+        .total-row td {
+            background: #e8e8e8;
+            font-weight: bold;
+        }
         .text-right { text-align: right; }
         .text-center { text-align: center; }
-        .signatures { width: 100%; border-collapse: collapse; margin-top: 50px; }
-        .signatures td { border: none; vertical-align: top; width: 50%; font-size: 10px; padding-top: 8px; }
+        .label-right { text-align: right; padding-right: 10px !important; }
+
+        .signatures {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 48px;
+        }
+        .signatures td {
+            border: none;
+            vertical-align: top;
+            width: 50%;
+            font-size: 11px;
+        }
+        .sig-line {
+            margin-top: 42px;
+            border-top: 1px solid #555;
+            width: 200px;
+        }
         .sig-right { text-align: right; }
-        .sig-line { margin-top: 40px; border-top: 1px solid #999; width: 180px; }
         .sig-right .sig-line { margin-left: auto; }
     </style>
 </head>
 <body>
-    <table class="header-table">
+    <div class="page-frame">
+    <table class="header">
         <tr>
-            <td class="logo-cell">
-                @if(!empty($logoPath) && file_exists($logoPath))
-                    <img src="{{ $logoPath }}" alt="Logo" class="logo">
+            <td style="width:130px;">
+                @if(!empty($logoSrc))
+                    <img src="{{ $logoSrc }}" alt="PGF" class="logo">
                 @endif
             </td>
-            <td style="text-align:center;">
-                <div class="company-name">PGF</div>
+            <td>
+                <div class="company-name">PGF-AFRICA SCOOPS</div>
                 <div class="company-subtitle">Plateforme de Gestion des Fournisseurs</div>
             </td>
-            <td style="width:110px;"></td>
         </tr>
     </table>
 
     <div class="doc-title">Bordereau transporteur N° {{ $bordereau->numero }}</div>
 
-    <table class="info-box">
-        <tr>
-            <td colspan="2" class="info-box-header">Informations du bordereau</td>
-        </tr>
-        <tr>
-            <td class="info-label" style="width:50%;">Transporteur</td>
-            <td class="info-label" style="width:50%;">Période</td>
-        </tr>
-        <tr>
-            <td class="info-value">
-                <strong>{{ strtoupper($bordereau->transporteur_code ? $bordereau->transporteur_code . ' — ' : '') }}{{ strtoupper($transporteurNom) }}</strong>
-            </td>
-            <td class="info-value">
-                {{ $bordereau->date_debut?->format('d/m/Y') }} au {{ $bordereau->date_fin?->format('d/m/Y') }}
-            </td>
-        </tr>
-        <tr>
-            <td class="info-label">Poids total</td>
-            <td class="info-label">Montant total transport</td>
-        </tr>
-        <tr>
-            <td class="info-value poids">{{ number_format((float) $bordereau->poids_total, 0, ',', ' ') }} KG</td>
-            <td class="info-value montant">{{ number_format((float) $bordereau->montant_total, 0, ',', ' ') }} FCFA</td>
-        </tr>
-        <tr>
-            <td colspan="2" class="info-label info-center">Date de création</td>
-        </tr>
-        <tr>
-            <td colspan="2" class="info-value info-center">{{ $dateCreation }}</td>
-        </tr>
-    </table>
+    <div class="meta">
+        <div class="meta-line">
+            <strong>TRANSPORTEUR :</strong>
+            {{ strtoupper($transporteurNom) }}
+        </div>
+        <div class="meta-line">
+            <strong>Période du :</strong>
+            {{ $bordereau->date_debut?->format('d/m/Y') }} au {{ $bordereau->date_fin?->format('d/m/Y') }}
+        </div>
+        <div class="meta-line">
+            <strong>Date d'émission :</strong> {{ $dateCreation }}
+        </div>
+    </div>
+
+    @php
+        $usinesTitre = collect($groupesUsine)->pluck('usine')->filter()->unique()->values();
+    @endphp
+    @if($usinesTitre->count() === 1)
+        <div class="usine-title">{{ $usinesTitre->first() }}</div>
+    @endif
 
     <table class="data">
         <thead>
             <tr>
-                <th style="width:10%;">Date</th>
-                <th style="width:12%;">N° fiche</th>
-                <th style="width:12%;">N° ticket</th>
+                <th style="width:11%;">Date</th>
+                <th style="width:13%;">N° fiche</th>
+                <th style="width:14%;">N° ticket</th>
                 <th style="width:16%;">Usine</th>
-                <th style="width:12%;">Véhicule</th>
-                <th style="width:12%;">Poids (Kg)</th>
-                <th style="width:12%;">Prix unit.</th>
-                <th style="width:14%;">Montant</th>
+                <th style="width:13%;">Véhicule</th>
+                <th style="width:11%;">Poids (kg)</th>
+                <th style="width:11%;">Prix unit.</th>
+                <th style="width:11%;">Montant</th>
             </tr>
         </thead>
         <tbody>
@@ -124,15 +208,17 @@
                     <td class="text-right">{{ number_format((int) ($ligne['montant'] ?? 0), 0, ',', ' ') }}</td>
                 </tr>
                 @endforeach
+                @if(count($groupesUsine) > 1)
                 <tr class="subtotal-row">
-                    <td colspan="5" class="subtotal-label">Sous-total {{ $groupe['usine'] }}</td>
+                    <td colspan="5" class="label-right">Sous-total {{ $groupe['usine'] }}</td>
                     <td class="text-right">{{ number_format($groupe['poids_total'], 0, ',', ' ') }}</td>
                     <td></td>
                     <td class="text-right">{{ number_format($groupe['montant_total'], 0, ',', ' ') }}</td>
                 </tr>
+                @endif
             @endforeach
             <tr class="total-row">
-                <td colspan="5" class="total-label">TOTAL GÉNÉRAL</td>
+                <td colspan="5" class="label-right">TOTAL GÉNÉRAL</td>
                 <td class="text-right">{{ number_format((float) $bordereau->poids_total, 0, ',', ' ') }}</td>
                 <td></td>
                 <td class="text-right">{{ number_format((float) $bordereau->montant_total, 0, ',', ' ') }}</td>
@@ -152,5 +238,6 @@
             </td>
         </tr>
     </table>
+    </div>
 </body>
 </html>

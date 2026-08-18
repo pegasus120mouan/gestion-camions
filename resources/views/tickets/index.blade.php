@@ -297,7 +297,7 @@
                 <td>{{ $t['nom_produit'] ?? '-' }}</td>
                 @endif
                 <td>{{ $t['nom_agent'] ?? '-' }}</td>
-                <td>{{ $t['nom_pont'] ?? ($t['origine'] ?? '-') }}</td>
+                <td>{{ trim((string) ($t['nom_pont'] ?? '')) !== '' ? $t['nom_pont'] : (trim((string) ($t['origine'] ?? '')) !== '' ? $t['origine'] : '-') }}</td>
                 <td>
                   @if(!empty($t['vehicule_id']))
                     <a href="{{ route('vehicules.depenses', ['vehicule_id' => $t['vehicule_id'], 'matricule' => $t['matricule_vehicule'] ?? '']) }}">
@@ -348,8 +348,18 @@
                   <a href="{{ route('tickets.pdf', ['id' => $t['id_ticket']]) }}" class="btn btn-sm btn-outline-secondary me-1" target="_blank" rel="noopener" title="Imprimer en PDF">
                     <i class="bx bx-printer"></i>
                   </a>
+                  <button
+                    type="button"
+                    class="btn btn-sm {{ $ticketValide ? 'btn-secondary' : 'btn-outline-success' }}"
+                    title="{{ $ticketValide ? 'Ticket déjà validé' : ($estCamionPgf ? 'Valider avec fiche de sortie' : 'Valider le ticket') }}"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalValiderTicket{{ $loop->index }}"
+                    @if($ticketValide) disabled @endif
+                  >
+                    <i class="bx bx-check"></i> Valider
+                  </button>
                   @if (!empty($onlyLocaux))
-                    <span class="badge bg-label-info me-1">Local</span>
+                    <span class="badge bg-label-info ms-1 me-1">Local</span>
                     <form method="POST" action="{{ route('tickets.destroy', $t['id_ticket']) }}" class="d-inline" onsubmit="return confirm('Supprimer ce ticket local ?');">
                       @csrf
                       @method('DELETE')
@@ -357,17 +367,6 @@
                         <i class="bx bx-trash"></i>
                       </button>
                     </form>
-                  @else
-                    <button
-                      type="button"
-                      class="btn btn-sm {{ $ticketValide ? 'btn-secondary' : 'btn-outline-success' }}"
-                      title="{{ $ticketValide ? 'Ticket déjà validé' : ($estCamionPgf ? 'Valider avec fiche de sortie' : 'Valider le ticket') }}"
-                      data-bs-toggle="modal"
-                      data-bs-target="#modalValiderTicket{{ $loop->index }}"
-                      @if($ticketValide) disabled @endif
-                    >
-                      <i class="bx bx-check"></i> Valider
-                    </button>
                   @endif
                 </td>
                 @endif
@@ -655,6 +654,9 @@
         <form method="POST" action="{{ route('tickets.valider', $t['id_ticket']) }}">
           @csrf
           <input type="hidden" name="confirm_validation" value="1" />
+          @if (!empty($onlyLocaux))
+            <input type="hidden" name="from" value="locaux" />
+          @endif
           <div class="modal-body">
             <div class="alert alert-light border mb-3">
               <div class="row g-2">
@@ -940,11 +942,63 @@ var vehiculesPgfLookup = @json($vehiculesPgfLookup ?? ['ids' => [], 'matricules'
 var fichesDisponiblesAssociation = @json(($fichesDisponiblesAssociation ?? collect())->values());
 var oldFicheId = @json(old('fiche_id'));
 var ticketPgfForceSubmit = false;
+var ticketAssocFicheEnCours = false;
 var vehiculesPgfIds = vehiculesPgfLookup.ids || {};
 var vehiculesPgfMatricules = {};
 Object.keys(vehiculesPgfLookup.matricules || {}).forEach(function(m) {
   vehiculesPgfMatricules[String(m).toUpperCase()] = true;
 });
+var parcsParPontProduit = @json($parcsParPontProduit ?? []);
+var usinesParProduit = @json($usinesParProduit ?? []);
+
+function pontEstGerable() {
+  var idPont = $('#ticket_id_pont').val();
+  return !!(idPont && pontGerableParId[String(idPont)]);
+}
+
+function formulaireTicketComplet() {
+  var dateOk = !!$('input[name="date_ticket"]').val();
+  var numeroOk = !!$('input[name="numero_ticket"]').val().trim();
+  var matricule = $('#ticket_vehicule_search').val().trim();
+  var vehiculeId = $('#ticket_vehicule_id').val() || vehiculesTicketMap[matricule];
+  var vehiculeOk = !!(matricule && vehiculeId);
+  var usineOk = !!$('#ticket_id_usine').val();
+  var groupeOk = !!$('#ticket_groupe_type').val();
+  var agentOk = !!$('#ticket_agent_ref').val();
+  var gerable = pontEstGerable();
+  var produitOk = !gerable || !!$('#ticket_produit_id').val();
+  var parcOk = true;
+
+  if (gerable) {
+    var $parc = $('#ticket_parc_id');
+    parcOk = !$parc.prop('disabled') && !!$parc.val();
+  }
+
+  return dateOk && numeroOk && vehiculeOk && usineOk && groupeOk && agentOk && produitOk && parcOk;
+}
+
+function syncTicketSubmitButton() {
+  $('#btnSubmitTicket').prop('disabled', !formulaireTicketComplet());
+}
+
+function syncParcObligatoire() {
+  var gerable = pontEstGerable();
+  $('#ticket_parc_required').toggleClass('d-none', !gerable);
+  $('#ticket_produit_required').toggleClass('d-none', !gerable);
+  var $parc = $('#ticket_parc_id');
+  $parc.prop('required', gerable && !$parc.prop('disabled'));
+  $('#ticket_produit_id').prop('required', gerable);
+  syncTicketSubmitButton();
+}
+
+function syncParcColumnVisibility() {
+  if (pontEstGerable()) {
+    $('#col_parc').show();
+  } else {
+    $('#col_parc').hide();
+  }
+  syncParcObligatoire();
+}
 
 function vehiculeSelectionneEstPgf() {
   var matricule = $('#ticket_vehicule_search').val().trim();
@@ -993,6 +1047,7 @@ function masquerChargementPage() {
 
 function ouvrirModalAssocierFicheTicket() {
   masquerChargementPage();
+  ticketAssocFicheEnCours = true;
   var fiches = fichesPourVehiculeSelectionne();
   var numero = $('input[name="numero_ticket"]').val() || '—';
   var matricule = $('#ticket_vehicule_search').val() || '—';
@@ -1127,8 +1182,9 @@ function resetAgentTicketSelection() {
 
 function selectAgentTicket(agentRef, label) {
   $('#ticket_agent_ref').val(agentRef);
-  $('#ticket_agent_search').val(label);
+  $('#ticket_agent_search').val(label || '');
   $('#ticket_agent_dropdown').hide();
+  $('#ticket_agent_search').removeClass('is-invalid');
   syncTicketSubmitButton();
 }
 
@@ -1285,17 +1341,22 @@ $(document).ready(function() {
     remplirAgentsTicket($(this).val(), null);
   });
 
-  $('#ticket_agent_search').on('input focus', function() {
-    if ($('#ticket_agent_ref').val() && $(this).val() === agentLabelParRef($('#ticket_agent_ref').val())) {
-      $(this).val('');
+  $('#ticket_agent_search').on('input', function() {
+    // Nouvelle saisie → invalider l'ancienne sélection, sans effacer au simple focus.
+    if ($('#ticket_agent_ref').val()) {
       $('#ticket_agent_ref').val('');
+      syncTicketSubmitButton();
     }
+    renderAgentsTicketDropdown();
+  });
+  $('#ticket_agent_search').on('focus', function() {
     renderAgentsTicketDropdown();
   });
 
   $(document).on('click', '.ticket-agent-option', function(e) {
     e.preventDefault();
     selectAgentTicket($(this).attr('data-agent-ref'), $(this).attr('data-agent-label'));
+    syncTicketSubmitButton();
   });
 
   $(document).on('click', function(e) {
@@ -1344,20 +1405,66 @@ $(document).ready(function() {
     var fiche = (fichesDisponiblesAssociation || []).find(function(f) {
       return String(f.id) === String(ficheId);
     });
+    var $form = $('#modalAddTicket form');
     $('#ticket_fiche_id').val(ficheId);
     if (fiche && fiche.poids_pont && !$('input[name="poids"]').val()) {
       $('input[name="poids"]').val(fiche.poids_pont);
     }
+    // S'assurer que le véhicule est toujours bien renseigné avant le submit final.
+    var matricule = ($('#ticket_vehicule_search').val() || $('#ticket_matricule_vehicule').val() || '').trim();
+    var vehiculeId = $('#ticket_vehicule_id').val() || vehiculesTicketMap[matricule] || '';
+    if (matricule) {
+      $('#ticket_vehicule_search').val(matricule);
+      $('#ticket_matricule_vehicule').val(matricule);
+    }
+    if (vehiculeId) {
+      $('#ticket_vehicule_id').val(vehiculeId);
+      if (matricule && !vehiculesTicketMap[matricule]) {
+        vehiculesTicketMap[matricule] = vehiculeId;
+      }
+    }
+
+    if (!matricule || !vehiculeId) {
+      alert('Veuillez sélectionner un véhicule valide dans la liste.');
+      return;
+    }
+    if (!$('#ticket_agent_ref').val()) {
+      alert('Veuillez sélectionner un agent dans la liste.');
+      return;
+    }
+
     ticketPgfForceSubmit = true;
+    ticketAssocFicheEnCours = true; // garder les champs tant que le submit n'est pas parti
+    $(this).prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Validation…');
+
+    var overlay = document.getElementById('page-loading-overlay');
+    if (overlay) {
+      overlay.classList.remove('is-hidden');
+    }
+
+    // Le formulaire est dans un modal masqué : la validation HTML5 native bloque souvent le submit.
+    $form.attr('novalidate', 'novalidate');
+    $form.find('[required]').prop('required', false);
+
     var assocModal = bootstrap.Modal.getInstance(document.getElementById('modalAssocierFicheTicket'));
     if (assocModal) {
       assocModal.hide();
     }
-    $('#modalAddTicket form').trigger('submit');
+
+    // Submit natif après un tick pour laisser fermer le modal.
+    setTimeout(function() {
+      ticketAssocFicheEnCours = false;
+      if (typeof $form[0].requestSubmit === 'function') {
+        $form[0].requestSubmit();
+      } else {
+        $form.trigger('submit');
+      }
+    }, 150);
   });
 
   $('#modalAssocierFicheTicket').on('hidden.bs.modal', function() {
     if (!ticketPgfForceSubmit) {
+      ticketAssocFicheEnCours = false;
       var addModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalAddTicket'));
       addModal.show();
       $('#modalAddTicket form button[type="submit"]')
@@ -1386,18 +1493,21 @@ $(document).ready(function() {
       return false;
     }
 
-    var matricule = $('#ticket_vehicule_search').val().trim();
-    var vehiculeId = vehiculesTicketMap[matricule];
+    var matricule = ($('#ticket_vehicule_search').val() || $('#ticket_matricule_vehicule').val() || '').trim();
+    var vehiculeId = $('#ticket_vehicule_id').val() || vehiculesTicketMap[matricule];
 
-    if (!matricule || vehiculeId === undefined || vehiculeId === '') {
+    if (!matricule || vehiculeId === undefined || vehiculeId === null || vehiculeId === '') {
       e.preventDefault();
+      ticketPgfForceSubmit = false;
       alert('Veuillez sélectionner un véhicule valide dans la liste.');
       $('#ticket_vehicule_search').focus();
       return false;
     }
 
+    $('#ticket_vehicule_search').val(matricule);
     $('#ticket_matricule_vehicule').val(matricule);
     $('#ticket_vehicule_id').val(vehiculeId);
+    vehiculesTicketMap[matricule] = vehiculeId;
 
     // Étape association PGF : ne pas bloquer / spinner tant que la fiche n'est pas choisie.
     if (vehiculeSelectionneEstPgf() && !ticketPgfForceSubmit) {
@@ -1413,6 +1523,10 @@ $(document).ready(function() {
   });
 
   $('#modalAddTicket').on('hidden.bs.modal', function() {
+    // Ne pas vider le formulaire pendant l'étape d'association fiche PGF.
+    if (ticketAssocFicheEnCours || ticketPgfForceSubmit) {
+      return;
+    }
     if (!oldMatriculeVehicule) {
       $('#ticket_vehicule_search').val('');
       $('#ticket_matricule_vehicule').val('');
@@ -1424,9 +1538,6 @@ $(document).ready(function() {
     syncTicketSubmitButton();
   });
 
-  // Usines par produit
-  var usinesParProduit = @json($usinesParProduit ?? []);
-
   function onProduitChangeUsine() {
     var produitId = $('#ticket_produit_id').val();
     var $usine = $('#ticket_id_usine');
@@ -1437,68 +1548,19 @@ $(document).ready(function() {
     if (!produitId) {
       $usine.append('<option value="">-- Sélectionner d\'abord un produit --</option>');
     } else {
-      var usines = usinesParProduit[produitId] || [];
+      var usines = usinesParProduit[produitId] || usinesParProduit[String(produitId)] || [];
       $usine.append('<option value="">-- Sélectionner une usine --</option>');
       usines.forEach(function(u) {
         $usine.append('<option value="' + u.id_usine + '">' + u.nom + '</option>');
       });
+      if (oldUsineVal && $usine.find('option[value="' + oldUsineVal + '"]').length) {
+        $usine.val(String(oldUsineVal));
+      }
     }
 
     if ($usine.hasClass('select2-hidden-accessible')) {
       $usine.trigger('change.select2');
     }
-    syncTicketSubmitButton();
-  }
-
-  function formulaireTicketComplet() {
-    var dateOk = !!$('input[name="date_ticket"]').val();
-    var numeroOk = !!$('input[name="numero_ticket"]').val().trim();
-    var matricule = $('#ticket_vehicule_search').val().trim();
-    var vehiculeOk = !!(matricule && vehiculesTicketMap[matricule]);
-    var usineOk = !!$('#ticket_id_usine').val();
-    var groupeOk = !!$('#ticket_groupe_type').val();
-    var agentOk = !!$('#ticket_agent_ref').val();
-    var gerable = pontEstGerable();
-    var produitOk = !gerable || !!$('#ticket_produit_id').val();
-    var parcOk = true;
-
-    if (gerable) {
-      var $parc = $('#ticket_parc_id');
-      parcOk = !$parc.prop('disabled') && !!$parc.val();
-    }
-
-    return dateOk && numeroOk && vehiculeOk && usineOk && groupeOk && agentOk && produitOk && parcOk;
-  }
-
-  function syncTicketSubmitButton() {
-    var $btn = $('#btnSubmitTicket');
-    $btn.prop('disabled', !formulaireTicketComplet());
-  }
-
-  // Pont → Produit → Parc
-  var parcsParPontProduit = @json($parcsParPontProduit ?? []);
-
-  function pontEstGerable() {
-    var idPont = $('#ticket_id_pont').val();
-    return !!(idPont && pontGerableParId[String(idPont)]);
-  }
-
-  function syncParcColumnVisibility() {
-    if (pontEstGerable()) {
-      $('#col_parc').show();
-    } else {
-      $('#col_parc').hide();
-    }
-    syncParcObligatoire();
-  }
-
-  function syncParcObligatoire() {
-    var gerable = pontEstGerable();
-    $('#ticket_parc_required').toggleClass('d-none', !gerable);
-    $('#ticket_produit_required').toggleClass('d-none', !gerable);
-    var $parc = $('#ticket_parc_id');
-    $parc.prop('required', gerable && !$parc.prop('disabled'));
-    $('#ticket_produit_id').prop('required', gerable);
     syncTicketSubmitButton();
   }
 

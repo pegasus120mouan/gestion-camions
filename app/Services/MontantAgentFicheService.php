@@ -278,21 +278,46 @@ class MontantAgentFicheService
         $date = $ticket->date_ticket?->format('Y-m-d') ?? now()->format('Y-m-d');
         $numero = trim((string) ($ticket->numero_ticket ?? ''));
 
+        $idPontTicket = (int) ($ticket->id_pont ?? 0);
+        $nomPontTicket = trim((string) ($ticket->nom_pont ?? ''));
+        if ($nomPontTicket === '' || mb_strtolower($nomPontTicket, 'UTF-8') === 'usine') {
+            $nomPontTicket = '';
+        }
+
+        $idAgent = (int) ($ticket->id_agent ?? 0);
+        if ($idAgent <= 0) {
+            $ticket->loadMissing('particulierAgent');
+            $idAgent = (int) ($ticket->particulierAgent?->id_agent ?? 0);
+            if ($idAgent > 0 && ! (int) ($ticket->id_agent ?? 0)) {
+                $ticket->id_agent = $idAgent;
+                $ticket->save();
+            }
+        }
+
+        $nomAgent = '';
+        $numeroAgent = '';
+        if ($ticket->relationLoaded('particulierAgent') && $ticket->particulierAgent) {
+            $nomAgent = trim((string) ($ticket->particulierAgent->nom_complet ?? ''));
+            $numeroAgent = trim((string) ($ticket->particulierAgent->numero_agent ?? ''));
+        }
+
         return FicheSortie::create([
             'numero_fiche' => 'TKT-' . preg_replace('/[^A-Za-z0-9\-_]/', '', $numero !== '' ? $numero : (string) $ticket->id_ticket),
             'vehicule_id' => (int) ($ticket->vehicule_id ?? 0) ?: null,
             'matricule_vehicule' => (string) ($ticket->matricule_vehicule ?? ''),
             'id_ticket' => $ticket->id_ticket,
             'numero_ticket' => $numero,
-            'id_agent' => (int) ($ticket->id_agent ?? 0) ?: null,
+            'id_agent' => $idAgent,
+            'nom_agent' => $nomAgent !== '' ? $nomAgent : null,
+            'numero_agent' => $numeroAgent !== '' ? $numeroAgent : null,
             'usine' => $usine,
             'produit_id' => $produitInfo ? (int) $produitInfo['produit_id'] : null,
             'nom_produit' => $produitInfo ? (string) ($produitInfo['nom'] ?? '') : null,
             'date_chargement' => $date,
             'date_dechargement' => $ticket->estValide() ? $date : null,
             'poids_pont' => $ticket->poids,
-            'id_pont' => 0,
-            'nom_pont' => 'Usine',
+            'id_pont' => $idPontTicket > 0 ? $idPontTicket : 0,
+            'nom_pont' => $nomPontTicket !== '' ? $nomPontTicket : ($idPontTicket > 0 ? '' : 'Usine'),
             'code_pont' => '',
         ]);
     }

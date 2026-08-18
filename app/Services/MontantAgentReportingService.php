@@ -65,7 +65,9 @@ class MontantAgentReportingService
             ->where(function (Builder $agentQuery) use ($idAgent, $apiRefs) {
                 if ($idAgent > 0) {
                     $agentQuery->where('id_agent', $idAgent)
-                        ->orWhereHas('ficheSortie', fn (Builder $f) => $f->where('id_agent', $idAgent));
+                        ->orWhereHas('ficheSortie', fn (Builder $f) => $f->where('id_agent', $idAgent))
+                        // Tickets locaux : souvent liés via particulier_agents.id_agent
+                        ->orWhereHas('particulierAgent', fn (Builder $pa) => $pa->where('id_agent', $idAgent));
 
                     if ($apiRefs['ids'] !== []) {
                         $agentQuery->orWhereIn('id_ticket', $apiRefs['ids']);
@@ -145,64 +147,108 @@ class MontantAgentReportingService
             return 0;
         }
 
+        // Toujours rattacher les tickets locaux (indépendant du cache API).
+        $count = $this->rattacherTicketsLocauxAgent($idAgent);
+
         $cacheKey = 'agent_tickets_sync:' . $idAgent;
         if (Cache::has($cacheKey)) {
-            return 0;
+            return $count;
         }
 
-        $request ??= request();
-        $apiTickets = $this->apiTicketsPourAgent($idAgent, $request);
+        try {
+            $request ??= request();
+            $apiTickets = $this->apiTicketsPourAgent($idAgent, $request);
 
-        if ($apiTickets === []) {
-            return 0;
-        }
+            foreach ($apiTickets as $apiTicket) {
+                $idTicket = (int) ($apiTicket['id_ticket'] ?? 0);
+                if ($idTicket <= 0) {
+                    continue;
+                }
 
-        $count = 0;
+                $numero = trim((string) ($apiTicket['numero_ticket'] ?? ''));
+                $estValideGest = TicketValidation::query()
+                    ->where(function (Builder $q) use ($idTicket, $numero) {
+                        $q->where('id_ticket', $idTicket);
+                        if ($numero !== '') {
+                            $q->orWhere('numero_ticket', $numero);
+                        }
+                    })
+                    ->exists();
 
-        foreach ($apiTickets as $apiTicket) {
-            $idTicket = (int) ($apiTicket['id_ticket'] ?? 0);
-            if ($idTicket <= 0) {
-                continue;
+                $ticketLocal = Ticket::query()->find($idTicket);
+                $legacyValide = $ticketLocal && $ticketLocal->conformite === 'valide';
+
+                if (! $estValideGest && ! $legacyValide) {
+                    continue;
+                }
+
+                $ticket = $this->assurerTicketDepuisApi($apiTicket, $idAgent);
+
+                if ($legacyValide && ! $estValideGest) {
+                    TicketValidation::updateOrCreate(
+                        ['id_ticket' => $idTicket],
+                        [
+                            'numero_ticket' => $numero !== '' ? $numero : (string) $idTicket,
+                            'validated_at' => $ticketLocal->updated_at ?? now(),
+                            'validated_by' => $ticketLocal->id_utilisateur,
+                        ]
+                    );
+                }
+
+                if ((int) ($ticket->id_agent ?? 0) !== $idAgent) {
+                    $ticket->update(['id_agent' => $idAgent]);
+                }
+
+                $count++;
             }
-
-            $numero = trim((string) ($apiTicket['numero_ticket'] ?? ''));
-            $estValideGest = TicketValidation::query()
-                ->where(function (Builder $q) use ($idTicket, $numero) {
-                    $q->where('id_ticket', $idTicket);
-                    if ($numero !== '') {
-                        $q->orWhere('numero_ticket', $numero);
-                    }
-                })
-                ->exists();
-
-            $ticketLocal = Ticket::query()->find($idTicket);
-            $legacyValide = $ticketLocal && $ticketLocal->conformite === 'valide';
-
-            if (! $estValideGest && ! $legacyValide) {
-                continue;
-            }
-
-            $ticket = $this->assurerTicketDepuisApi($apiTicket, $idAgent);
-
-            if ($legacyValide && ! $estValideGest) {
-                TicketValidation::updateOrCreate(
-                    ['id_ticket' => $idTicket],
-                    [
-                        'numero_ticket' => $numero !== '' ? $numero : (string) $idTicket,
-                        'validated_at' => $ticketLocal->updated_at ?? now(),
-                        'validated_by' => $ticketLocal->id_utilisateur,
-                    ]
-                );
-            }
-
-            if ((int) ($ticket->id_agent ?? 0) !== $idAgent) {
-                $ticket->update(['id_agent' => $idAgent]);
-            }
-
-            $count++;
+        } catch (\Throwable $e) {
+            // Sync API optionnelle : ne pas empêcher l'affichage des tickets locaux.
         }
 
         Cache::put($cacheKey, true, now()->addMinutes(10));
+
+        return $count;
+    }
+
+    /**
+     * Tickets locaux validés liés via particulier_agent mais sans id_agent renseigné.
+     */
+    private function rattacherTicketsLocauxAgent(int $idAgent): int
+    {
+        $tickets = Ticket::query()
+            ->with('particulierAgent')
+            ->where(function (Builder $validatedQuery) {
+                $validatedQuery->whereHas('validation')
+                    ->orWhere('conformite', 'valide');
+            })
+            ->where(function (Builder $q) use ($idAgent) {
+                $q->where('id_agent', $idAgent)
+                    ->orWhere(function (Builder $qq) use ($idAgent) {
+                        $qq->where(function (Builder $nullAgent) {
+                            $nullAgent->whereNull('id_agent')->orWhere('id_agent', 0);
+                        })->whereHas('particulierAgent', fn (Builder $pa) => $pa->where('id_agent', $idAgent));
+                    });
+            })
+            ->get();
+
+        $count = 0;
+        foreach ($tickets as $ticket) {
+            $changed = false;
+            if ((int) ($ticket->id_agent ?? 0) !== $idAgent) {
+                $ticket->id_agent = $idAgent;
+                $changed = true;
+            }
+            if ($changed) {
+                $ticket->save();
+                $count++;
+            }
+
+            try {
+                $this->montantAgentFiche->assurerFichePourTicketAgent($ticket);
+            } catch (\Throwable $e) {
+                // Ne pas bloquer la page financière si une fiche technique échoue.
+            }
+        }
 
         return $count;
     }
@@ -400,7 +446,13 @@ class MontantAgentReportingService
             $poids = (float) ($fiche->poids_pont ?? 0);
         }
 
-        return $pu !== null && $poids > 0 ? (int) round($pu * $poids) : 0;
+        if ($pu !== null && $poids > 0) {
+            return (int) round($pu * $poids);
+        }
+
+        $montantStocke = (float) ($ticket->montant_paie ?? 0);
+
+        return $montantStocke > 0 ? (int) round($montantStocke) : 0;
     }
 
     public function prixUnitaireLigneTicket(
@@ -422,14 +474,21 @@ class MontantAgentReportingService
             ?: ($fiche?->produit_id ? (int) $fiche->produit_id : null)
             ?: $this->produitIdDepuisUsine((int) ($ticket->id_usine ?? 0), $nomUsine);
 
-        return $this->ticketPrix->prixUnitairePourTicket(
+        $pu = $this->ticketPrix->prixUnitairePourTicket(
             $ticket,
             $produitId,
-            null,
+            $ticket->date_ticket?->format('Y-m-d'),
             null,
             (int) ($ticket->id_agent ?? 0) ?: null,
             $nomUsine,
         );
+        if ($pu !== null) {
+            return $pu;
+        }
+
+        $prixStocke = (float) ($ticket->prix_unitaire ?? 0);
+
+        return $prixStocke > 0 ? $prixStocke : null;
     }
 
     /**
@@ -546,17 +605,46 @@ class MontantAgentReportingService
                 $this->appliquerProduitSurFiche($ficheLiee, $produitInfo);
             }
 
+            $prixUnitaire = $this->prixUnitaireLigneTicket($ticket, $ficheDonnees, $produitId, $usinesById);
+            $montant = $this->montantLigneTicket($ticket, $ficheDonnees, $produitId, $usinesById);
+            $this->persisterMontantsCalcules($ticket, $ficheDonnees, $prixUnitaire, $montant);
+
             $result[] = [
                 'ticket' => $ticket,
                 'fiche' => $ficheLiee ?? $this->ficheVirtuelleDepuisTicket($ticket, $nomUsine, $produitId, $produitInfo['nom'] ?? null),
                 'a_fiche' => $aFiche,
-                'montant' => $this->montantLigneTicket($ticket, $ficheDonnees, $produitId, $usinesById),
-                'prix_unitaire' => $this->prixUnitaireLigneTicket($ticket, $ficheDonnees, $produitId, $usinesById),
+                'montant' => $montant,
+                'prix_unitaire' => $prixUnitaire,
                 'poids_effectif' => $poids,
             ];
         }
 
         return $result;
+    }
+
+    private function persisterMontantsCalcules(
+        Ticket $ticket,
+        ?FicheSortie $fiche,
+        ?float $prixUnitaire,
+        int $montant
+    ): void {
+        $ticketDirty = false;
+        if ($prixUnitaire !== null && (float) ($ticket->prix_unitaire ?? 0) <= 0) {
+            $ticket->prix_unitaire = $prixUnitaire;
+            $ticketDirty = true;
+        }
+        if ($montant > 0 && (float) ($ticket->montant_paie ?? 0) <= 0) {
+            $ticket->montant_paie = $montant;
+            $ticketDirty = true;
+        }
+        if ($ticketDirty) {
+            $ticket->save();
+        }
+
+        if ($fiche && $fiche->exists && $montant > 0 && (float) ($fiche->montant_agent ?? 0) <= 0) {
+            $fiche->montant_agent = $montant;
+            $fiche->save();
+        }
     }
 
     /**

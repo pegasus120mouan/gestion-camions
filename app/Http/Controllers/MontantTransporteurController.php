@@ -412,13 +412,27 @@ class MontantTransporteurController extends Controller
             ->findOrFail($id);
 
         $groupesUsine = $this->bordereauTransporteur->grouperParUsine($bordereau->fiches_data ?? []);
-        $logoPath = public_path('assets/img/logo.png');
+
+        $logoSrc = null;
+        foreach (['img/logo/logo3.png', 'img/logo/logo.png', 'img/logo/logo1.png'] as $rel) {
+            $candidate = public_path($rel);
+            if (is_file($candidate)) {
+                $mime = match (strtolower(pathinfo($candidate, PATHINFO_EXTENSION))) {
+                    'jpg', 'jpeg' => 'image/jpeg',
+                    'gif' => 'image/gif',
+                    'webp' => 'image/webp',
+                    default => 'image/png',
+                };
+                $logoSrc = 'data:' . $mime . ';base64,' . base64_encode((string) file_get_contents($candidate));
+                break;
+            }
+        }
 
         $pdf = Pdf::loadView('gestion_financiere.bordereau_transporteur_pdf', [
             'transporteur' => $transporteur,
             'bordereau' => $bordereau,
             'groupesUsine' => $groupesUsine,
-            'logoPath' => file_exists($logoPath) ? $logoPath : null,
+            'logoSrc' => $logoSrc,
             'transporteurNom' => trim($transporteur->nom . ' ' . $transporteur->prenoms),
             'dateCreation' => ($bordereau->created_at ?? now())->format('d/m/Y \à H:i'),
         ])->setPaper('a4', 'portrait');

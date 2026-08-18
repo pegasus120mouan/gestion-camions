@@ -10,12 +10,15 @@ class Ticket extends Model
     protected $table = 'tickets';
     protected $primaryKey = 'id_ticket';
 
-    public $incrementing = false;
+    /** Auto-incrément MySQL (les ids Unipalm peuvent toujours être imposés à la main). */
+    public $incrementing = true;
 
     protected $keyType = 'int';
 
     protected $fillable = [
         'id_usine',
+        'id_pont',
+        'nom_pont',
         'date_ticket',
         'id_agent',
         'particulier_agent_id',

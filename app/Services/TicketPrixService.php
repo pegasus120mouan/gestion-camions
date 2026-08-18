@@ -66,7 +66,7 @@ class TicketPrixService
                 : $ticket->particulierAgent()->first();
 
             if ($particulier && $particulier->id_agent) {
-                return $this->prixUnitairePrixAgent(
+                $puApi = $this->prixUnitairePrixAgent(
                     (int) $particulier->id_agent,
                     $idUsine > 0 ? $idUsine : null,
                     $produitId,
@@ -74,12 +74,15 @@ class TicketPrixService
                     $typeVehicule,
                     $nomUsine
                 );
+                if ($puApi !== null) {
+                    return $puApi;
+                }
             }
 
             $records = $particulierPrixRecords
                 ?? ParticulierAgentPrix::where('particulier_agent_id', $ticket->particulier_agent_id)->get();
 
-            return $this->prixUnitaireParticulierAgent(
+            $puParticulier = $this->prixUnitaireParticulierAgent(
                 $records,
                 (int) $ticket->particulier_agent_id,
                 $idUsine,
@@ -87,11 +90,14 @@ class TicketPrixService
                 $nomTypeTransporteur,
                 $produitId
             );
+            if ($puParticulier !== null) {
+                return $puParticulier;
+            }
         }
 
         $idAgentApi = (int) ($ticket->id_agent ?: $idAgentApiContext ?: 0);
         if ($idAgentApi > 0) {
-            return $this->prixUnitairePrixAgent(
+            $puApi = $this->prixUnitairePrixAgent(
                 $idAgentApi,
                 $idUsine > 0 ? $idUsine : null,
                 $produitId,
@@ -99,9 +105,14 @@ class TicketPrixService
                 $typeVehicule,
                 $nomUsine
             );
+            if ($puApi !== null) {
+                return $puApi;
+            }
         }
 
-        return null;
+        $prixStocke = (float) ($ticket->prix_unitaire ?? 0);
+
+        return $prixStocke > 0 ? $prixStocke : null;
     }
 
     public function montantPourTicket(
@@ -237,13 +248,18 @@ class TicketPrixService
             ->where('id_agent', $idAgentApi)
             ->where('type', $type)
             ->where(fn ($q) => $q->whereNull('date_debut')->orWhereDate('date_debut', '<=', $date))
-            ->where(fn ($q) => $q->whereNull('date_fin')->orWhereDate('date_fin', '>=', $date));
-
-        if ($nomUsine !== null) {
-            $baseQuery->where('nom_usine', $nomUsine);
-        } elseif ($idUsine !== null && $idUsine > 0) {
-            $baseQuery->where('id_usine', $idUsine);
-        }
+            ->where(fn ($q) => $q->whereNull('date_fin')->orWhereDate('date_fin', '>=', $date))
+            ->where(function ($q) use ($idUsine, $nomUsine) {
+                $hasId = $idUsine !== null && $idUsine > 0;
+                $hasNom = $nomUsine !== null && $nomUsine !== '';
+                if ($hasId && $hasNom) {
+                    $q->where('id_usine', $idUsine)->orWhere('nom_usine', $nomUsine);
+                } elseif ($hasNom) {
+                    $q->where('nom_usine', $nomUsine);
+                } elseif ($hasId) {
+                    $q->where('id_usine', $idUsine);
+                }
+            });
 
         if ($produitId) {
             $match = (clone $baseQuery)->where('produit_id', $produitId)->orderByDesc('date_debut')->first();
