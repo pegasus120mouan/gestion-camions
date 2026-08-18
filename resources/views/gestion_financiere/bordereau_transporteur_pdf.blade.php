@@ -89,8 +89,14 @@
         table.data th,
         table.data td {
             border: 1px solid #222;
-            padding: 7px 8px;
+            padding: 7px 6px;
             font-size: 10.5px;
+        }
+        table.data td.text-right,
+        table.data th:nth-child(6),
+        table.data th:nth-child(7),
+        table.data th:nth-child(8) {
+            white-space: nowrap;
         }
         table.data thead th {
             background: #e8e8e8;
@@ -177,13 +183,13 @@
         <thead>
             <tr>
                 <th style="width:11%;">Date</th>
-                <th style="width:13%;">N° fiche</th>
-                <th style="width:14%;">N° ticket</th>
-                <th style="width:16%;">Usine</th>
-                <th style="width:13%;">Véhicule</th>
-                <th style="width:11%;">Poids (kg)</th>
+                <th style="width:14%;">N° fiche</th>
+                <th style="width:15%;">N° ticket</th>
+                <th style="width:12%;">Usine</th>
+                <th style="width:10%;">Véhicule</th>
+                <th style="width:12%;">Poids (kg)</th>
                 <th style="width:11%;">Prix unit.</th>
-                <th style="width:11%;">Montant</th>
+                <th style="width:15%;">Montant</th>
             </tr>
         </thead>
         <tbody>
