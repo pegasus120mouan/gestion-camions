@@ -51,13 +51,11 @@ class MontantChefChargeurController extends Controller
 
         foreach ($fiches as $fiche) {
             // Trouver le prix unitaire applicable à la date de chargement
-            $prixPeriode = ChefChargeurPrix::where('id_chef_chargeur', $chef->id)
-                ->where('date_debut', '<=', $fiche->date_chargement)
-                ->where(function ($query) use ($fiche) {
-                    $query->whereNull('date_fin')
-                          ->orWhere('date_fin', '>=', $fiche->date_chargement);
-                })
-                ->first();
+            $prixPeriode = ChefChargeurPrix::findApplicable(
+                (int) $chef->id,
+                $fiche->date_chargement,
+                $fiche->produit_id ? (int) $fiche->produit_id : null
+            );
 
             if ($prixPeriode) {
                 // Convertir kg en tonnes (diviser par 1000)
@@ -104,13 +102,11 @@ class MontantChefChargeurController extends Controller
         // Calculer le montant pour chaque fiche
         $fichesAvecMontant = [];
         foreach ($fiches as $fiche) {
-            $prixPeriode = ChefChargeurPrix::where('id_chef_chargeur', $chef->id)
-                ->where('date_debut', '<=', $fiche->date_chargement)
-                ->where(function ($query) use ($fiche) {
-                    $query->whereNull('date_fin')
-                          ->orWhere('date_fin', '>=', $fiche->date_chargement);
-                })
-                ->first();
+            $prixPeriode = ChefChargeurPrix::findApplicable(
+                (int) $chef->id,
+                $fiche->date_chargement,
+                $fiche->produit_id ? (int) $fiche->produit_id : null
+            );
 
             // Convertir kg en tonnes (diviser par 1000)
             $poidsEnTonnes = (float) $fiche->poids_pont / 1000;
@@ -153,13 +149,11 @@ class MontantChefChargeurController extends Controller
         $fichesAvecMontant = [];
         $montantDu = 0;
         foreach ($fiches as $fiche) {
-            $prixPeriode = ChefChargeurPrix::where('id_chef_chargeur', $chef->id)
-                ->where('date_debut', '<=', $fiche->date_chargement)
-                ->where(function ($query) use ($fiche) {
-                    $query->whereNull('date_fin')
-                          ->orWhere('date_fin', '>=', $fiche->date_chargement);
-                })
-                ->first();
+            $prixPeriode = ChefChargeurPrix::findApplicable(
+                (int) $chef->id,
+                $fiche->date_chargement,
+                $fiche->produit_id ? (int) $fiche->produit_id : null
+            );
 
             // Convertir kg en tonnes (diviser par 1000)
             $poidsEnTonnes = (float) $fiche->poids_pont / 1000;

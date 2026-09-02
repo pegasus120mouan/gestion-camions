@@ -70,20 +70,23 @@
               <i class="bx bx-user"></i> Particuliers
             </a>
           </nav>
-          <span class="badge bg-label-primary">{{ $rows->count() }} {{ $tab === 'usines' ? 'usine(s)' : 'particulier(s)' }}</span>
+          <span class="badge bg-label-primary" id="badgeNbClients">{{ $rows->count() }} {{ $tab === 'usines' ? 'usine(s)' : 'particulier(s)' }}</span>
         </div>
 
-        <form method="GET" action="{{ route('transferts.financier.index') }}" class="tf-search mb-4">
+        <form method="GET" action="{{ route('transferts.financier.index') }}" class="tf-search mb-4" id="formRechercheFinancier">
           <input type="hidden" name="tab" value="{{ $tab }}" />
           <div class="row g-2 align-items-center">
             <div class="col-md-7 col-lg-6">
               <div class="input-group">
                 <span class="input-group-text bg-white"><i class="bx bx-search"></i></span>
                 <input
-                  type="text"
+                  type="search"
                   name="search"
+                  id="inputRechercheFinancier"
                   class="form-control"
                   value="{{ $search }}"
+                  autocomplete="off"
+                  autofocus
                   placeholder="{{ $tab === 'usines' ? 'Rechercher une usine...' : 'Rechercher un particulier (nom, code)...' }}"
                 />
               </div>
@@ -96,7 +99,7 @@
         </form>
 
         <div class="table-responsive">
-          <table class="table table-hover tf-table mb-0">
+          <table class="table table-hover tf-table mb-0" id="tableFinancierClients">
             <thead>
               <tr>
                 <th>{{ $tab === 'usines' ? 'Usine' : 'Particulier' }}</th>
@@ -110,8 +113,12 @@
               @forelse($rows as $item)
                 @php
                   $lien = route('transferts.financier.show', ['type' => $item['client_type'], 'id' => $item['client_id']]);
+                  $searchBlob = mb_strtolower(
+                    trim(($item['client'] ?? '') . ' ' . ($item['client_id'] ?? '') . ' ' . ($item['code'] ?? '')),
+                    'UTF-8'
+                  );
                 @endphp
-                <tr>
+                <tr data-search="{{ e($searchBlob) }}">
                   <td>
                     <a href="{{ $lien }}" class="text-primary fw-bold">
                       {{ $item['client'] ?: '—' }}
@@ -147,12 +154,21 @@
                   </td>
                 </tr>
               @empty
-                <tr>
+                <tr class="js-empty-server">
                   <td colspan="5" class="text-center text-muted py-4">
-                    Aucun {{ $tab === 'usines' ? 'usine' : 'particulier' }} trouvé
+                    @if($search !== '')
+                      Aucun {{ $tab === 'usines' ? 'usine' : 'particulier' }} trouvé pour « {{ $search }} »
+                    @else
+                      Aucun {{ $tab === 'usines' ? 'usine' : 'particulier' }} trouvé
+                    @endif
                   </td>
                 </tr>
               @endforelse
+              <tr id="rowRechercheVide" class="d-none">
+                <td colspan="5" class="text-center text-muted py-4">
+                  Aucun résultat pour cette recherche
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -160,4 +176,49 @@
     </div>
   </div>
 </div>
+
+<script>
+(function () {
+  var input = document.getElementById('inputRechercheFinancier');
+  var badge = document.getElementById('badgeNbClients');
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#tableFinancierClients tbody tr[data-search]'));
+  var emptyRow = document.getElementById('rowRechercheVide');
+  var label = @json($tab === 'usines' ? 'usine(s)' : 'particulier(s)');
+
+  function normalize(value) {
+    return String(value || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  }
+
+  function filtrer() {
+    var needle = normalize(input ? input.value : '');
+    var visibles = 0;
+
+    rows.forEach(function (row) {
+      var haystack = normalize(row.getAttribute('data-search') || '');
+      var match = needle === '' || haystack.indexOf(needle) !== -1;
+      row.classList.toggle('d-none', !match);
+      if (match) visibles += 1;
+    });
+
+    if (emptyRow) {
+      emptyRow.classList.toggle('d-none', visibles > 0 || rows.length === 0);
+    }
+
+    if (badge) {
+      badge.textContent = visibles + ' ' + label;
+    }
+  }
+
+  if (input) {
+    input.addEventListener('input', filtrer);
+    if (input.value) {
+      filtrer();
+    }
+  }
+})();
+</script>
 @endsection

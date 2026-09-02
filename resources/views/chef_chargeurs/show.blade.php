@@ -57,6 +57,7 @@
               <table class="table mb-0">
                 <thead>
                   <tr>
+                    <th>Produit</th>
                     <th>Prix (FCFA)</th>
                     <th>Date début</th>
                     <th>Date fin</th>
@@ -66,6 +67,13 @@
                 <tbody>
                   @forelse($chef->prixPeriodes as $prix)
                     <tr>
+                      <td>
+                        @if($prix->produit || $prix->nom_produit)
+                          <span class="badge bg-label-info">{{ $prix->produit?->nom ?? $prix->nom_produit }}</span>
+                        @else
+                          <span class="text-muted">—</span>
+                        @endif
+                      </td>
                       <td><strong>{{ number_format($prix->prix_unitaire, 0, ',', ' ') }}</strong></td>
                       <td>{{ $prix->date_debut->format('d/m/Y') }}</td>
                       <td>{{ $prix->date_fin ? $prix->date_fin->format('d/m/Y') : '-' }}</td>
@@ -82,7 +90,7 @@
                     </tr>
                   @empty
                     <tr>
-                      <td colspan="4" class="text-center text-muted py-3">Aucun prix défini</td>
+                      <td colspan="5" class="text-center text-muted py-3">Aucun prix défini</td>
                     </tr>
                   @endforelse
                 </tbody>
@@ -137,6 +145,15 @@
         @csrf
         <div class="modal-body">
           <div class="mb-3">
+            <label class="form-label">Produit <span class="text-danger">*</span></label>
+            <select name="produit_id" class="form-select" required>
+              <option value="">-- Sélectionner un produit --</option>
+              @foreach($produits as $produit)
+                <option value="{{ $produit->id }}">{{ $produit->nom }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="mb-3">
             <label class="form-label">Prix unitaire (FCFA) <span class="text-danger">*</span></label>
             <input type="number" name="prix_unitaire" class="form-control" required min="0" />
           </div>
@@ -176,6 +193,15 @@
         @method('PUT')
         <div class="modal-body">
           <div class="mb-3">
+            <label class="form-label">Produit <span class="text-danger">*</span></label>
+            <select name="produit_id" class="form-select" required>
+              <option value="">-- Sélectionner un produit --</option>
+              @foreach($produits as $produit)
+                <option value="{{ $produit->id }}" @selected((int) $prix->produit_id === (int) $produit->id)>{{ $produit->nom }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="mb-3">
             <label class="form-label">Prix unitaire (FCFA) <span class="text-danger">*</span></label>
             <input type="number" name="prix_unitaire" class="form-control" value="{{ $prix->prix_unitaire }}" required min="0" />
           </div>
@@ -210,7 +236,10 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        Voulez-vous vraiment supprimer le prix <strong>{{ number_format($prix->prix_unitaire, 0, ',', ' ') }} FCFA</strong> 
+        Voulez-vous vraiment supprimer le prix <strong>{{ number_format($prix->prix_unitaire, 0, ',', ' ') }} FCFA</strong>
+        @if($prix->produit || $prix->nom_produit)
+          pour <strong>{{ $prix->produit?->nom ?? $prix->nom_produit }}</strong>
+        @endif
         (du {{ $prix->date_debut->format('d/m/Y') }}{{ $prix->date_fin ? ' au ' . $prix->date_fin->format('d/m/Y') : '' }}) ?
       </div>
       <div class="modal-footer">

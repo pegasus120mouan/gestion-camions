@@ -366,11 +366,14 @@ class TransfertFinancierController extends Controller
                 ];
             })
             ->when($search !== '', function (Collection $collection) use ($search) {
-                $needle = mb_strtolower($search, 'UTF-8');
+                $needle = $this->normalizeSearch($search);
 
                 return $collection->filter(function (array $item) use ($needle) {
-                    return str_contains(mb_strtolower($item['client'], 'UTF-8'), $needle)
-                        || str_contains(mb_strtolower($item['client_id'], 'UTF-8'), $needle);
+                    $haystack = $this->normalizeSearch(
+                        ($item['client'] ?? '') . ' ' . ($item['client_id'] ?? '') . ' ' . ($item['code'] ?? '')
+                    );
+
+                    return $needle === '' || str_contains($haystack, $needle);
                 });
             })
             ->sortBy(fn (array $item) => mb_strtoupper($item['client'], 'UTF-8'))
@@ -421,9 +424,9 @@ class TransfertFinancierController extends Controller
             }
 
             if ($search !== '') {
-                $needle = mb_strtolower($search, 'UTF-8');
-                $label = mb_strtolower((string) $agg->client, 'UTF-8');
-                if (!str_contains($label, $needle) && !str_contains((string) $clientId, $needle)) {
+                $needle = $this->normalizeSearch($search);
+                $label = $this->normalizeSearch((string) $agg->client . ' ' . $clientId);
+                if ($needle !== '' && !str_contains($label, $needle)) {
                     continue;
                 }
             }
@@ -443,8 +446,32 @@ class TransfertFinancierController extends Controller
         }
 
         return $rows
+            ->when($search !== '', function (Collection $collection) use ($search) {
+                $needle = $this->normalizeSearch($search);
+
+                return $collection->filter(function (array $item) use ($needle) {
+                    $haystack = $this->normalizeSearch(
+                        ($item['client'] ?? '') . ' ' . ($item['client_id'] ?? '') . ' ' . ($item['code'] ?? '')
+                    );
+
+                    return $needle === '' || str_contains($haystack, $needle);
+                });
+            })
             ->sortBy(fn (array $item) => mb_strtoupper($item['client'], 'UTF-8'))
             ->values();
+    }
+
+    private function normalizeSearch(string $value): string
+    {
+        $value = mb_strtolower(trim($value), 'UTF-8');
+        if (class_exists(\Normalizer::class)) {
+            $normalized = \Normalizer::normalize($value, \Normalizer::FORM_D);
+            if (is_string($normalized)) {
+                $value = preg_replace('/\p{Mn}+/u', '', $normalized) ?? $value;
+            }
+        }
+
+        return $value;
     }
 
     /**

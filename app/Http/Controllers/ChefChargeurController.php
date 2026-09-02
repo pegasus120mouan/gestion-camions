@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ChefChargeur;
 use App\Models\ChefChargeurPrix;
+use App\Models\Produit;
 use Illuminate\Http\Request;
 
 class ChefChargeurController extends Controller
@@ -64,46 +65,30 @@ class ChefChargeurController extends Controller
 
     public function show(ChefChargeur $chefChargeur)
     {
-        $chefChargeur->load(['chargeurs', 'prixPeriodes']);
+        $chefChargeur->load(['chargeurs', 'prixPeriodes.produit']);
+        $produits = Produit::query()->orderBy('nom')->get();
 
         return view('chef_chargeurs.show', [
             'chef' => $chefChargeur,
+            'produits' => $produits,
         ]);
     }
 
     public function storePrix(Request $request, ChefChargeur $chefChargeur)
     {
         $validated = $request->validate([
+            'produit_id' => ['required', 'integer', 'exists:produits,id'],
             'prix_unitaire' => ['required', 'integer', 'min:0'],
             'date_debut' => ['required', 'date'],
-            'date_fin' => ['nullable', 'date'],
+            'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
         ]);
 
-        $dateDebut = $validated['date_debut'];
-        $dateFin = $validated['date_fin'] ?? null;
+        $produit = Produit::query()->findOrFail($validated['produit_id']);
+        $validated['nom_produit'] = $produit->nom;
 
-        $chevauchement = $chefChargeur->prixPeriodes()
-            ->where(function ($query) use ($dateDebut, $dateFin) {
-                $query->where(function ($q) use ($dateDebut, $dateFin) {
-                    $q->where('date_debut', '<=', $dateDebut)
-                      ->where(function ($q2) use ($dateDebut) {
-                          $q2->whereNull('date_fin')
-                             ->orWhere('date_fin', '>=', $dateDebut);
-                      });
-                })->orWhere(function ($q) use ($dateDebut, $dateFin) {
-                    if ($dateFin) {
-                        $q->where('date_debut', '<=', $dateFin)
-                          ->where('date_debut', '>=', $dateDebut);
-                    } else {
-                        $q->where('date_debut', '>=', $dateDebut);
-                    }
-                });
-            })
-            ->exists();
-
-        if ($chevauchement) {
+        if ($this->periodeChevauche($chefChargeur, $validated['produit_id'], $validated['date_debut'], $validated['date_fin'] ?? null)) {
             return redirect()->route('chef_chargeurs.show', $chefChargeur)
-                ->with('error', 'Cette période chevauche une période existante. Veuillez choisir des dates différentes.');
+                ->with('error', 'Cette période chevauche une période existante pour ce produit.');
         }
 
         $chefChargeur->prixPeriodes()->create($validated);
@@ -114,37 +99,24 @@ class ChefChargeurController extends Controller
     public function updatePrix(Request $request, ChefChargeur $chefChargeur, ChefChargeurPrix $prix)
     {
         $validated = $request->validate([
+            'produit_id' => ['required', 'integer', 'exists:produits,id'],
             'prix_unitaire' => ['required', 'integer', 'min:0'],
             'date_debut' => ['required', 'date'],
-            'date_fin' => ['nullable', 'date'],
+            'date_fin' => ['nullable', 'date', 'after_or_equal:date_debut'],
         ]);
 
-        $dateDebut = $validated['date_debut'];
-        $dateFin = $validated['date_fin'] ?? null;
+        $produit = Produit::query()->findOrFail($validated['produit_id']);
+        $validated['nom_produit'] = $produit->nom;
 
-        $chevauchement = $chefChargeur->prixPeriodes()
-            ->where('id', '!=', $prix->id)
-            ->where(function ($query) use ($dateDebut, $dateFin) {
-                $query->where(function ($q) use ($dateDebut, $dateFin) {
-                    $q->where('date_debut', '<=', $dateDebut)
-                      ->where(function ($q2) use ($dateDebut) {
-                          $q2->whereNull('date_fin')
-                             ->orWhere('date_fin', '>=', $dateDebut);
-                      });
-                })->orWhere(function ($q) use ($dateDebut, $dateFin) {
-                    if ($dateFin) {
-                        $q->where('date_debut', '<=', $dateFin)
-                          ->where('date_debut', '>=', $dateDebut);
-                    } else {
-                        $q->where('date_debut', '>=', $dateDebut);
-                    }
-                });
-            })
-            ->exists();
-
-        if ($chevauchement) {
+        if ($this->periodeChevauche(
+            $chefChargeur,
+            $validated['produit_id'],
+            $validated['date_debut'],
+            $validated['date_fin'] ?? null,
+            $prix->id
+        )) {
             return redirect()->route('chef_chargeurs.show', $chefChargeur)
-                ->with('error', 'Cette période chevauche une période existante. Veuillez choisir des dates différentes.');
+                ->with('error', 'Cette période chevauche une période existante pour ce produit.');
         }
 
         $prix->update($validated);
@@ -157,5 +129,34 @@ class ChefChargeurController extends Controller
         $prix->delete();
 
         return redirect()->route('chef_chargeurs.show', $chefChargeur)->with('success', 'Prix supprimé avec succès.');
+    }
+
+    private function periodeChevauche(
+        ChefChargeur $chefChargeur,
+        int $produitId,
+        string $dateDebut,
+        ?string $dateFin,
+        ?int $ignoreId = null
+    ): bool {
+        return $chefChargeur->prixPeriodes()
+            ->where('produit_id', $produitId)
+            ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
+            ->where(function ($query) use ($dateDebut, $dateFin) {
+                $query->where(function ($q) use ($dateDebut) {
+                    $q->where('date_debut', '<=', $dateDebut)
+                        ->where(function ($q2) use ($dateDebut) {
+                            $q2->whereNull('date_fin')
+                                ->orWhere('date_fin', '>=', $dateDebut);
+                        });
+                })->orWhere(function ($q) use ($dateDebut, $dateFin) {
+                    if ($dateFin) {
+                        $q->where('date_debut', '<=', $dateFin)
+                            ->where('date_debut', '>=', $dateDebut);
+                    } else {
+                        $q->where('date_debut', '>=', $dateDebut);
+                    }
+                });
+            })
+            ->exists();
     }
 }

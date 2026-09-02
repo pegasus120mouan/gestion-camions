@@ -1476,13 +1476,11 @@ class DepenseController extends Controller
             // Calculer le paiement chargeur si on a le poids et la date de chargement
             if ($chefChargeur && $ficheSortie->poids_pont && $ficheSortie->date_chargement) {
                 // Trouver le prix unitaire applicable à la date de chargement
-                $prixPeriode = \App\Models\ChefChargeurPrix::where('id_chef_chargeur', $chefChargeur->id)
-                    ->where('date_debut', '<=', $ficheSortie->date_chargement)
-                    ->where(function ($query) use ($ficheSortie) {
-                        $query->whereNull('date_fin')
-                              ->orWhere('date_fin', '>=', $ficheSortie->date_chargement);
-                    })
-                    ->first();
+                $prixPeriode = \App\Models\ChefChargeurPrix::findApplicable(
+                    (int) $chefChargeur->id,
+                    $ficheSortie->date_chargement,
+                    $ficheSortie->produit_id ? (int) $ficheSortie->produit_id : null
+                );
 
                 if ($prixPeriode) {
                     $prixUnitaireChargeur = $prixPeriode->prix_unitaire;
