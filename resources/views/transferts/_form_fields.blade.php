@@ -91,16 +91,12 @@
     </select>
   </div>
 
-  <div class="col-md-4">
+  <div class="col-md-6">
     <label class="form-label">Poids départ (kg)</label>
     <input type="number" name="poids_depart" class="form-control" min="0" step="0.01" value="{{ old('poids_depart', $t?->poids_depart) }}" />
   </div>
-  <div class="col-md-4">
+  <div class="col-md-6">
     <label class="form-label">Poids arrivée (kg)</label>
     <input type="number" name="poids_arrivee" class="form-control" min="0" step="0.01" value="{{ old('poids_arrivee', $t?->poids_arrivee) }}" />
-  </div>
-  <div class="col-md-4">
-    <label class="form-label">Montant (FCFA) <span class="text-danger">*</span></label>
-    <input type="number" name="montant" class="form-control" required min="0" step="1" value="{{ old('montant', $t?->montant) }}" />
   </div>
 </div>

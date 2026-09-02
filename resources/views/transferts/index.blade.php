@@ -6,6 +6,32 @@
 <style>
   .select2-container--bootstrap-5 .select2-selection { min-height: 38px; }
   .modal .select2-container { z-index: 1056; }
+  .transferts-table {
+    font-size: 0.78rem;
+    width: auto;
+    min-width: 100%;
+    table-layout: auto;
+  }
+  .transferts-table thead th {
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    padding: 0.4rem 0.45rem;
+  }
+  .transferts-table td {
+    vertical-align: middle;
+    padding: 0.35rem 0.45rem;
+    white-space: nowrap;
+  }
+  .transferts-table .btn-sm {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.45rem;
+  }
+  .transferts-table .btn-icon {
+    width: 1.65rem;
+    height: 1.65rem;
+    padding: 0;
+  }
 </style>
 @endsection
 
@@ -15,7 +41,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
         <h4 class="mb-1">Liste des transferts</h4>
-        <p class="text-muted mb-0">Enregistrement des transferts (chargement, véhicule, client, lieux, poids, montant)</p>
+        <p class="text-muted mb-0">Enregistrement des transferts (chargement, véhicule, client, lieux, poids)</p>
       </div>
       <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalCreateTransfert">
         <i class="bx bx-plus me-1"></i> Enregistrer un transfert
@@ -65,7 +91,7 @@
 
     <div class="card">
       <div class="table-responsive text-nowrap">
-        <table class="table">
+        <table class="table transferts-table">
           <thead>
             <tr>
               <th>Date chargement</th>
@@ -75,8 +101,10 @@
               <th>Destination</th>
               <th class="text-end">Poids départ</th>
               <th class="text-end">Poids arrivée</th>
+              <th class="text-end">Prix unitaire</th>
               <th class="text-end">Montant</th>
               <th>Statut</th>
+              <th>Paiement</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -94,8 +122,19 @@
                 <td class="text-end">
                   {{ $transfert->poids_arrivee !== null ? number_format((float) $transfert->poids_arrivee, 0, ',', ' ') : '—' }}
                 </td>
+                <td class="text-end">
+                  @if($transfert->prix_unitaire !== null)
+                    {{ number_format((float) $transfert->prix_unitaire, 0, ',', ' ') }}
+                  @else
+                    —
+                  @endif
+                </td>
                 <td class="text-end text-danger fw-semibold">
-                  {{ number_format((float) $transfert->montant, 0, ',', ' ') }} FCFA
+                  @if($transfert->montant !== null)
+                    {{ number_format((float) $transfert->montant, 0, ',', ' ') }} FCFA
+                  @else
+                    —
+                  @endif
                 </td>
                 <td>
                   @if(($transfert->statut ?? 'non_decharge') === 'decharge')
@@ -120,23 +159,75 @@
                   @endif
                 </td>
                 <td>
+                  @if(($transfert->paiement ?? 'non_paye') === 'paye')
+                    <button type="button" class="btn btn-sm btn-secondary" disabled>
+                      Payé
+                    </button>
+                  @else
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-danger"
+                      data-bs-toggle="modal"
+                      data-bs-target="#modalPayerTransfert"
+                      data-action="{{ route('transferts.payer', $transfert) }}"
+                      data-vehicule="{{ $transfert->matricule_vehicule }}"
+                      data-client="{{ $transfert->client }}"
+                      data-montant="{{ $transfert->montant }}"
+                      data-date="{{ $transfert->date_chargement?->format('d/m/Y') }}"
+                    >
+                      Non payé
+                    </button>
+                  @endif
+                </td>
+                <td>
+                  @php $estPaye = ($transfert->paiement ?? 'non_paye') === 'paye'; @endphp
                   <div class="d-flex gap-1">
-                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditTransfert{{ $transfert->id }}" title="Modifier">
+                    <button
+                      type="button"
+                      class="btn btn-sm {{ $estPaye ? 'btn-secondary' : 'btn-outline-success' }}"
+                      title="{{ $estPaye ? 'Actions verrouillées (payé)' : 'Prix unitaire' }}"
+                      @if($estPaye) disabled @else
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalPrixUnitaire"
+                        data-action="{{ route('transferts.prix_unitaire', $transfert) }}"
+                        data-vehicule="{{ $transfert->matricule_vehicule }}"
+                        data-client="{{ $transfert->client }}"
+                        data-poids="{{ $transfert->poids_arrivee ?? $transfert->poids_depart }}"
+                        data-prix="{{ $transfert->prix_unitaire }}"
+                      @endif
+                    >
+                      <i class="bx bx-money"></i>
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-sm {{ $estPaye ? 'btn-secondary' : 'btn-outline-primary' }}"
+                      title="{{ $estPaye ? 'Actions verrouillées (payé)' : 'Modifier' }}"
+                      @if($estPaye) disabled @else
+                        data-bs-toggle="modal"
+                        data-bs-target="#modalEditTransfert{{ $transfert->id }}"
+                      @endif
+                    >
                       <i class="bx bx-edit"></i>
                     </button>
-                    <form method="POST" action="{{ route('transferts.destroy', $transfert) }}" class="d-inline" onsubmit="return confirm('Supprimer ce transfert ?');">
-                      @csrf
-                      @method('DELETE')
-                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer">
+                    @if($estPaye)
+                      <button type="button" class="btn btn-sm btn-secondary" title="Actions verrouillées (payé)" disabled>
                         <i class="bx bx-trash"></i>
                       </button>
-                    </form>
+                    @else
+                      <form method="POST" action="{{ route('transferts.destroy', $transfert) }}" class="d-inline" onsubmit="return confirm('Supprimer ce transfert ?');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer">
+                          <i class="bx bx-trash"></i>
+                        </button>
+                      </form>
+                    @endif
                   </div>
                 </td>
               </tr>
             @empty
               <tr>
-                <td colspan="10" class="text-center py-4 text-muted">Aucun transfert enregistré</td>
+                <td colspan="12" class="text-center py-4 text-muted">Aucun transfert enregistré</td>
               </tr>
             @endforelse
           </tbody>
@@ -146,6 +237,99 @@
 
     <div class="mt-3">
       {{ $transferts->links() }}
+    </div>
+  </div>
+</div>
+
+{{-- Modal prix unitaire --}}
+<div class="modal fade" id="modalPrixUnitaire" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-success">
+        <h5 class="modal-title text-white">
+          <i class="bx bx-money me-2"></i>Renseigner le prix unitaire
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" id="formPrixUnitaire" action="#">
+        @csrf
+        <div class="modal-body">
+          <div class="rounded border bg-light p-3 mb-3">
+            <div class="row g-2 small">
+              <div class="col-5 text-muted">Véhicule</div>
+              <div class="col-7 fw-semibold" id="prixModalVehicule">—</div>
+              <div class="col-5 text-muted">Client</div>
+              <div class="col-7 fw-semibold" id="prixModalClient">—</div>
+              <div class="col-5 text-muted">Poids</div>
+              <div class="col-7 fw-semibold"><span id="prixModalPoids">—</span> kg</div>
+            </div>
+          </div>
+          <div class="mb-0">
+            <label class="form-label" for="prixUnitaireInput">Prix unitaire (FCFA) <span class="text-danger">*</span></label>
+            <input
+              type="number"
+              name="prix_unitaire"
+              id="prixUnitaireInput"
+              class="form-control form-control-lg"
+              min="0"
+              step="1"
+              required
+              placeholder="Ex: 80"
+            />
+            <div class="form-text">Le montant sera calculé automatiquement (prix × poids).</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-success">
+            <i class="bx bx-save me-1"></i>Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{{-- Modal confirmation paiement --}}
+<div class="modal fade" id="modalPayerTransfert" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-danger">
+        <h5 class="modal-title text-white">
+          <i class="bx bx-credit-card me-2"></i>Confirmer le paiement
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="POST" id="formPayerTransfert" action="#">
+        @csrf
+        <div class="modal-body">
+          <p class="mb-3">
+            Voulez-vous marquer ce transfert comme <strong>payé</strong>&nbsp;?
+          </p>
+          <div class="rounded border bg-light p-3">
+            <div class="row g-2 small">
+              <div class="col-5 text-muted">Date</div>
+              <div class="col-7 fw-semibold" id="paiementModalDate">—</div>
+              <div class="col-5 text-muted">Véhicule</div>
+              <div class="col-7 fw-semibold" id="paiementModalVehicule">—</div>
+              <div class="col-5 text-muted">Client</div>
+              <div class="col-7 fw-semibold" id="paiementModalClient">—</div>
+              <div class="col-5 text-muted">Montant</div>
+              <div class="col-7 fw-semibold text-danger" id="paiementModalMontant">—</div>
+            </div>
+          </div>
+          <div class="alert alert-danger border-0 mt-3 mb-0 py-2 small">
+            <i class="bx bx-info-circle me-1"></i>
+            Cette action est définitive : le statut de paiement passera à <strong>Payé</strong>.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-danger">
+            <i class="bx bx-check me-1"></i>Confirmer le paiement
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -417,6 +601,45 @@
       $('#dechargeModalDepart').text($btn.data('depart') || '—');
       $('#dechargeModalDestination').text($btn.data('destination') || '—');
     });
+
+    $(document).on('show.bs.modal', '#modalPayerTransfert', function (event) {
+      var button = event.relatedTarget;
+      if (!button) return;
+
+      var $btn = $(button);
+      var montant = $btn.data('montant');
+
+      $('#formPayerTransfert').attr('action', $btn.data('action') || '#');
+      $('#paiementModalDate').text($btn.data('date') || '—');
+      $('#paiementModalVehicule').text($btn.data('vehicule') || '—');
+      $('#paiementModalClient').text($btn.data('client') || '—');
+      $('#paiementModalMontant').text(
+        montant !== undefined && montant !== null && montant !== ''
+          ? Number(montant).toLocaleString('fr-FR') + ' FCFA'
+          : '—'
+      );
+    });
+
+    $(document).on('show.bs.modal', '#modalPrixUnitaire', function (event) {
+      var button = event.relatedTarget;
+      if (!button) return;
+
+      var $btn = $(button);
+      var prix = $btn.data('prix');
+      var poids = $btn.data('poids');
+
+      $('#formPrixUnitaire').attr('action', $btn.data('action') || '#');
+      $('#prixModalVehicule').text($btn.data('vehicule') || '—');
+      $('#prixModalClient').text($btn.data('client') || '—');
+      $('#prixModalPoids').text(poids !== undefined && poids !== null && poids !== ''
+        ? Number(poids).toLocaleString('fr-FR')
+        : '—');
+      $('#prixUnitaireInput').val(prix !== undefined && prix !== null && prix !== '' ? prix : '');
+    });
+
+    @if($errors->has('prix_unitaire'))
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('modalPrixUnitaire')).show();
+    @endif
   });
 })();
 </script>

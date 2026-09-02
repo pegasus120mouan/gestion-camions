@@ -476,6 +476,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/transferts', [TransfertController::class, 'store'])->name('transferts.store');
     Route::put('/transferts/{transfert}', [TransfertController::class, 'update'])->name('transferts.update');
     Route::post('/transferts/{transfert}/decharger', [TransfertController::class, 'markDecharge'])->name('transferts.decharger');
+    Route::post('/transferts/{transfert}/payer', [TransfertController::class, 'markPaye'])->name('transferts.payer');
+    Route::post('/transferts/{transfert}/prix-unitaire', [TransfertController::class, 'updatePrixUnitaire'])->name('transferts.prix_unitaire');
     Route::delete('/transferts/{transfert}', [TransfertController::class, 'destroy'])->name('transferts.destroy');
 
     // Clients (transferts) — Usines / Particuliers

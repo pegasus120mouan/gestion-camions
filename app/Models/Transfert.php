@@ -19,14 +19,19 @@ class Transfert extends Model
         'lieu_destination',
         'poids_depart',
         'poids_arrivee',
+        'prix_unitaire',
         'montant',
         'statut',
+        'paiement',
         'commentaire',
         'created_by',
     ];
 
     public const STATUT_NON_DECHARGE = 'non_decharge';
     public const STATUT_DECHARGE = 'decharge';
+
+    public const PAIEMENT_NON_PAYE = 'non_paye';
+    public const PAIEMENT_PAYE = 'paye';
 
     public function getStatutLabelAttribute(): string
     {
@@ -36,10 +41,19 @@ class Transfert extends Model
         };
     }
 
+    public function getPaiementLabelAttribute(): string
+    {
+        return match ($this->paiement) {
+            self::PAIEMENT_PAYE => 'Payé',
+            default => 'Non payé',
+        };
+    }
+
     protected $casts = [
         'date_chargement' => 'date',
         'poids_depart' => 'decimal:2',
         'poids_arrivee' => 'decimal:2',
+        'prix_unitaire' => 'decimal:2',
         'montant' => 'decimal:2',
     ];
 }

@@ -60,9 +60,10 @@ class TransfertController extends Controller
             'lieu_destination' => trim($validated['lieu_destination']),
             'poids_depart' => $validated['poids_depart'] ?? null,
             'poids_arrivee' => $validated['poids_arrivee'] ?? null,
-            'montant' => $validated['montant'],
+            'montant' => null,
             'statut' => Transfert::STATUT_NON_DECHARGE,
-            'commentaire' => $validated['commentaire'] ?? null,
+            'paiement' => Transfert::PAIEMENT_NON_PAYE,
+            'commentaire' => null,
             'created_by' => Auth::id(),
         ]);
 
@@ -73,6 +74,12 @@ class TransfertController extends Controller
 
     public function update(Request $request, Transfert $transfert)
     {
+        if ($this->isPaye($transfert)) {
+            return redirect()
+                ->route('transferts.index')
+                ->withErrors(['paiement' => 'Ce transfert est payé : modification impossible.']);
+        }
+
         $validated = $this->validateTransfert($request);
 
         $transfert->update([
@@ -86,8 +93,6 @@ class TransfertController extends Controller
             'lieu_destination' => trim($validated['lieu_destination']),
             'poids_depart' => $validated['poids_depart'] ?? null,
             'poids_arrivee' => $validated['poids_arrivee'] ?? null,
-            'montant' => $validated['montant'],
-            'commentaire' => $validated['commentaire'] ?? null,
         ]);
 
         return redirect()
@@ -97,6 +102,12 @@ class TransfertController extends Controller
 
     public function destroy(Transfert $transfert)
     {
+        if ($this->isPaye($transfert)) {
+            return redirect()
+                ->route('transferts.index')
+                ->withErrors(['paiement' => 'Ce transfert est payé : suppression impossible.']);
+        }
+
         $transfert->delete();
 
         return redirect()
@@ -121,6 +132,57 @@ class TransfertController extends Controller
             ->with('success', 'Transfert marqué comme déchargé.');
     }
 
+    public function markPaye(Transfert $transfert)
+    {
+        if (($transfert->paiement ?? Transfert::PAIEMENT_NON_PAYE) === Transfert::PAIEMENT_PAYE) {
+            return redirect()
+                ->route('transferts.index')
+                ->with('success', 'Ce transfert est déjà payé.');
+        }
+
+        $transfert->update([
+            'paiement' => Transfert::PAIEMENT_PAYE,
+        ]);
+
+        return redirect()
+            ->route('transferts.index')
+            ->with('success', 'Transfert marqué comme payé.');
+    }
+
+    public function updatePrixUnitaire(Request $request, Transfert $transfert)
+    {
+        if ($this->isPaye($transfert)) {
+            return redirect()
+                ->route('transferts.index')
+                ->withErrors(['paiement' => 'Ce transfert est payé : modification du prix impossible.']);
+        }
+
+        $validated = $request->validate([
+            'prix_unitaire' => ['required', 'numeric', 'min:0'],
+        ], [
+            'prix_unitaire.required' => 'Le prix unitaire est obligatoire.',
+            'prix_unitaire.numeric' => 'Le prix unitaire doit être un nombre.',
+        ]);
+
+        $prixUnitaire = (float) $validated['prix_unitaire'];
+        $poids = $transfert->poids_arrivee ?? $transfert->poids_depart;
+        $montant = $poids !== null ? round($prixUnitaire * (float) $poids, 2) : null;
+
+        $transfert->update([
+            'prix_unitaire' => $prixUnitaire,
+            'montant' => $montant,
+        ]);
+
+        return redirect()
+            ->route('transferts.index')
+            ->with('success', 'Prix unitaire enregistré avec succès.');
+    }
+
+    private function isPaye(Transfert $transfert): bool
+    {
+        return ($transfert->paiement ?? Transfert::PAIEMENT_NON_PAYE) === Transfert::PAIEMENT_PAYE;
+    }
+
     private function validateTransfert(Request $request): array
     {
         $validated = $request->validate([
@@ -134,8 +196,6 @@ class TransfertController extends Controller
             'lieu_destination' => ['required', 'string', 'max:255'],
             'poids_depart' => ['nullable', 'numeric', 'min:0'],
             'poids_arrivee' => ['nullable', 'numeric', 'min:0'],
-            'montant' => ['required', 'numeric', 'min:0'],
-            'commentaire' => ['nullable', 'string', 'max:1000'],
         ], [
             'date_chargement.required' => 'La date de chargement est obligatoire.',
             'matricule_vehicule.required' => 'Le véhicule est obligatoire.',
@@ -144,7 +204,6 @@ class TransfertController extends Controller
             'client.required' => 'Le client est obligatoire.',
             'lieu_depart.required' => 'Le lieu de départ est obligatoire.',
             'lieu_destination.required' => 'Le lieu de destination est obligatoire.',
-            'montant.required' => 'Le montant est obligatoire.',
         ]);
 
         $this->assertClientExists($validated['client_type'], $validated['client_id']);
