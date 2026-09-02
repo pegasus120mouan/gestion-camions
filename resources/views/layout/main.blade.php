@@ -162,6 +162,28 @@
 
 
 
+            <li class="menu-item {{ request()->routeIs('transferts.*') || request()->routeIs('clients.*') ? 'active open' : '' }}">
+              <a href="javascript:void(0);" class="menu-link menu-toggle">
+                <i class="menu-icon tf-icons bx bx-transfer-alt" style="color: #7367f0;"></i>
+                <div class="text-truncate" data-i18n="Layouts">Gestion des transferts</div>
+              </a>
+
+              <ul class="menu-sub">
+                <li class="menu-item {{ request()->routeIs('transferts.*') ? 'active' : '' }}">
+                  <a href="{{ route('transferts.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Without menu">Liste des transferts</div>
+                  </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('clients.*') ? 'active' : '' }}">
+                  <a href="{{ route('clients.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Without menu">Liste des clients</div>
+                  </a>
+                </li>
+              </ul>
+            </li>
+
+
+
 
            <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">

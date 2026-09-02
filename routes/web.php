@@ -15,6 +15,7 @@ use App\Http\Controllers\CommisController;
 use App\Http\Controllers\FinancementController;
 use App\Http\Controllers\AvanceTransporteurController;
 use App\Http\Controllers\UsineController;
+use App\Http\Controllers\ClientController;
 use App\Http\Controllers\StockPgfController;
 use App\Http\Controllers\GroupeController;
 use App\Http\Controllers\PlanteurController;
@@ -22,6 +23,7 @@ use App\Http\Controllers\MinioProxyController;
 use App\Http\Controllers\ChefChargeurController;
 use App\Http\Controllers\ChargeurController;
 use App\Http\Controllers\ChauffeurController;
+use App\Http\Controllers\TransfertController;
 use App\Http\Controllers\TransporteurController;
 use App\Http\Controllers\MontantChefChargeurController;
 use App\Http\Controllers\MontantFournisseurController;
@@ -468,6 +470,24 @@ Route::middleware('auth')->group(function () {
     Route::get('/gestion-financiere/transporteur/{transporteur}/bordereaux/{id}/pdf', [MontantTransporteurController::class, 'exportBordereauPdf'])->name('gestionfinanciere.transporteur.bordereau.pdf');
     Route::delete('/gestion-financiere/transporteur/{transporteur}/bordereaux/{id}', [MontantTransporteurController::class, 'destroyBordereau'])->name('gestionfinanciere.transporteur.bordereau.destroy');
     Route::post('/gestion-financiere/transporteur/{transporteur}/bordereaux/{id}/paiement', [MontantTransporteurController::class, 'storePaiementBordereau'])->name('gestionfinanciere.transporteur.bordereau.paiement.store');
+
+    // Transferts
+    Route::get('/transferts', [TransfertController::class, 'index'])->name('transferts.index');
+    Route::post('/transferts', [TransfertController::class, 'store'])->name('transferts.store');
+    Route::put('/transferts/{transfert}', [TransfertController::class, 'update'])->name('transferts.update');
+    Route::post('/transferts/{transfert}/decharger', [TransfertController::class, 'markDecharge'])->name('transferts.decharger');
+    Route::delete('/transferts/{transfert}', [TransfertController::class, 'destroy'])->name('transferts.destroy');
+
+    // Clients (transferts) — Usines / Particuliers
+    Route::get('/clients', [ClientController::class, 'index'])->name('clients.index');
+    Route::post('/clients', [ClientController::class, 'store'])->name('clients.store');
+    Route::get('/clients/usines/{id}', [ClientController::class, 'showUsine'])->name('clients.usines.show');
+    Route::post('/clients/sites', [ClientController::class, 'storeSite'])->name('clients.sites.store');
+    Route::put('/clients/sites/{site}', [ClientController::class, 'updateSite'])->name('clients.sites.update');
+    Route::delete('/clients/sites/{site}', [ClientController::class, 'destroySite'])->name('clients.sites.destroy');
+    Route::get('/clients/{client}', [ClientController::class, 'show'])->name('clients.show');
+    Route::put('/clients/{client}', [ClientController::class, 'update'])->name('clients.update');
+    Route::delete('/clients/{client}', [ClientController::class, 'destroy'])->name('clients.destroy');
 
     // Services
     Route::get('/services', [ServiceController::class, 'index'])->name('services.index');
