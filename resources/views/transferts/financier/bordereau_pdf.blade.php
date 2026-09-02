@@ -212,13 +212,14 @@
     <table class="data">
         <thead>
             <tr>
-                <th style="width:12%;">Date</th>
-                <th style="width:14%;">Véhicule</th>
-                <th style="width:18%;">Départ</th>
-                <th style="width:18%;">Destination</th>
-                <th style="width:12%;">Poids (Kg)</th>
-                <th style="width:12%;">Prix unit.</th>
-                <th style="width:14%;">Montant</th>
+                <th style="width:11%;">Date</th>
+                <th style="width:12%;">Véhicule</th>
+                <th style="width:14%;">Produit</th>
+                <th style="width:15%;">Départ</th>
+                <th style="width:15%;">Destination</th>
+                <th style="width:11%;">Poids (Kg)</th>
+                <th style="width:11%;">Prix unit.</th>
+                <th style="width:11%;">Montant</th>
             </tr>
         </thead>
         <tbody>
@@ -232,6 +233,7 @@
                         @endif
                     </td>
                     <td class="text-center">{{ $ligne['matricule_vehicule'] ?? '—' }}</td>
+                    <td class="text-center">{{ $ligne['nom_produit'] ?? '—' }}</td>
                     <td class="text-center">{{ $ligne['lieu_depart'] ?? '—' }}</td>
                     <td class="text-center">{{ $ligne['lieu_destination'] ?? '—' }}</td>
                     <td class="text-right">{{ number_format((float) ($ligne['poids'] ?? 0), 0, ',', ' ') }}</td>
@@ -246,11 +248,11 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7" class="text-center">Aucun transfert</td>
+                    <td colspan="8" class="text-center">Aucun transfert</td>
                 </tr>
             @endforelse
             <tr class="total-row">
-                <td colspan="4" class="total-label">TOTAL GÉNÉRAL</td>
+                <td colspan="5" class="total-label">TOTAL GÉNÉRAL</td>
                 <td class="text-right">{{ number_format((float) $bordereau->poids_total, 0, ',', ' ') }}</td>
                 <td></td>
                 <td class="text-right">{{ number_format((float) $bordereau->montant_total, 0, ',', ' ') }}</td>

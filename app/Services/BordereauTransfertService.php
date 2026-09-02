@@ -51,6 +51,8 @@ class BordereauTransfertService
                 'transfert_id' => $transfert->id,
                 'date_chargement' => $transfert->date_chargement?->format('Y-m-d'),
                 'matricule_vehicule' => $transfert->matricule_vehicule,
+                'produit_id' => $transfert->produit_id,
+                'nom_produit' => $transfert->nom_produit,
                 'lieu_depart' => $transfert->lieu_depart,
                 'lieu_destination' => $transfert->lieu_destination,
                 'poids' => $poids !== null ? (float) $poids : 0,

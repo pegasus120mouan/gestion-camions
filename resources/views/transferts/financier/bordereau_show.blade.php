@@ -56,6 +56,7 @@
             <tr>
               <th>Date</th>
               <th>Véhicule</th>
+              <th>Produit</th>
               <th>Départ</th>
               <th>Destination</th>
               <th class="text-end">Poids</th>
@@ -68,6 +69,7 @@
               <tr>
                 <td>{{ !empty($ligne['date_chargement']) ? \Carbon\Carbon::parse($ligne['date_chargement'])->format('d/m/Y') : '—' }}</td>
                 <td><strong>{{ $ligne['matricule_vehicule'] ?? '—' }}</strong></td>
+                <td>{{ $ligne['nom_produit'] ?? '—' }}</td>
                 <td>{{ $ligne['lieu_depart'] ?? '—' }}</td>
                 <td>{{ $ligne['lieu_destination'] ?? '—' }}</td>
                 <td class="text-end">{{ number_format((float) ($ligne['poids'] ?? 0), 0, ',', ' ') }}</td>
@@ -78,7 +80,7 @@
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="6" class="text-end fw-bold">Total</td>
+              <td colspan="7" class="text-end fw-bold">Total</td>
               <td class="text-end text-danger fw-bold">{{ number_format((float) $bordereau->montant_total, 0, ',', ' ') }} FCFA</td>
             </tr>
           </tfoot>

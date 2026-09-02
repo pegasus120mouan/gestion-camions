@@ -71,7 +71,7 @@
         <form method="GET" action="{{ route('transferts.index') }}" class="row g-3 align-items-end">
           <div class="col-md-4">
             <label class="form-label">Recherche</label>
-            <input type="text" name="q" class="form-control" value="{{ $search }}" placeholder="Véhicule, client, lieu..." />
+            <input type="text" name="q" class="form-control" value="{{ $search }}" placeholder="Véhicule, produit, client, lieu..." />
           </div>
           <div class="col-md-3">
             <label class="form-label">Date début</label>
@@ -96,6 +96,7 @@
             <tr>
               <th>Date chargement</th>
               <th>Véhicule</th>
+              <th>Produit</th>
               <th>Client</th>
               <th>Départ</th>
               <th>Destination</th>
@@ -112,6 +113,7 @@
               <tr>
                 <td>{{ $transfert->date_chargement?->format('d/m/Y') }}</td>
                 <td><strong>{{ $transfert->matricule_vehicule }}</strong></td>
+                <td>{{ $transfert->nom_produit ?: '—' }}</td>
                 <td>{{ $transfert->client }}</td>
                 <td>{{ $transfert->lieu_depart }}</td>
                 <td>{{ $transfert->lieu_destination }}</td>
@@ -205,7 +207,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="11" class="text-center py-4 text-muted">Aucun transfert enregistré</td>
+                <td colspan="12" class="text-center py-4 text-muted">Aucun transfert enregistré</td>
               </tr>
             @endforelse
           </tbody>
@@ -327,7 +329,7 @@
       <form method="POST" action="{{ route('transferts.store') }}">
         @csrf
         <div class="modal-body">
-          @include('transferts._form_fields', ['transfert' => null, 'vehicules' => $vehicules])
+          @include('transferts._form_fields', ['transfert' => null, 'vehicules' => $vehicules, 'produits' => $produits])
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
@@ -351,7 +353,7 @@
         @csrf
         @method('PUT')
         <div class="modal-body">
-          @include('transferts._form_fields', ['transfert' => $transfert, 'vehicules' => $vehicules])
+          @include('transferts._form_fields', ['transfert' => $transfert, 'vehicules' => $vehicules, 'produits' => $produits])
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
@@ -492,6 +494,8 @@
       syncVehiculeId($(this));
     });
     syncVehiculeId($form.find('.js-transfert-vehicule'));
+
+    initSelect2($form.find('.js-transfert-produit'), $modal);
 
     fillClientOptions($form, preferredClientId);
     initSelect2($form.find('.js-transfert-client'), $modal);

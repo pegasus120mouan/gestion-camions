@@ -15,6 +15,8 @@ class Transfert extends Model
         'client',
         'client_type',
         'client_id',
+        'produit_id',
+        'nom_produit',
         'lieu_depart',
         'lieu_destination',
         'poids_depart',
@@ -48,6 +50,11 @@ class Transfert extends Model
             self::PAIEMENT_PAYE => 'Payé',
             default => 'Non payé',
         };
+    }
+
+    public function produit()
+    {
+        return $this->belongsTo(Produit::class, 'produit_id');
     }
 
     protected $casts = [

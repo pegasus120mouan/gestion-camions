@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\ClientSite;
+use App\Models\Produit;
 use App\Models\Transfert;
 use App\Models\Usine;
 use Illuminate\Http\Request;
@@ -24,6 +25,7 @@ class TransfertController extends Controller
                 $query->where(function ($sub) use ($q) {
                     $sub->where('matricule_vehicule', 'like', '%' . $q . '%')
                         ->orWhere('client', 'like', '%' . $q . '%')
+                        ->orWhere('nom_produit', 'like', '%' . $q . '%')
                         ->orWhere('lieu_depart', 'like', '%' . $q . '%')
                         ->orWhere('lieu_destination', 'like', '%' . $q . '%');
                 });
@@ -39,6 +41,7 @@ class TransfertController extends Controller
             'transferts' => $transferts,
             'vehicules' => $this->fetchVehicules($request),
             'clientsOptions' => $this->buildClientsOptions(),
+            'produits' => Produit::query()->orderBy('nom')->get(),
             'search' => $q,
             'dateDebut' => $dateDebut,
             'dateFin' => $dateFin,
@@ -48,6 +51,7 @@ class TransfertController extends Controller
     public function store(Request $request)
     {
         $validated = $this->validateTransfert($request);
+        $produit = Produit::query()->findOrFail($validated['produit_id']);
 
         Transfert::create([
             'date_chargement' => $validated['date_chargement'],
@@ -56,6 +60,8 @@ class TransfertController extends Controller
             'client' => trim($validated['client']),
             'client_type' => $validated['client_type'],
             'client_id' => (string) $validated['client_id'],
+            'produit_id' => $produit->id,
+            'nom_produit' => $produit->nom,
             'lieu_depart' => trim($validated['lieu_depart']),
             'lieu_destination' => trim($validated['lieu_destination']),
             'poids_depart' => $validated['poids_depart'] ?? null,
@@ -81,6 +87,7 @@ class TransfertController extends Controller
         }
 
         $validated = $this->validateTransfert($request);
+        $produit = Produit::query()->findOrFail($validated['produit_id']);
 
         $transfert->update([
             'date_chargement' => $validated['date_chargement'],
@@ -89,6 +96,8 @@ class TransfertController extends Controller
             'client' => trim($validated['client']),
             'client_type' => $validated['client_type'],
             'client_id' => (string) $validated['client_id'],
+            'produit_id' => $produit->id,
+            'nom_produit' => $produit->nom,
             'lieu_depart' => trim($validated['lieu_depart']),
             'lieu_destination' => trim($validated['lieu_destination']),
             'poids_depart' => $validated['poids_depart'] ?? null,
@@ -175,6 +184,7 @@ class TransfertController extends Controller
             'client_type' => ['required', 'in:usine,particulier'],
             'client_id' => ['required', 'string', 'max:50'],
             'client' => ['required', 'string', 'max:255'],
+            'produit_id' => ['required', 'integer', 'exists:produits,id'],
             'lieu_depart' => ['required', 'string', 'max:255'],
             'lieu_destination' => ['required', 'string', 'max:255'],
             'poids_depart' => ['nullable', 'numeric', 'min:0'],
@@ -185,6 +195,8 @@ class TransfertController extends Controller
             'client_type.required' => 'Le type de client est obligatoire.',
             'client_id.required' => 'Le client est obligatoire.',
             'client.required' => 'Le client est obligatoire.',
+            'produit_id.required' => 'Le produit est obligatoire.',
+            'produit_id.exists' => 'Produit introuvable.',
             'lieu_depart.required' => 'Le lieu de départ est obligatoire.',
             'lieu_destination.required' => 'Le lieu de destination est obligatoire.',
         ]);

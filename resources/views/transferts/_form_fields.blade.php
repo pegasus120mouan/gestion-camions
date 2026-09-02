@@ -5,6 +5,7 @@
   $selectedClientType = old('client_type', $t?->client_type ?: 'usine');
   $selectedClientId = old('client_id', $t?->client_id);
   $selectedClientName = old('client', $t?->client);
+  $selectedProduitId = old('produit_id', $t?->produit_id);
   $selectedLieuDepart = old('lieu_depart', $t?->lieu_depart);
   $selectedLieuDestination = old('lieu_destination', $t?->lieu_destination);
 @endphp
@@ -51,6 +52,18 @@
     </select>
     <input type="hidden" name="vehicule_id" class="js-transfert-vehicule-id" value="{{ $selectedVehiculeId }}" />
     <div class="form-text">Tapez pour rechercher ou saisir un matricule.</div>
+  </div>
+
+  <div class="col-md-12">
+    <label class="form-label">Produit <span class="text-danger">*</span></label>
+    <select name="produit_id" class="form-select js-transfert-produit" data-placeholder="-- Choisir un produit --" required>
+      <option value="">-- Choisir un produit --</option>
+      @foreach(($produits ?? []) as $produit)
+        <option value="{{ $produit->id }}" @selected((string) $selectedProduitId === (string) $produit->id)>
+          {{ $produit->nom }}
+        </option>
+      @endforeach
+    </select>
   </div>
 
   <div class="col-md-12">

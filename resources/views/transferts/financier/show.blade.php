@@ -197,6 +197,7 @@
             <tr>
               <th>Date</th>
               <th>Véhicule</th>
+              <th>Produit</th>
               <th>Départ</th>
               <th>Destination</th>
               <th class="text-end">Poids</th>
@@ -212,6 +213,7 @@
               <tr>
                 <td>{{ $transfert->date_chargement?->format('d/m/Y') }}</td>
                 <td><strong>{{ $transfert->matricule_vehicule }}</strong></td>
+                <td>{{ $transfert->nom_produit ?: '—' }}</td>
                 <td>{{ $transfert->lieu_depart }}</td>
                 <td>{{ $transfert->lieu_destination }}</td>
                 <td class="text-end">
@@ -251,7 +253,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="10" class="text-center text-muted py-4">Aucun transfert pour ce client</td>
+                <td colspan="11" class="text-center text-muted py-4">Aucun transfert pour ce client</td>
               </tr>
             @endforelse
           </tbody>
@@ -373,6 +375,7 @@
                     <th style="width:40px"><input type="checkbox" id="checkAllTransferts" checked></th>
                     <th>Date</th>
                     <th>Véhicule</th>
+                    <th>Produit</th>
                     <th>Trajet</th>
                     <th class="text-end">Poids</th>
                     <th class="text-end">Montant</th>
@@ -483,6 +486,7 @@
             '<td><input type="checkbox" class="form-check-input check-transfert" name="transfert_ids[]" value="' + t.id + '" data-montant="' + t.montant + '" checked></td>' +
             '<td>' + (t.date_chargement || '—') + '</td>' +
             '<td><strong>' + (t.matricule_vehicule || '—') + '</strong></td>' +
+            '<td>' + (t.nom_produit || '—') + '</td>' +
             '<td>' + (t.lieu_depart || '—') + ' → ' + (t.lieu_destination || '—') + '</td>' +
             '<td class="text-end">' + Number(t.poids || 0).toLocaleString('fr-FR') + '</td>' +
             '<td class="text-end text-danger fw-semibold">' + formatMoney(t.montant) + '</td>';

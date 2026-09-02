@@ -114,6 +114,7 @@ class TransfertFinancierController extends Controller
                     'id' => $transfert->id,
                     'date_chargement' => $transfert->date_chargement?->format('d/m/Y'),
                     'matricule_vehicule' => $transfert->matricule_vehicule,
+                    'nom_produit' => $transfert->nom_produit,
                     'lieu_depart' => $transfert->lieu_depart,
                     'lieu_destination' => $transfert->lieu_destination,
                     'poids' => $poids !== null ? (float) $poids : 0,
