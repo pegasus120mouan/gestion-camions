@@ -24,6 +24,7 @@ use App\Http\Controllers\ChefChargeurController;
 use App\Http\Controllers\ChargeurController;
 use App\Http\Controllers\ChauffeurController;
 use App\Http\Controllers\TransfertController;
+use App\Http\Controllers\TransfertFinancierController;
 use App\Http\Controllers\TransporteurController;
 use App\Http\Controllers\MontantChefChargeurController;
 use App\Http\Controllers\MontantFournisseurController;
@@ -476,9 +477,18 @@ Route::middleware('auth')->group(function () {
     Route::post('/transferts', [TransfertController::class, 'store'])->name('transferts.store');
     Route::put('/transferts/{transfert}', [TransfertController::class, 'update'])->name('transferts.update');
     Route::post('/transferts/{transfert}/decharger', [TransfertController::class, 'markDecharge'])->name('transferts.decharger');
-    Route::post('/transferts/{transfert}/payer', [TransfertController::class, 'markPaye'])->name('transferts.payer');
     Route::post('/transferts/{transfert}/prix-unitaire', [TransfertController::class, 'updatePrixUnitaire'])->name('transferts.prix_unitaire');
     Route::delete('/transferts/{transfert}', [TransfertController::class, 'destroy'])->name('transferts.destroy');
+
+    // Gestion financière des transferts
+    Route::get('/transferts-financier', [TransfertFinancierController::class, 'index'])->name('transferts.financier.index');
+    Route::get('/transferts-financier/{type}/{id}', [TransfertFinancierController::class, 'show'])->name('transferts.financier.show');
+    Route::get('/transferts-financier/{type}/{id}/bordereaux/eligibles', [TransfertFinancierController::class, 'transfertsEligibles'])->name('transferts.financier.bordereau.eligibles');
+    Route::post('/transferts-financier/{type}/{id}/bordereaux', [TransfertFinancierController::class, 'storeBordereau'])->name('transferts.financier.bordereau.store');
+    Route::get('/transferts-financier/{type}/{id}/bordereaux/{bordereau}', [TransfertFinancierController::class, 'showBordereau'])->name('transferts.financier.bordereau.show');
+    Route::get('/transferts-financier/{type}/{id}/bordereaux/{bordereau}/pdf', [TransfertFinancierController::class, 'exportBordereauPdf'])->name('transferts.financier.bordereau.pdf');
+    Route::delete('/transferts-financier/{type}/{id}/bordereaux/{bordereau}', [TransfertFinancierController::class, 'destroyBordereau'])->name('transferts.financier.bordereau.destroy');
+    Route::post('/transferts-financier/{type}/{id}/bordereaux/{bordereau}/paiement', [TransfertFinancierController::class, 'storePaiementBordereau'])->name('transferts.financier.bordereau.paiement');
 
     // Clients (transferts) — Usines / Particuliers
     Route::get('/clients', [ClientController::class, 'index'])->name('clients.index');

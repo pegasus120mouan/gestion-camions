@@ -37,8 +37,8 @@
 
 @section('content')
 <div class="content-wrapper">
-  <div class="container-xxl flex-grow-1 container-p-y">
-    <div class="d-flex justify-content-between align-items-center mb-4">
+  <div class="container-xxl flex-grow-1 container-p-y pt-2">
+    <div class="d-flex justify-content-between align-items-center mb-3">
       <div>
         <h4 class="mb-1">Liste des transferts</h4>
         <p class="text-muted mb-0">Enregistrement des transferts (chargement, véhicule, client, lieux, poids)</p>
@@ -104,7 +104,6 @@
               <th class="text-end">Prix unitaire</th>
               <th class="text-end">Montant</th>
               <th>Statut</th>
-              <th>Paiement</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -159,33 +158,12 @@
                   @endif
                 </td>
                 <td>
-                  @if(($transfert->paiement ?? 'non_paye') === 'paye')
-                    <button type="button" class="btn btn-sm btn-secondary" disabled>
-                      Payé
-                    </button>
-                  @else
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-danger"
-                      data-bs-toggle="modal"
-                      data-bs-target="#modalPayerTransfert"
-                      data-action="{{ route('transferts.payer', $transfert) }}"
-                      data-vehicule="{{ $transfert->matricule_vehicule }}"
-                      data-client="{{ $transfert->client }}"
-                      data-montant="{{ $transfert->montant }}"
-                      data-date="{{ $transfert->date_chargement?->format('d/m/Y') }}"
-                    >
-                      Non payé
-                    </button>
-                  @endif
-                </td>
-                <td>
                   @php $estPaye = ($transfert->paiement ?? 'non_paye') === 'paye'; @endphp
                   <div class="d-flex gap-1">
                     <button
                       type="button"
                       class="btn btn-sm {{ $estPaye ? 'btn-secondary' : 'btn-outline-success' }}"
-                      title="{{ $estPaye ? 'Actions verrouillées (payé)' : 'Prix unitaire' }}"
+                      title="{{ $estPaye ? 'Actions verrouillées (payé via bordereau)' : 'Prix unitaire' }}"
                       @if($estPaye) disabled @else
                         data-bs-toggle="modal"
                         data-bs-target="#modalPrixUnitaire"
@@ -201,7 +179,7 @@
                     <button
                       type="button"
                       class="btn btn-sm {{ $estPaye ? 'btn-secondary' : 'btn-outline-primary' }}"
-                      title="{{ $estPaye ? 'Actions verrouillées (payé)' : 'Modifier' }}"
+                      title="{{ $estPaye ? 'Actions verrouillées (payé via bordereau)' : 'Modifier' }}"
                       @if($estPaye) disabled @else
                         data-bs-toggle="modal"
                         data-bs-target="#modalEditTransfert{{ $transfert->id }}"
@@ -210,7 +188,7 @@
                       <i class="bx bx-edit"></i>
                     </button>
                     @if($estPaye)
-                      <button type="button" class="btn btn-sm btn-secondary" title="Actions verrouillées (payé)" disabled>
+                      <button type="button" class="btn btn-sm btn-secondary" title="Actions verrouillées (payé via bordereau)" disabled>
                         <i class="bx bx-trash"></i>
                       </button>
                     @else
@@ -227,7 +205,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="12" class="text-center py-4 text-muted">Aucun transfert enregistré</td>
+                <td colspan="11" class="text-center py-4 text-muted">Aucun transfert enregistré</td>
               </tr>
             @endforelse
           </tbody>
@@ -283,50 +261,6 @@
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
           <button type="submit" class="btn btn-success">
             <i class="bx bx-save me-1"></i>Enregistrer
-          </button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-{{-- Modal confirmation paiement --}}
-<div class="modal fade" id="modalPayerTransfert" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0 shadow">
-      <div class="modal-header bg-danger">
-        <h5 class="modal-title text-white">
-          <i class="bx bx-credit-card me-2"></i>Confirmer le paiement
-        </h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-      </div>
-      <form method="POST" id="formPayerTransfert" action="#">
-        @csrf
-        <div class="modal-body">
-          <p class="mb-3">
-            Voulez-vous marquer ce transfert comme <strong>payé</strong>&nbsp;?
-          </p>
-          <div class="rounded border bg-light p-3">
-            <div class="row g-2 small">
-              <div class="col-5 text-muted">Date</div>
-              <div class="col-7 fw-semibold" id="paiementModalDate">—</div>
-              <div class="col-5 text-muted">Véhicule</div>
-              <div class="col-7 fw-semibold" id="paiementModalVehicule">—</div>
-              <div class="col-5 text-muted">Client</div>
-              <div class="col-7 fw-semibold" id="paiementModalClient">—</div>
-              <div class="col-5 text-muted">Montant</div>
-              <div class="col-7 fw-semibold text-danger" id="paiementModalMontant">—</div>
-            </div>
-          </div>
-          <div class="alert alert-danger border-0 mt-3 mb-0 py-2 small">
-            <i class="bx bx-info-circle me-1"></i>
-            Cette action est définitive : le statut de paiement passera à <strong>Payé</strong>.
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Annuler</button>
-          <button type="submit" class="btn btn-danger">
-            <i class="bx bx-check me-1"></i>Confirmer le paiement
           </button>
         </div>
       </form>
@@ -600,24 +534,6 @@
       $('#dechargeModalClient').text($btn.data('client') || '—');
       $('#dechargeModalDepart').text($btn.data('depart') || '—');
       $('#dechargeModalDestination').text($btn.data('destination') || '—');
-    });
-
-    $(document).on('show.bs.modal', '#modalPayerTransfert', function (event) {
-      var button = event.relatedTarget;
-      if (!button) return;
-
-      var $btn = $(button);
-      var montant = $btn.data('montant');
-
-      $('#formPayerTransfert').attr('action', $btn.data('action') || '#');
-      $('#paiementModalDate').text($btn.data('date') || '—');
-      $('#paiementModalVehicule').text($btn.data('vehicule') || '—');
-      $('#paiementModalClient').text($btn.data('client') || '—');
-      $('#paiementModalMontant').text(
-        montant !== undefined && montant !== null && montant !== ''
-          ? Number(montant).toLocaleString('fr-FR') + ' FCFA'
-          : '—'
-      );
     });
 
     $(document).on('show.bs.modal', '#modalPrixUnitaire', function (event) {

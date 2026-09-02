@@ -169,7 +169,7 @@
               </a>
 
               <ul class="menu-sub">
-                <li class="menu-item {{ request()->routeIs('transferts.*') ? 'active' : '' }}">
+                <li class="menu-item {{ request()->routeIs('transferts.*') && !request()->routeIs('transferts.financier.*') ? 'active' : '' }}">
                   <a href="{{ route('transferts.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Without menu">Liste des transferts</div>
                   </a>
@@ -177,6 +177,11 @@
                 <li class="menu-item {{ request()->routeIs('clients.*') ? 'active' : '' }}">
                   <a href="{{ route('clients.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Without menu">Liste des clients</div>
+                  </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('transferts.financier.*') ? 'active' : '' }}">
+                  <a href="{{ route('transferts.financier.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Without menu">Gestion Financière des transferts</div>
                   </a>
                 </li>
               </ul>
@@ -1565,7 +1570,7 @@
 
           <!-- Statistiques fiches de sortie (visible sur toutes les pages sauf dashboards) -->
           @if(!request()->routeIs('dashboard') && !request()->routeIs('dashboard.*') && !request()->routeIs('home'))
-            <div class="container-xxl flex-grow-1 container-p-y pb-0">
+            <div class="container-xxl container-p-y pb-0">
               @include('partials.fiches_sortie_stats')
             </div>
           @endif

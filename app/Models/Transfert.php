@@ -23,6 +23,7 @@ class Transfert extends Model
         'montant',
         'statut',
         'paiement',
+        'bordereau_transfert_id',
         'commentaire',
         'created_by',
     ];

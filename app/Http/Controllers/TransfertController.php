@@ -132,23 +132,6 @@ class TransfertController extends Controller
             ->with('success', 'Transfert marqué comme déchargé.');
     }
 
-    public function markPaye(Transfert $transfert)
-    {
-        if (($transfert->paiement ?? Transfert::PAIEMENT_NON_PAYE) === Transfert::PAIEMENT_PAYE) {
-            return redirect()
-                ->route('transferts.index')
-                ->with('success', 'Ce transfert est déjà payé.');
-        }
-
-        $transfert->update([
-            'paiement' => Transfert::PAIEMENT_PAYE,
-        ]);
-
-        return redirect()
-            ->route('transferts.index')
-            ->with('success', 'Transfert marqué comme payé.');
-    }
-
     public function updatePrixUnitaire(Request $request, Transfert $transfert)
     {
         if ($this->isPaye($transfert)) {

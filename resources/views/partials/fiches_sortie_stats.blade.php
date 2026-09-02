@@ -5,7 +5,7 @@
     $fichesDechargees = $fichesSortieStats['dechargees'];
 @endphp
 
-<div class="row mb-4">
+<div class="row mb-2">
   <div class="col-md-4">
     <div class="card text-white" style="background-color: #00bcd4;">
       <div class="card-body py-3">
