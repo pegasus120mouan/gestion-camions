@@ -738,14 +738,19 @@ class MontantAgentReportingService
     {
         return Cache::remember('montant_agent_usines_by_id', 3600, function () {
             $index = [];
-            foreach (Usine::all() as $ul) {
-                $index[(string) $ul->id_usine] = $ul->nom_usine;
-            }
 
+            // API d'abord : éviter qu'un id local (ex. AFIMEX=2) masque une usine API (SEHP=2).
             foreach ($this->usinesParProduit->fetchApiUsinesEnrichiesForLookup() as $u) {
                 $key = (string) ($u['id_usine'] ?? '');
-                if ($key !== '' && ! isset($index[$key])) {
+                if ($key !== '') {
                     $index[$key] = (string) ($u['nom_usine'] ?? '');
+                }
+            }
+
+            foreach (Usine::all() as $ul) {
+                $key = (string) $ul->id_usine;
+                if ($key !== '' && ! isset($index[$key])) {
+                    $index[$key] = $ul->nom_usine;
                 }
             }
 

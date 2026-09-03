@@ -193,11 +193,10 @@ class TicketController extends Controller
             'last_page' => $lastPage,
         ];
 
-        // Usines : base locale d'abord, complément API mis en cache 5 min
+        // Usines : API d'abord (tickets Unipalm), puis locales pour les ids absents.
+        // Les id_usine locaux et API peuvent entrer en collision (ex. API SEHP=2 vs local AFIMEX=2).
         $timeout = 10;
-        $usinesById = \App\Models\Usine::query()
-            ->pluck('nom_usine', 'id_usine')
-            ->all();
+        $usinesById = [];
 
         try {
             $usinesUrl = (string) config('services.external_auth.mes_usines_url', 'https://api.objetombrepegasus.online/api/camions/mes_usines.php');
@@ -234,11 +233,19 @@ class TicketController extends Controller
 
             foreach ($usinesApi as $u) {
                 $idUsine = (int) ($u['id_usine'] ?? 0);
-                if ($idUsine > 0 && ! isset($usinesById[$idUsine])) {
+                if ($idUsine > 0) {
                     $usinesById[$idUsine] = (string) ($u['nom_usine'] ?? '');
                 }
             }
         } catch (\Throwable $e) {}
+
+        foreach (\App\Models\Usine::query()->get(['id_usine', 'nom_usine']) as $ul) {
+            $idUsine = (int) $ul->id_usine;
+            if ($idUsine > 0 && ! isset($usinesById[$idUsine])) {
+                $usinesById[$idUsine] = (string) $ul->nom_usine;
+            }
+        }
+
         $agentsById = [];
         foreach ($agentsApi as $a) {
             $agentsById[$a['id_agent'] ?? 0] = $a['nom_complet'] ?? '';
@@ -387,14 +394,39 @@ class TicketController extends Controller
                     'produit_id' => $fiche->produit_id,
                     'id_agent' => $fiche->id_agent,
                     'nom_agent' => $fiche->nom_agent,
+                    'usine' => trim((string) ($fiche->usine ?? '')),
+                    'numero_ticket' => trim((string) ($fiche->numero_ticket ?? '')),
                 ];
             };
 
+            $ticketsByIdForFiche = [];
+            foreach ($ticketsArray as $t) {
+                $idT = (int) ($t['id_ticket'] ?? 0);
+                if ($idT > 0) {
+                    $ticketsByIdForFiche[$idT] = $t;
+                }
+            }
+
             foreach ($fiches as $fiche) {
                 $idTicketFiche = (int) ($fiche->id_ticket ?? 0);
-                if ($idTicketFiche > 0) {
-                    $fichesSortie[$idTicketFiche] = $mapFiche($fiche);
+                if ($idTicketFiche <= 0 || ! isset($ticketsByIdForFiche[$idTicketFiche])) {
+                    continue;
                 }
+
+                $ticketRef = $ticketsByIdForFiche[$idTicketFiche];
+                $numeroTicket = mb_strtolower(trim((string) ($ticketRef['numero_ticket'] ?? '')), 'UTF-8');
+                $numeroFiche = mb_strtolower(trim((string) ($fiche->numero_ticket ?? '')), 'UTF-8');
+                $usineTicket = mb_strtolower(trim((string) ($ticketRef['nom_usine'] ?? '')), 'UTF-8');
+                $usineFiche = mb_strtolower(trim((string) ($fiche->usine ?? '')), 'UTF-8');
+
+                // Évite les collisions d'id_ticket API/local : exiger N° ou usine concordants.
+                $numeroOk = $numeroTicket !== '' && $numeroFiche !== '' && $numeroTicket === $numeroFiche;
+                $usineOk = $usineTicket !== '' && $usineFiche !== '' && $usineTicket === $usineFiche;
+                if (! $numeroOk && ! $usineOk) {
+                    continue;
+                }
+
+                $fichesSortie[$idTicketFiche] = $mapFiche($fiche);
             }
 
             // Fiches liées seulement par N° ticket (id_ticket null) → rattacher au ticket local.
@@ -435,13 +467,21 @@ class TicketController extends Controller
                 $ticket['poids_parc'] = $fichesSortie[$idTicket]['poids_parc'];
                 $ticket['prix_unitaire_transport'] = $fichesSortie[$idTicket]['prix_unitaire_transport'];
                 $ticket['poids_unitaire_regime'] = $fichesSortie[$idTicket]['poids_unitaire_regime'];
-                $ticket['nom_produit'] = $fichesSortie[$idTicket]['nom_produit'];
-                $produitId = $fichesSortie[$idTicket]['produit_id'] ?? null;
                 $idAgentFiche = !empty($fichesSortie[$idTicket]['id_agent'])
                     ? (int) $fichesSortie[$idTicket]['id_agent']
                     : null;
                 if (($ticket['nom_agent'] ?? '-') === '-' && !empty($fichesSortie[$idTicket]['nom_agent'])) {
                     $ticket['nom_agent'] = $fichesSortie[$idTicket]['nom_agent'];
+                }
+
+                // Produit fiche uniquement si l'usine de la fiche correspond au ticket.
+                $usineTicket = mb_strtolower(trim((string) ($ticket['nom_usine'] ?? '')), 'UTF-8');
+                $usineFiche = mb_strtolower(trim((string) ($fichesSortie[$idTicket]['usine'] ?? '')), 'UTF-8');
+                if ($usineTicket !== '' && $usineFiche !== '' && $usineTicket === $usineFiche) {
+                    $ticket['nom_produit'] = $fichesSortie[$idTicket]['nom_produit'];
+                    $produitId = $fichesSortie[$idTicket]['produit_id'] ?? null;
+                } else {
+                    $ticket['nom_produit'] = null;
                 }
             } else {
                 $ticket['fiche_id'] = null;
@@ -2279,13 +2319,6 @@ class TicketController extends Controller
             return '—';
         }
 
-        $local = trim((string) (\App\Models\Usine::query()
-            ->where('id_usine', $idUsine)
-            ->value('nom_usine') ?? ''));
-        if ($local !== '') {
-            return $local;
-        }
-
         try {
             $usinesUrl = (string) config(
                 'services.external_auth.mes_usines_url',
@@ -2333,7 +2366,14 @@ class TicketController extends Controller
         } catch (\Throwable $e) {
         }
 
-        return 'Usine #' . $idUsine;
+        $local = trim((string) (\App\Models\Usine::query()
+            ->where('id_usine', $idUsine)
+            ->value('nom_usine') ?? ''));
+        if ($local !== '') {
+            return $local;
+        }
+
+        return '—';
     }
 
     /**

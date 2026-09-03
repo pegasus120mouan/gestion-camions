@@ -67,25 +67,31 @@ class UsinesParProduitService
      */
     public function produitPourUsine(?int $idUsine, ?string $nomUsine = null): ?array
     {
-        if ($idUsine !== null && $idUsine > 0) {
+        $nomFourni = trim((string) $nomUsine);
+
+        // Espace local (>= 5000) uniquement pour le match par id local.
+        if (Usine::isLocalId($idUsine)) {
             $locale = Usine::query()
                 ->where('id_usine', $idUsine)
                 ->with('produit')
                 ->first();
 
             if ($locale?->produit_id && $locale->produit) {
-                return [
-                    'produit_id' => (int) $locale->produit_id,
-                    'nom' => (string) $locale->produit->nom,
-                ];
+                if ($nomFourni === '' || $this->nomsUsineEquivalents($locale->nom_usine, $nomFourni)) {
+                    return [
+                        'produit_id' => (int) $locale->produit_id,
+                        'nom' => (string) $locale->produit->nom,
+                    ];
+                }
             }
 
-            if (($nomUsine === null || trim($nomUsine) === '') && $locale) {
+            if ($nomFourni === '' && $locale) {
                 $nomUsine = (string) $locale->nom_usine;
+                $nomFourni = trim($nomUsine);
             }
         }
 
-        $nom = trim((string) $nomUsine);
+        $nom = $nomFourni;
         $key = $nom !== '' ? mb_strtolower($nom, 'UTF-8') : '';
 
         if ($key !== '' && Schema::hasColumn('usines', 'produit_id')) {
@@ -107,10 +113,18 @@ class UsinesParProduitService
                 continue;
             }
 
+            $nomApi = trim((string) ($usine['nom_usine'] ?? ''));
             $match = false;
-            if ($idUsine !== null && $idUsine > 0 && (int) ($usine['id_usine'] ?? 0) === $idUsine) {
+
+            if ($key !== '' && mb_strtolower($nomApi, 'UTF-8') === $key) {
                 $match = true;
-            } elseif ($key !== '' && mb_strtolower(trim((string) ($usine['nom_usine'] ?? '')), 'UTF-8') === $key) {
+            } elseif (
+                $idUsine !== null
+                && $idUsine > 0
+                && ! Usine::isLocalId($idUsine)
+                && (int) ($usine['id_usine'] ?? 0) === $idUsine
+                && ($key === '' || $this->nomsUsineEquivalents($nomApi, $nom))
+            ) {
                 $match = true;
             }
 
@@ -145,6 +159,14 @@ class UsinesParProduitService
         }
 
         return null;
+    }
+
+    private function nomsUsineEquivalents(?string $a, ?string $b): bool
+    {
+        $na = mb_strtolower(trim((string) $a), 'UTF-8');
+        $nb = mb_strtolower(trim((string) $b), 'UTF-8');
+
+        return $na !== '' && $nb !== '' && $na === $nb;
     }
 
     /**

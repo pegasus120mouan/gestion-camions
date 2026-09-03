@@ -261,9 +261,6 @@ class MontantParticulierReportingService
     private function buildUsinesById(): array
     {
         $index = [];
-        foreach (Usine::all() as $ul) {
-            $index[(int) $ul->id_usine] = $ul->nom_usine;
-        }
 
         try {
             $url = (string) config('services.external_auth.mes_usines_url');
@@ -272,12 +269,19 @@ class MontantParticulierReportingService
             if ($resp->successful()) {
                 foreach ($resp->json('usines') ?? [] as $u) {
                     $id = (int) ($u['id_usine'] ?? 0);
-                    if ($id > 0 && !isset($index[$id])) {
+                    if ($id > 0) {
                         $index[$id] = $u['nom_usine'] ?? '';
                     }
                 }
             }
         } catch (\Throwable $e) {
+        }
+
+        foreach (Usine::all() as $ul) {
+            $id = (int) $ul->id_usine;
+            if ($id > 0 && ! isset($index[$id])) {
+                $index[$id] = $ul->nom_usine;
+            }
         }
 
         return $index;
