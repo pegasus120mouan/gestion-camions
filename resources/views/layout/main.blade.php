@@ -220,7 +220,7 @@
 
 
 
-             <li class="menu-item">
+             <li class="menu-item {{ request()->routeIs('tickets.*') ? 'open' : '' }}">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-map" style="color: #00cfe8;"></i>
                 <div class="text-truncate" data-i18n="Weighbridges">Tickets</div>
@@ -240,11 +240,31 @@
                     <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets locaux</div>
                   </a>
                 </li>
-                <li class="menu-item {{ request()->routeIs('tickets.index') && request('statut') === 'en_attente' ? 'active' : '' }}">
-                  <a href="{{ route('tickets.index', ['statut' => 'en_attente']) }}" class="menu-link">
+                <li class="menu-item {{ request()->routeIs('tickets.index') && request('statut') === 'en_attente' ? 'active open' : '' }}">
+                  <a href="javascript:void(0);" class="menu-link menu-toggle">
                     <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets en attente</div>
-                    <span class="badge rounded-pill bg-danger ms-auto">{{ $ticketsEnAttenteCount ?? 0 }}</span>
+                    @if(($ticketsEnAttenteCount ?? 0) > 0)
+                      <span class="badge rounded-pill bg-danger ms-auto">{{ $ticketsEnAttenteCount }}</span>
+                    @endif
                   </a>
+                  <ul class="menu-sub">
+                    <li class="menu-item {{ request()->routeIs('tickets.index') && request('statut') === 'en_attente' && request('type') === 'professionnel' ? 'active' : '' }}">
+                      <a href="{{ route('tickets.index', ['statut' => 'en_attente', 'type' => 'professionnel']) }}" class="menu-link">
+                        <div class="text-truncate">Tickets professionnels</div>
+                        @if(($ticketsEnAttenteProfessionnelCount ?? 0) > 0)
+                          <span class="badge rounded-pill bg-danger ms-auto">{{ $ticketsEnAttenteProfessionnelCount }}</span>
+                        @endif
+                      </a>
+                    </li>
+                    <li class="menu-item {{ request()->routeIs('tickets.index') && request('statut') === 'en_attente' && request('type') === 'particulier' ? 'active' : '' }}">
+                      <a href="{{ route('tickets.index', ['statut' => 'en_attente', 'type' => 'particulier']) }}" class="menu-link">
+                        <div class="text-truncate">Tickets particuliers</div>
+                        @if(($ticketsEnAttenteParticulierCount ?? 0) > 0)
+                          <span class="badge rounded-pill bg-danger ms-auto">{{ $ticketsEnAttenteParticulierCount }}</span>
+                        @endif
+                      </a>
+                    </li>
+                  </ul>
                 </li>
                 <li class="menu-item {{ request()->routeIs('tickets.unipalm') ? 'active' : '' }}">
                   <a href="{{ route('tickets.unipalm') }}" class="menu-link">

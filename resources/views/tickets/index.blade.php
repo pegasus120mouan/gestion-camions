@@ -51,7 +51,11 @@
   $ticketsIndexRoute = $ticketsIndexRoute ?? 'tickets.index';
   $ticketsQueryBase = !empty($onlyCamionsPgf)
     ? request()->only(['vehicule', 'agent', 'statut', 'date_debut', 'date_fin', 'numero'])
-    : request()->only(['vehicule', 'usine', 'agent', 'statut', 'numero']);
+    : request()->only(['vehicule', 'usine', 'agent', 'statut', 'numero', 'type']);
+  $enAttenteParams = ['statut' => 'en_attente'];
+  if (!empty($typeTicket)) {
+    $enAttenteParams['type'] = $typeTicket;
+  }
 @endphp
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
@@ -62,6 +66,10 @@
             Activités camions PGF
           @elseif (!empty($onlyLocaux))
             Mes tickets locaux
+          @elseif (!empty($enAttenteOnly) && ($typeTicket ?? '') === 'particulier')
+            Mes tickets particuliers en attente
+          @elseif (!empty($enAttenteOnly) && ($typeTicket ?? '') === 'professionnel')
+            Mes tickets professionnels en attente
           @elseif (!empty($enAttenteOnly))
             Mes tickets en attente
           @else
@@ -200,6 +208,9 @@
         <form method="GET" action="{{ route($ticketsIndexRoute) }}" class="row g-3">
           @if(!empty($enAttenteOnly))
             <input type="hidden" name="statut" value="en_attente" />
+            @if(!empty($typeTicket))
+              <input type="hidden" name="type" value="{{ $typeTicket }}" />
+            @endif
           @endif
           <div class="col-md-2">
             <label class="form-label">N° ticket</label>
@@ -224,7 +235,7 @@
           </div>
           <div class="col-md-4 d-flex align-items-end gap-2">
             <button type="submit" class="btn btn-primary">Rechercher</button>
-            <a href="{{ route($ticketsIndexRoute, !empty($enAttenteOnly) ? ['statut' => 'en_attente'] : []) }}" class="btn btn-outline-secondary">Reinitialiser</a>
+            <a href="{{ route($ticketsIndexRoute, !empty($enAttenteOnly) ? $enAttenteParams : []) }}" class="btn btn-outline-secondary">Reinitialiser</a>
           </div>
         </form>
       </div>

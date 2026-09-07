@@ -34,11 +34,18 @@ class AppServiceProvider extends ServiceProvider
                 ->count();
 
             $ticketsEnAttenteCount = 0;
+            $ticketsEnAttenteProfessionnelCount = 0;
+            $ticketsEnAttenteParticulierCount = 0;
             try {
-                $ticketsEnAttenteCount = app(\App\Services\MesTicketsService::class)
-                    ->countTicketsEnAttente(request());
+                $counts = app(\App\Services\MesTicketsService::class)
+                    ->countsTicketsEnAttente(request());
+                $ticketsEnAttenteCount = (int) ($counts['total'] ?? 0);
+                $ticketsEnAttenteProfessionnelCount = (int) ($counts['professionnel'] ?? 0);
+                $ticketsEnAttenteParticulierCount = (int) ($counts['particulier'] ?? 0);
             } catch (\Throwable) {
                 $ticketsEnAttenteCount = 0;
+                $ticketsEnAttenteProfessionnelCount = 0;
+                $ticketsEnAttenteParticulierCount = 0;
             }
 
             $chefSession = app(\App\Services\ChefEquipeSession::class);
@@ -60,6 +67,8 @@ class AppServiceProvider extends ServiceProvider
             $view->with([
                 'peseesTodayCount' => $peseesTodayCount,
                 'ticketsEnAttenteCount' => $ticketsEnAttenteCount,
+                'ticketsEnAttenteProfessionnelCount' => $ticketsEnAttenteProfessionnelCount,
+                'ticketsEnAttenteParticulierCount' => $ticketsEnAttenteParticulierCount,
                 'showSoldeChefBanner' => $showSoldeChefBanner,
                 'soldeChef' => $soldeChef,
                 'soldeChefToken' => $soldeChefToken,

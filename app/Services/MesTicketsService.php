@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Ticket;
 use App\Models\TicketValidation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -665,30 +666,42 @@ class MesTicketsService
 
     public function countTicketsEnAttente(?Request $request = null): int
     {
-        $request ??= request();
-        $cacheKey = 'tickets_en_attente_count:'.$this->ticketsCacheKey([], $request);
+        return $this->countsTicketsEnAttente($request)['total'];
+    }
 
-        return (int) Cache::remember($cacheKey, 120, function () use ($request) {
+    /**
+     * @return array{total: int, professionnel: int, particulier: int}
+     */
+    public function countsTicketsEnAttente(?Request $request = null): array
+    {
+        $request ??= request();
+        $cacheKey = 'tickets_en_attente_counts:'.$this->ticketsCacheKey([], $request);
+
+        return Cache::remember($cacheKey, 120, function () use ($request) {
+            $empty = ['total' => 0, 'professionnel' => 0, 'particulier' => 0];
             $chefParams = $this->chefContext->apiQueryParams($request);
             $token = trim((string) ($chefParams['token'] ?? ''));
             $idChef = (int) ($chefParams['id_chef'] ?? 0);
 
             if ($token === '' && $idChef <= 0) {
-                return 0;
+                return $empty;
             }
 
             $connection = $this->databaseResolver->connection();
             if ($connection !== null && ! $this->databaseResolver->usesApi()) {
-                return $this->countEnAttenteFromDatabase($token, $idChef, $connection);
+                $tickets = $this->enAttenteTicketsFromDatabase($token, $idChef, $connection);
+            } else {
+                $tickets = $this->filterTicketsNonValides($this->fetchAllTickets([], $request));
             }
 
-            $all = $this->fetchAllTickets([], $request);
-
-            return count($this->filterTicketsNonValides($all));
+            return $this->splitEnAttenteCounts($tickets);
         });
     }
 
-    private function countEnAttenteFromDatabase(string $token, int $idChef, string $connection): int
+    /**
+     * @return list<array{id_ticket: int, numero_ticket: string}>
+     */
+    private function enAttenteTicketsFromDatabase(string $token, int $idChef, string $connection): array
     {
         $bindings = [];
         $where = ['a.date_suppression IS NULL'];
@@ -704,7 +717,7 @@ class MesTicketsService
         $whereSql = implode(' AND ', $where);
 
         $rows = DB::connection($connection)->select(
-            "SELECT t.id_ticket
+            "SELECT t.id_ticket, t.numero_ticket
             FROM tickets t
             INNER JOIN agents a ON a.id_agent = t.id_agent
             INNER JOIN chef_equipe ce ON ce.id_chef = a.id_chef
@@ -712,24 +725,99 @@ class MesTicketsService
             $bindings
         );
 
-        $ids = array_map(static fn ($row) => (int) $row->id_ticket, $rows);
-        if ($ids === []) {
-            return 0;
-        }
+        $tickets = array_map(static fn ($row) => [
+            'id_ticket' => (int) $row->id_ticket,
+            'numero_ticket' => (string) ($row->numero_ticket ?? ''),
+        ], $rows);
 
-        $validated = TicketValidation::query()
-            ->whereIn('id_ticket', $ids)
+        return $this->filterTicketsNonValides($tickets);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $tickets
+     * @return array{total: int, professionnel: int, particulier: int}
+     */
+    private function splitEnAttenteCounts(array $tickets): array
+    {
+        $locauxParticuliers = Ticket::query()
+            ->whereNotNull('particulier_agent_id')
+            ->get(['id_ticket', 'numero_ticket']);
+
+        $idsParticuliers = $locauxParticuliers
             ->pluck('id_ticket')
+            ->map(static fn ($id) => (int) $id)
+            ->filter()
+            ->flip()
+            ->all();
+        $numerosParticuliers = $locauxParticuliers
+            ->pluck('numero_ticket')
+            ->map(static fn ($n) => mb_strtolower(trim((string) $n), 'UTF-8'))
+            ->filter()
             ->flip()
             ->all();
 
-        return count(array_filter($ids, static fn (int $id) => ! isset($validated[$id])));
+        $particulier = 0;
+        $seenIds = [];
+        $seenNumeros = [];
+
+        foreach ($tickets as $ticket) {
+            $id = (int) ($ticket['id_ticket'] ?? 0);
+            $numero = mb_strtolower(trim((string) ($ticket['numero_ticket'] ?? '')), 'UTF-8');
+            if ($id > 0) {
+                $seenIds[$id] = true;
+            }
+            if ($numero !== '') {
+                $seenNumeros[$numero] = true;
+            }
+
+            $estParticulier = ! empty($ticket['particulier_agent_id'])
+                || ($id > 0 && isset($idsParticuliers[$id]))
+                || ($numero !== '' && isset($numerosParticuliers[$numero]));
+
+            if ($estParticulier) {
+                $particulier++;
+            }
+        }
+
+        $locauxSeuls = [];
+        foreach (Ticket::query()->get(['id_ticket', 'numero_ticket', 'particulier_agent_id']) as $local) {
+            $id = (int) $local->id_ticket;
+            $numero = mb_strtolower(trim((string) $local->numero_ticket), 'UTF-8');
+            if (($id > 0 && isset($seenIds[$id])) || ($numero !== '' && isset($seenNumeros[$numero]))) {
+                continue;
+            }
+
+            $locauxSeuls[] = [
+                'id_ticket' => $id,
+                'numero_ticket' => (string) ($local->numero_ticket ?? ''),
+                'particulier_agent_id' => $local->particulier_agent_id,
+            ];
+        }
+
+        if ($locauxSeuls !== []) {
+            foreach ($this->filterTicketsNonValides($locauxSeuls) as $ticket) {
+                $tickets[] = $ticket;
+                if (! empty($ticket['particulier_agent_id'])) {
+                    $particulier++;
+                }
+            }
+        }
+
+        $total = count($tickets);
+
+        return [
+            'total' => $total,
+            'particulier' => $particulier,
+            'professionnel' => max(0, $total - $particulier),
+        ];
     }
 
     public function forgetEnAttenteCountCache(?Request $request = null): void
     {
         $request ??= request();
-        Cache::forget('tickets_en_attente_count:'.$this->ticketsCacheKey([], $request));
+        $suffix = $this->ticketsCacheKey([], $request);
+        Cache::forget('tickets_en_attente_count:'.$suffix);
+        Cache::forget('tickets_en_attente_counts:'.$suffix);
     }
 
     /**

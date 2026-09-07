@@ -61,6 +61,10 @@ class TicketController extends Controller
         $dateFin = trim((string) $request->query('date_fin', ''));
         $statutPaiement = trim((string) $request->query('statut', ''));
         $enAttenteOnly = $statutPaiement === 'en_attente';
+        $typeTicket = trim((string) $request->query('type', ''));
+        if (! in_array($typeTicket, ['professionnel', 'particulier'], true)) {
+            $typeTicket = '';
+        }
         $onlyLocaux = $request->routeIs('tickets.locaux');
         $onlyCamionsPgf = $request->routeIs('camions.activites') || $request->boolean('camion_pgf');
         if ($onlyCamionsPgf && ! in_array($statutPaiement, ['', 'paye', 'non_paye'], true)) {
@@ -86,9 +90,13 @@ class TicketController extends Controller
                 $externalError = $probe['error'] ?? null;
             }
         }
+        if ($enAttenteOnly && ! $onlyLocaux) {
+            $allTickets = $this->mergeLocalTicketsIntoList($allTickets);
+        }
         $filteredTickets = $this->mesTicketsService->filterTickets($allTickets, $vehicule, $usine, $agent, $numero);
         if ($enAttenteOnly) {
             $filteredTickets = $this->mesTicketsService->filterTicketsNonValides($filteredTickets);
+            $filteredTickets = $this->filtrerTicketsParType($filteredTickets, $typeTicket);
         }
         if ($onlyCamionsPgf) {
             $vehiculesPgfLookupEarly = $this->vehiculesPgfLookup();
@@ -815,6 +823,7 @@ class TicketController extends Controller
             'parcsParPontProduit' => $parcsParPontProduit,
             'external_error' => $externalError,
             'enAttenteOnly' => $enAttenteOnly,
+            'typeTicket' => $typeTicket,
             'onlyCamionsPgf' => $onlyCamionsPgf,
             'onlyLocaux' => $onlyLocaux,
             'ticketsIndexRoute' => $ticketsIndexRoute,
@@ -823,6 +832,46 @@ class TicketController extends Controller
                 ? $this->fichesDisponiblesPourAssociation()
                 : collect(),
         ]);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $tickets
+     * @return list<array<string, mixed>>
+     */
+    private function filtrerTicketsParType(array $tickets, string $type): array
+    {
+        if (! in_array($type, ['professionnel', 'particulier'], true)) {
+            return $tickets;
+        }
+
+        $locauxParticuliers = Ticket::query()
+            ->whereNotNull('particulier_agent_id')
+            ->get(['id_ticket', 'numero_ticket']);
+
+        $ids = $locauxParticuliers
+            ->pluck('id_ticket')
+            ->map(static fn ($id) => (int) $id)
+            ->filter()
+            ->flip()
+            ->all();
+        $numeros = $locauxParticuliers
+            ->pluck('numero_ticket')
+            ->map(static fn ($n) => mb_strtolower(trim((string) $n), 'UTF-8'))
+            ->filter()
+            ->flip()
+            ->all();
+
+        return array_values(array_filter($tickets, function (array $ticket) use ($type, $ids, $numeros) {
+            $estParticulier = ! empty($ticket['particulier_agent_id']);
+            if (! $estParticulier) {
+                $id = (int) ($ticket['id_ticket'] ?? 0);
+                $numero = mb_strtolower(trim((string) ($ticket['numero_ticket'] ?? '')), 'UTF-8');
+                $estParticulier = ($id > 0 && isset($ids[$id]))
+                    || ($numero !== '' && isset($numeros[$numero]));
+            }
+
+            return $type === 'particulier' ? $estParticulier : ! $estParticulier;
+        }));
     }
 
     /**
