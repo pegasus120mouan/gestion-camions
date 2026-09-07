@@ -143,7 +143,41 @@ class MesAgentsService
         return $this->cachedChefAgentIds = array_values(array_unique($ids));
     }
 
+    /**
+     * Agents Unipalm du chef dont le sous-groupe est Particuliers.
+     *
+     * @return array{ids: array<int, true>, noms: array<string, true>}
+     */
+    public function particuliersLookup(?Request $request = null): array
+    {
+        if ($this->cachedParticuliersLookup !== null) {
+            return $this->cachedParticuliersLookup;
+        }
+
+        $ids = [];
+        $noms = [];
+        foreach ($this->fetchAllAgents(['sous_groupe' => 'particulier'], $request) as $agent) {
+            $id = (int) ($agent['id_agent'] ?? 0);
+            if ($id > 0) {
+                $ids[$id] = true;
+            }
+
+            $nom = mb_strtolower(trim((string) ($agent['nom_complet'] ?? '')), 'UTF-8');
+            if ($nom !== '') {
+                $noms[$nom] = true;
+            }
+        }
+
+        return $this->cachedParticuliersLookup = [
+            'ids' => $ids,
+            'noms' => $noms,
+        ];
+    }
+
     private ?array $cachedChefAgentIds = null;
+
+    /** @var array{ids: array<int, true>, noms: array<string, true>}|null */
+    private ?array $cachedParticuliersLookup = null;
 
     /** @var array<string, list<array<string, mixed>>> */
     private array $cachedAllAgents = [];

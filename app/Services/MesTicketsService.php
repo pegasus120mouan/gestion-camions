@@ -18,6 +18,7 @@ class MesTicketsService
     public function __construct(
         private CamionsDatabaseResolver $databaseResolver,
         private ChefEquipeContext $chefContext,
+        private MesAgentsService $mesAgentsService,
     ) {}
 
     /**
@@ -664,6 +665,96 @@ class MesTicketsService
         ));
     }
 
+    /**
+     * Unipalm (sous-groupe Particuliers) en priorité, puis tickets locaux liés à un agent particulier.
+     *
+     * @param  list<array<string, mixed>>  $tickets
+     * @return list<array<string, mixed>>
+     */
+    public function filtrerTicketsParType(array $tickets, string $type, ?Request $request = null): array
+    {
+        if (! in_array($type, ['professionnel', 'particulier'], true)) {
+            return $tickets;
+        }
+
+        $lookup = $this->ticketParticulierLookup($request);
+
+        return array_values(array_filter(
+            $tickets,
+            fn (array $ticket): bool => $type === 'particulier'
+                ? $this->ticketEstParticulier($ticket, $lookup)
+                : ! $this->ticketEstParticulier($ticket, $lookup)
+        ));
+    }
+
+    /**
+     * @return array{
+     *     unipalmIds: array<int, true>,
+     *     unipalmNoms: array<string, true>,
+     *     locauxIds: array<int, true>,
+     *     locauxNumeros: array<string, true>
+     * }
+     */
+    private function ticketParticulierLookup(?Request $request = null): array
+    {
+        $unipalm = $this->mesAgentsService->particuliersLookup($request);
+        $locauxParticuliers = Ticket::query()
+            ->whereNotNull('particulier_agent_id')
+            ->get(['id_ticket', 'numero_ticket']);
+
+        return [
+            'unipalmIds' => $unipalm['ids'],
+            'unipalmNoms' => $unipalm['noms'],
+            'locauxIds' => $locauxParticuliers
+                ->pluck('id_ticket')
+                ->map(static fn ($id) => (int) $id)
+                ->filter()
+                ->flip()
+                ->all(),
+            'locauxNumeros' => $locauxParticuliers
+                ->pluck('numero_ticket')
+                ->map(static fn ($n) => mb_strtolower(trim((string) $n), 'UTF-8'))
+                ->filter()
+                ->flip()
+                ->all(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $ticket
+     * @param  array{
+     *     unipalmIds: array<int, true>,
+     *     unipalmNoms: array<string, true>,
+     *     locauxIds: array<int, true>,
+     *     locauxNumeros: array<string, true>
+     * }  $lookup
+     */
+    private function ticketEstParticulier(array $ticket, array $lookup): bool
+    {
+        if (! empty($ticket['particulier_agent_id'])) {
+            return true;
+        }
+
+        $idAgent = (int) ($ticket['id_agent'] ?? 0);
+        if ($idAgent > 0 && isset($lookup['unipalmIds'][$idAgent])) {
+            return true;
+        }
+
+        $nomAgent = mb_strtolower(trim((string) ($ticket['nom_agent'] ?? '')), 'UTF-8');
+        if ($nomAgent !== '' && $nomAgent !== '-' && isset($lookup['unipalmNoms'][$nomAgent])) {
+            return true;
+        }
+
+        $idTicket = (int) ($ticket['id_ticket'] ?? 0);
+        if ($idTicket > 0 && isset($lookup['locauxIds'][$idTicket])) {
+            return true;
+        }
+
+        $numero = mb_strtolower(trim((string) ($ticket['numero_ticket'] ?? '')), 'UTF-8');
+
+        return $numero !== '' && isset($lookup['locauxNumeros'][$numero]);
+    }
+
     public function countTicketsEnAttente(?Request $request = null): int
     {
         return $this->countsTicketsEnAttente($request)['total'];
@@ -675,7 +766,7 @@ class MesTicketsService
     public function countsTicketsEnAttente(?Request $request = null): array
     {
         $request ??= request();
-        $cacheKey = 'tickets_en_attente_counts:'.$this->ticketsCacheKey([], $request);
+        $cacheKey = 'tickets_en_attente_counts_v2:'.$this->ticketsCacheKey([], $request);
 
         return Cache::remember($cacheKey, 120, function () use ($request) {
             $empty = ['total' => 0, 'professionnel' => 0, 'particulier' => 0];
@@ -739,22 +830,7 @@ class MesTicketsService
      */
     private function splitEnAttenteCounts(array $tickets): array
     {
-        $locauxParticuliers = Ticket::query()
-            ->whereNotNull('particulier_agent_id')
-            ->get(['id_ticket', 'numero_ticket']);
-
-        $idsParticuliers = $locauxParticuliers
-            ->pluck('id_ticket')
-            ->map(static fn ($id) => (int) $id)
-            ->filter()
-            ->flip()
-            ->all();
-        $numerosParticuliers = $locauxParticuliers
-            ->pluck('numero_ticket')
-            ->map(static fn ($n) => mb_strtolower(trim((string) $n), 'UTF-8'))
-            ->filter()
-            ->flip()
-            ->all();
+        $lookup = $this->ticketParticulierLookup();
 
         $particulier = 0;
         $seenIds = [];
@@ -770,17 +846,13 @@ class MesTicketsService
                 $seenNumeros[$numero] = true;
             }
 
-            $estParticulier = ! empty($ticket['particulier_agent_id'])
-                || ($id > 0 && isset($idsParticuliers[$id]))
-                || ($numero !== '' && isset($numerosParticuliers[$numero]));
-
-            if ($estParticulier) {
+            if ($this->ticketEstParticulier($ticket, $lookup)) {
                 $particulier++;
             }
         }
 
         $locauxSeuls = [];
-        foreach (Ticket::query()->get(['id_ticket', 'numero_ticket', 'particulier_agent_id']) as $local) {
+        foreach (Ticket::query()->get(['id_ticket', 'numero_ticket', 'particulier_agent_id', 'id_agent']) as $local) {
             $id = (int) $local->id_ticket;
             $numero = mb_strtolower(trim((string) $local->numero_ticket), 'UTF-8');
             if (($id > 0 && isset($seenIds[$id])) || ($numero !== '' && isset($seenNumeros[$numero]))) {
@@ -791,13 +863,14 @@ class MesTicketsService
                 'id_ticket' => $id,
                 'numero_ticket' => (string) ($local->numero_ticket ?? ''),
                 'particulier_agent_id' => $local->particulier_agent_id,
+                'id_agent' => (int) ($local->id_agent ?? 0),
             ];
         }
 
         if ($locauxSeuls !== []) {
             foreach ($this->filterTicketsNonValides($locauxSeuls) as $ticket) {
                 $tickets[] = $ticket;
-                if (! empty($ticket['particulier_agent_id'])) {
+                if ($this->ticketEstParticulier($ticket, $lookup)) {
                     $particulier++;
                 }
             }
@@ -818,6 +891,7 @@ class MesTicketsService
         $suffix = $this->ticketsCacheKey([], $request);
         Cache::forget('tickets_en_attente_count:'.$suffix);
         Cache::forget('tickets_en_attente_counts:'.$suffix);
+        Cache::forget('tickets_en_attente_counts_v2:'.$suffix);
     }
 
     /**

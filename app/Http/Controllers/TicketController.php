@@ -96,7 +96,7 @@ class TicketController extends Controller
         $filteredTickets = $this->mesTicketsService->filterTickets($allTickets, $vehicule, $usine, $agent, $numero);
         if ($enAttenteOnly) {
             $filteredTickets = $this->mesTicketsService->filterTicketsNonValides($filteredTickets);
-            $filteredTickets = $this->filtrerTicketsParType($filteredTickets, $typeTicket);
+            $filteredTickets = $this->mesTicketsService->filtrerTicketsParType($filteredTickets, $typeTicket, $request);
         }
         if ($onlyCamionsPgf) {
             $vehiculesPgfLookupEarly = $this->vehiculesPgfLookup();
@@ -834,45 +834,6 @@ class TicketController extends Controller
         ]);
     }
 
-    /**
-     * @param  list<array<string, mixed>>  $tickets
-     * @return list<array<string, mixed>>
-     */
-    private function filtrerTicketsParType(array $tickets, string $type): array
-    {
-        if (! in_array($type, ['professionnel', 'particulier'], true)) {
-            return $tickets;
-        }
-
-        $locauxParticuliers = Ticket::query()
-            ->whereNotNull('particulier_agent_id')
-            ->get(['id_ticket', 'numero_ticket']);
-
-        $ids = $locauxParticuliers
-            ->pluck('id_ticket')
-            ->map(static fn ($id) => (int) $id)
-            ->filter()
-            ->flip()
-            ->all();
-        $numeros = $locauxParticuliers
-            ->pluck('numero_ticket')
-            ->map(static fn ($n) => mb_strtolower(trim((string) $n), 'UTF-8'))
-            ->filter()
-            ->flip()
-            ->all();
-
-        return array_values(array_filter($tickets, function (array $ticket) use ($type, $ids, $numeros) {
-            $estParticulier = ! empty($ticket['particulier_agent_id']);
-            if (! $estParticulier) {
-                $id = (int) ($ticket['id_ticket'] ?? 0);
-                $numero = mb_strtolower(trim((string) ($ticket['numero_ticket'] ?? '')), 'UTF-8');
-                $estParticulier = ($id > 0 && isset($ids[$id]))
-                    || ($numero !== '' && isset($numeros[$numero]));
-            }
-
-            return $type === 'particulier' ? $estParticulier : ! $estParticulier;
-        }));
-    }
 
     /**
      * Fiches non déchargées encore libres (pour association ticket local PGF).
