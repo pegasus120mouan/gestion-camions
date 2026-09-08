@@ -1588,8 +1588,7 @@ class TicketController extends Controller
                 return $this->validerTicketLocal($request, $localTicket, $dechargementService, $chefAgentIds);
             }
 
-            return redirect()->route('tickets.index')
-                ->with('error', 'Ticket introuvable pour votre équipe.');
+            return $this->reponseValidationTicket($request, false, 'Ticket introuvable pour votre équipe.');
         }
 
         $estCamionPgf = $this->vehiculeEstCamionPgf(
@@ -1609,16 +1608,14 @@ class TicketController extends Controller
         ]);
 
         if (! $request->boolean('confirm_validation')) {
-            return redirect()->route('tickets.index')
-                ->with('error', 'Validation refusée : action non confirmée.');
+            return $this->reponseValidationTicket($request, false, 'Validation refusée : action non confirmée.');
         }
 
         $numeroTicket = trim((string) ($apiTicket['numero_ticket'] ?? ''));
 
         $existing = $this->findTicketLocal($id, $numeroTicket);
         if ($this->ticketEstDejaValide($existing, $id, $numeroTicket)) {
-            return redirect()->route('tickets.index')
-                ->with('error', 'Ce ticket est déjà validé.');
+            return $this->reponseValidationTicket($request, false, 'Ce ticket est déjà validé.');
         }
 
         if (!$existing && $numeroTicket !== '') {
@@ -1626,8 +1623,7 @@ class TicketController extends Controller
                 ->where('numero_ticket', $numeroTicket)
                 ->exists();
             if ($dejaValideParNumero) {
-                return redirect()->route('tickets.index')
-                    ->with('error', 'Ce ticket est déjà validé.');
+                return $this->reponseValidationTicket($request, false, 'Ce ticket est déjà validé.');
             }
         }
 
@@ -1639,8 +1635,7 @@ class TicketController extends Controller
                 ->find($validated['fiche_id']);
 
             if (!$fiche) {
-                return redirect()->route('tickets.index')
-                    ->with('error', 'Fiche de sortie introuvable ou déjà déchargée.');
+                return $this->reponseValidationTicket($request, false, 'Fiche de sortie introuvable ou déjà déchargée.');
             }
 
             $raison = $this->ficheTicketCorrespondance->raisonNonCorrespondance(
@@ -1648,8 +1643,7 @@ class TicketController extends Controller
                 $fiche
             );
             if ($raison !== null) {
-                return redirect()->route('tickets.index')
-                    ->with('error', $raison);
+                return $this->reponseValidationTicket($request, false, $raison);
             }
         }
 
@@ -1684,8 +1678,7 @@ class TicketController extends Controller
             $idAgentApi = (int) $fiche->id_agent;
         }
         if ($idAgentApi <= 0) {
-            return redirect()->route('tickets.index')
-                ->with('error', 'Impossible de valider : agent introuvable sur ce ticket.');
+            return $this->reponseValidationTicket($request, false, 'Impossible de valider : agent introuvable sur ce ticket.');
         }
 
         $ticket->fill([
@@ -1743,17 +1736,18 @@ class TicketController extends Controller
                 }
             });
         } catch (UniqueConstraintViolationException) {
-            return redirect()->route('tickets.index')
-                ->with('error', 'Ce ticket est déjà validé ou existe déjà dans le système.');
+            return $this->reponseValidationTicket($request, false, 'Ce ticket est déjà validé ou existe déjà dans le système.');
         } catch (\InvalidArgumentException $e) {
-            return redirect()->route('tickets.index')
-                ->with('error', $e->getMessage());
+            return $this->reponseValidationTicket($request, false, $e->getMessage());
         }
 
         $ticket = Ticket::query()->find($id) ?? $this->findTicketLocal($id, $numeroTicket);
         if (! $ticket) {
-            return redirect()->route('tickets.index')
-                ->with('error', 'Le ticket a été validé mais est introuvable en base (id ' . $id . '). Contactez l\'administrateur.');
+            return $this->reponseValidationTicket(
+                $request,
+                false,
+                'Le ticket a été validé mais est introuvable en base (id ' . $id . '). Contactez l\'administrateur.'
+            );
         }
 
         $ficheTransporteur = $fiche;
@@ -1800,8 +1794,7 @@ class TicketController extends Controller
                 $message .= ' Transmis au transporteur ' . $transporteurLie->code . '.';
             }
 
-            return redirect()->route('tickets.index')
-                ->with('success', $message . $stockMsg);
+            return $this->reponseValidationTicket($request, true, $message . $stockMsg);
         }
 
         $message = 'Ticket « ' . ($apiTicket['numero_ticket'] ?? $id) . ' » validé avec succès.';
@@ -1812,8 +1805,7 @@ class TicketController extends Controller
             $message .= ' Les informations ont été transmises au transporteur ' . $transporteurLie->code . '.';
         }
 
-        return redirect()->route('tickets.index')
-            ->with('success', $message);
+        return $this->reponseValidationTicket($request, true, $message);
     }
 
     /**
@@ -1832,8 +1824,7 @@ class TicketController extends Controller
         $numeroTicket = trim((string) $ticket->numero_ticket);
 
         if ($this->ticketEstDejaValide($ticket, $id, $numeroTicket)) {
-            return redirect()->route($redirectRoute)
-                ->with('error', 'Ce ticket est déjà validé.');
+            return $this->reponseValidationTicket($request, false, 'Ce ticket est déjà validé.', $redirectRoute);
         }
 
         $estCamionPgf = $this->vehiculeEstCamionPgf(
@@ -1853,8 +1844,7 @@ class TicketController extends Controller
         ]);
 
         if (! $request->boolean('confirm_validation')) {
-            return redirect()->route($redirectRoute)
-                ->with('error', 'Validation refusée : action non confirmée.');
+            return $this->reponseValidationTicket($request, false, 'Validation refusée : action non confirmée.', $redirectRoute);
         }
 
         $fiche = null;
@@ -1865,8 +1855,7 @@ class TicketController extends Controller
                 ->find($validated['fiche_id']);
 
             if (! $fiche) {
-                return redirect()->route($redirectRoute)
-                    ->with('error', 'Fiche de sortie introuvable ou déjà déchargée.');
+                return $this->reponseValidationTicket($request, false, 'Fiche de sortie introuvable ou déjà déchargée.', $redirectRoute);
             }
 
             $ticketApiLike = $this->localTicketToApiArray($ticket);
@@ -1885,8 +1874,7 @@ class TicketController extends Controller
                     || ($matriculeTicket !== '' && $matriculeTicket === $matriculeFiche);
 
                 if (! $vehiculeOk) {
-                    return redirect()->route($redirectRoute)
-                        ->with('error', 'Le véhicule de la fiche ne correspond pas au ticket.');
+                    return $this->reponseValidationTicket($request, false, 'Le véhicule de la fiche ne correspond pas au ticket.', $redirectRoute);
                 }
             }
 
@@ -2001,11 +1989,9 @@ class TicketController extends Controller
                 }
             });
         } catch (UniqueConstraintViolationException) {
-            return redirect()->route($redirectRoute)
-                ->with('error', 'Ce ticket est déjà validé ou existe déjà dans le système.');
+            return $this->reponseValidationTicket($request, false, 'Ce ticket est déjà validé ou existe déjà dans le système.', $redirectRoute);
         } catch (\InvalidArgumentException $e) {
-            return redirect()->route($redirectRoute)
-                ->with('error', $e->getMessage());
+            return $this->reponseValidationTicket($request, false, $e->getMessage(), $redirectRoute);
         }
 
         $ticket->refresh();
@@ -2056,8 +2042,7 @@ class TicketController extends Controller
                 $message .= ' Transmis au transporteur ' . $transporteurLie->code . '.';
             }
 
-            return redirect()->route($redirectRoute)
-                ->with('success', $message . $stockMsg);
+            return $this->reponseValidationTicket($request, true, $message . $stockMsg, $redirectRoute);
         }
 
         $message = 'Ticket « ' . ($numeroTicket !== '' ? $numeroTicket : $id) . ' » validé avec succès.';
@@ -2068,8 +2053,28 @@ class TicketController extends Controller
             $message .= ' Les informations ont été transmises au transporteur ' . $transporteurLie->code . '.';
         }
 
-        return redirect()->route($redirectRoute)
-            ->with('success', $message);
+        return $this->reponseValidationTicket($request, true, $message, $redirectRoute);
+    }
+
+    /**
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
+     */
+    private function reponseValidationTicket(Request $request, bool $success, string $message, string $route = 'tickets.index')
+    {
+        if ($request->ajax() || $request->wantsJson()) {
+            if ($success) {
+                session()->flash('success', $message);
+            }
+
+            return response()->json([
+                'success' => $success,
+                'message' => $message,
+            ], $success ? 200 : 422);
+        }
+
+        return $success
+            ? redirect()->route($route)->with('success', $message)->with('play_validation_sound', true)
+            : redirect()->route($route)->with('error', $message);
     }
 
     public function confirmUnipalm(Request $request, int $id, ChefEquipeContext $chefContext)

@@ -1670,6 +1670,81 @@ $(document).ready(function() {
 });
 </script>
 
+<script>
+(function () {
+  var soundUrl = @json(asset('sounds/validation.wav'));
+
+  function playValidationSound() {
+    new Audio(soundUrl).play().catch(function () {});
+  }
+
+  function fermerModal(form) {
+    var modalEl = form.closest('.modal');
+    if (!modalEl || !window.bootstrap) {
+      return;
+    }
+    var instance = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+    instance.hide();
+  }
+
+  @if(session('play_validation_sound'))
+  playValidationSound();
+  @endif
+
+  document.querySelectorAll('form[action*="/tickets/"][action*="/valider"]').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      if (form.dataset.skipAjax === '1') {
+        return;
+      }
+      e.preventDefault();
+
+      var btn = form.querySelector('button[type="submit"]');
+      if (btn) {
+        btn.disabled = true;
+      }
+
+      fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json'
+        }
+      }).then(function (response) {
+        return response.json().then(function (data) {
+          return { ok: response.ok, data: data || {} };
+        }).catch(function () {
+          return { ok: response.ok, data: {} };
+        });
+      }).then(function (result) {
+        var data = result.data || {};
+        if (!result.ok || data.success === false) {
+          var msg = data.message;
+          if (!msg && data.errors) {
+            var first = Object.values(data.errors)[0];
+            msg = Array.isArray(first) ? first[0] : first;
+          }
+          alert(msg || 'La validation a échoué.');
+          if (btn) {
+            btn.disabled = false;
+          }
+          return;
+        }
+
+        playValidationSound();
+        fermerModal(form);
+        setTimeout(function () {
+          window.location.reload();
+        }, 2800);
+      }).catch(function () {
+        form.dataset.skipAjax = '1';
+        form.submit();
+      });
+    });
+  });
+})();
+</script>
+
 @endsection
 
 @section('page-scripts')

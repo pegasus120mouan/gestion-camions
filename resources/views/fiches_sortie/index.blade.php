@@ -351,6 +351,14 @@
               <label class="form-label">Date de déchargement</label>
               <input type="date" name="date_dechargement" class="form-control" />
             </div>
+            <div class="col-md-6">
+              <label class="form-label">Carburant (FCFA)</label>
+              <input type="number" name="carburant" class="form-control" min="0" step="1" placeholder="0" value="{{ old('carburant') }}" />
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Frais de route (FCFA)</label>
+              <input type="number" name="frais_route" class="form-control" min="0" step="1" placeholder="0" value="{{ old('frais_route') }}" />
+            </div>
           </div>
         </div>
         <div class="modal-footer">

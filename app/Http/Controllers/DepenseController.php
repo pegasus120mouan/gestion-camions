@@ -1306,6 +1306,8 @@ class DepenseController extends Controller
             'produit_id' => ['required', 'integer', 'exists:produits,id'],
             'pont_display' => ['nullable', 'string'],
             'agent_display' => ['nullable', 'string'],
+            'carburant' => ['nullable', 'integer', 'min:0'],
+            'frais_route' => ['nullable', 'integer', 'min:0'],
         ]);
 
         if (!$this->usineAppartientAuProduit($validated['usine'] ?? null, (int) $validated['produit_id'])) {
@@ -1427,6 +1429,8 @@ class DepenseController extends Controller
             'date_chargement' => $validated['date_chargement'],
             'date_dechargement' => $validated['date_dechargement'] ?? null,
             'poids_pont' => $validated['poids_pont'] ?? null,
+            'carburant' => $validated['carburant'] ?? null,
+            'frais_route' => $validated['frais_route'] ?? null,
             'id_ticket' => null,
             'numero_ticket' => null,
             'prix_unitaire_transport' => 0,
