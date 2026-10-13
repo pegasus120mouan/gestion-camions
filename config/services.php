@@ -61,6 +61,8 @@ return [
         'password' => env('SUPERADMIN_PASSWORD', ''),
         // Chef d'équipe Unipalm dont le super-utilisateur voit les données.
         'chef_login' => env('SUPERADMIN_CHEF_LOGIN', 'pgf'),
+        // Utilisé si la base Unipalm n'est pas joignable (production en mode API).
+        'chef_token' => env('SUPERADMIN_CHEF_TOKEN', ''),
     ],
 
 ];

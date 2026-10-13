@@ -283,6 +283,10 @@ class TicketTransporteurFicheService
             return $transporteur;
         }
 
+        if (app(CamionPgfService::class)->estCamionPgf((int) ($ticket->vehicule_id ?? 0), $ticket->matricule_vehicule)) {
+            return null;
+        }
+
         if ((float) ($ticket->poids ?? 0) > 0 || trim((string) $ticket->numero_ticket) !== '') {
             $this->creerFicheDepuisTicket($ticket, $transporteur, $context);
         }

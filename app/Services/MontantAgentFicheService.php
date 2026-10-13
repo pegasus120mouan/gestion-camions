@@ -246,7 +246,10 @@ class MontantAgentFicheService
         return ! str_starts_with(strtoupper($numero), 'TKT-');
     }
 
-    public function assurerFichePourTicketAgent(Ticket $ticket, ?array $produitInfo = null): FicheSortie
+    /**
+     * Fiche technique TKT- du ticket. Jamais créée pour un camion PGF : sa fiche de sortie se saisit à part.
+     */
+    public function assurerFichePourTicketAgent(Ticket $ticket, ?array $produitInfo = null): ?FicheSortie
     {
         $existing = $this->fichePourTicket($ticket, false);
         $usine = app(MontantAgentReportingService::class)->nomUsinePourTicket($existing, $ticket);
@@ -273,6 +276,10 @@ class MontantAgentFicheService
             }
 
             return $existing;
+        }
+
+        if ($this->vehiculeEstCamionPgf((int) ($ticket->vehicule_id ?? 0), (string) ($ticket->matricule_vehicule ?? ''))) {
+            return null;
         }
 
         $date = $ticket->date_ticket?->format('Y-m-d') ?? now()->format('Y-m-d');

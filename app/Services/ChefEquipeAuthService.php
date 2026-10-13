@@ -60,6 +60,37 @@ class ChefEquipeAuthService
     }
 
     /**
+     * Chef d'équipe par token via l'API mes_tickets (quand la base Unipalm n'est pas joignable).
+     *
+     * @return array{id_chef: int, nom: string, prenoms: string, nom_complet: string, token: string, login: string}|null
+     */
+    public function findByToken(string $token): ?array
+    {
+        $token = trim($token);
+        $url = (string) config('services.external_auth.mes_tickets_url', '');
+        if ($token === '' || $url === '') {
+            return null;
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->withoutVerifying()
+                ->timeout((int) config('services.external_auth.tickets_timeout', 60))
+                ->retry(2, 1000, null, false)
+                ->get($url, ['token' => $token, 'page' => 1, 'per_page' => 1]);
+
+            $chef = $response->successful() ? $response->json('chef') : null;
+            if (! is_array($chef) || empty($chef['id_chef'])) {
+                return null;
+            }
+
+            return $this->normalizeChef(['token' => $token] + $chef);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
      * @return array{id_chef: int, nom: string, prenoms: string, nom_complet: string, token: string, login: string}|null
      */
     private function attemptViaDatabase(string $login, string $password): ?array

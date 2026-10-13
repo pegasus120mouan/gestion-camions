@@ -412,6 +412,9 @@ class MontantAgentController extends Controller
         }
 
         $fiche = $fiche ?? $this->montantAgentFiche->assurerFichePourTicketAgent($ticket);
+        if (! $fiche) {
+            return back()->with('error', 'Camion PGF sans fiche de sortie : associez d\'abord une fiche de sortie à ce ticket.');
+        }
 
         $produit = Produit::query()->findOrFail((int) $validated['produit_id']);
 

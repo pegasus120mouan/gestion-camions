@@ -16,6 +16,7 @@ use App\Models\Produit;
 use App\Models\Stock;
 use App\Models\Ticket;
 use App\Models\TicketValidation;
+use App\Services\CamionPgfService;
 use App\Services\ChefEquipeContext;
 use App\Services\FicheSortieDechargementService;
 use App\Services\FicheSortieNumeroService;
@@ -961,28 +962,7 @@ class TicketController extends Controller
      */
     private function vehiculesPgfLookup(): array
     {
-        $groupeIds = Groupe::query()
-            ->where('nom_groupe', 'like', '%PGF%')
-            ->pluck('id');
-
-        $rows = GroupeVehicule::query()
-            ->whereIn('groupe_id', $groupeIds)
-            ->get(['vehicule_id', 'matricule_vehicule']);
-
-        $ids = [];
-        $matricules = [];
-        foreach ($rows as $row) {
-            $id = (int) $row->vehicule_id;
-            if ($id > 0) {
-                $ids[$id] = true;
-            }
-            $matricule = strtoupper(trim((string) $row->matricule_vehicule));
-            if ($matricule !== '') {
-                $matricules[$matricule] = true;
-            }
-        }
-
-        return ['ids' => $ids, 'matricules' => $matricules];
+        return app(CamionPgfService::class)->lookup();
     }
 
     /**
@@ -990,15 +970,7 @@ class TicketController extends Controller
      */
     private function vehiculeEstCamionPgf(int $vehiculeId, ?string $matricule, ?array $lookup = null): bool
     {
-        $lookup ??= $this->vehiculesPgfLookup();
-
-        if ($vehiculeId > 0 && isset($lookup['ids'][$vehiculeId])) {
-            return true;
-        }
-
-        $matricule = strtoupper(trim((string) $matricule));
-
-        return $matricule !== '' && isset($lookup['matricules'][$matricule]);
+        return app(CamionPgfService::class)->estCamionPgf($vehiculeId, $matricule, $lookup);
     }
 
     /**
@@ -1755,7 +1727,7 @@ class TicketController extends Controller
         if ($estCamionPgf && $ficheTransporteur) {
             $ficheTransporteur->refresh();
             app(TicketTransporteurFicheService::class)->synchroniserDonneesTicketSurFiche($ficheTransporteur);
-        } else {
+        } elseif (! $estCamionPgf) {
             app(MontantAgentFicheService::class)->assurerFichePourTicketAgent($ticket, $produitInfo);
             $ficheTransporteur = FicheSortie::query()
                 ->where('id_ticket', $ticket->id_ticket)
@@ -1799,6 +1771,9 @@ class TicketController extends Controller
         }
 
         $message = 'Ticket « ' . ($apiTicket['numero_ticket'] ?? $id) . ' » validé avec succès.';
+        if ($estCamionPgf) {
+            $message .= ' Camion PGF : aucune fiche de sortie associée.';
+        }
         if ($produitInfo) {
             $message .= ' Produit : ' . $produitInfo['nom'] . '.';
         }
@@ -2005,7 +1980,7 @@ class TicketController extends Controller
         if ($estCamionPgf && $ficheTransporteur) {
             $ficheTransporteur->refresh();
             app(TicketTransporteurFicheService::class)->synchroniserDonneesTicketSurFiche($ficheTransporteur);
-        } else {
+        } elseif (! $estCamionPgf) {
             app(MontantAgentFicheService::class)->assurerFichePourTicketAgent($ticket, $produitInfo);
             $ficheTransporteur = FicheSortie::query()
                 ->where('id_ticket', $ticket->id_ticket)
@@ -2051,6 +2026,9 @@ class TicketController extends Controller
         }
 
         $message = 'Ticket « ' . ($numeroTicket !== '' ? $numeroTicket : $id) . ' » validé avec succès.';
+        if ($estCamionPgf) {
+            $message .= ' Camion PGF : aucune fiche de sortie associée.';
+        }
         if ($produitInfo) {
             $message .= ' Produit : ' . $produitInfo['nom'] . '.';
         }
@@ -2135,6 +2113,7 @@ class TicketController extends Controller
 
         $valides = 0;
         $avecFiche = 0;
+        $pgfSansFiche = 0;
         $echecs = [];
 
         foreach ($tickets as $ticket) {
@@ -2178,6 +2157,8 @@ class TicketController extends Controller
                     $valides++;
                     if ($ficheId) {
                         $avecFiche++;
+                    } elseif ($estPgf) {
+                        $pgfSansFiche++;
                     }
                 } else {
                     $echecs[] = $numero . ' : ' . ($data['message'] ?? 'échec de validation.');
@@ -2201,6 +2182,9 @@ class TicketController extends Controller
         $message = "{$valides} ticket(s) {$libelle} validé(s) sur " . count($tickets) . '.';
         if ($avecFiche > 0) {
             $message .= " {$avecFiche} associé(s) automatiquement à leur fiche de sortie.";
+        }
+        if ($pgfSansFiche > 0) {
+            $message .= " {$pgfSansFiche} camion(s) PGF validé(s) sans fiche de sortie.";
         }
 
         if ($valides > 0) {

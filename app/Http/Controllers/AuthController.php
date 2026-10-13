@@ -31,7 +31,8 @@ class AuthController extends Controller
         ]);
 
         if ($parametresAccess->attempt($credentials['login'], $credentials['password'])) {
-            $chef = $authService->findByLogin((string) config('services.superadmin.chef_login', ''));
+            $chef = $authService->findByLogin((string) config('services.superadmin.chef_login', ''))
+                ?? $authService->findByToken((string) config('services.superadmin.chef_token', ''));
             if ($chef) {
                 $chefSession->login($request, $chef);
             } else {
