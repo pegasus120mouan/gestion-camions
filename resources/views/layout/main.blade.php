@@ -907,6 +907,16 @@
               </a>
             </li>
 
+            @if(!empty($peutParametres))
+            <li class="menu-header small text-uppercase"><span class="menu-header-text">System</span></li>
+            <li class="menu-item {{ request()->routeIs('parametres.*') ? 'active' : '' }}">
+              <a href="{{ route('parametres.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-cog" style="color: #7367f0;"></i>
+                <div class="text-truncate">Paramètres</div>
+              </a>
+            </li>
+            @endif
+
 
 
          <!--   <li class="menu-item">
@@ -1540,8 +1550,8 @@
                             </div>
                           </div>
                           <div class="flex-grow-1">
-                            <h6 class="mb-0">{{ $authChef['nom_complet'] ?? 'Chef d\'équipe' }}</h6>
-                            <small class="text-body-secondary">Chef d'équipe</small>
+                            <h6 class="mb-0">{{ $authChef['nom_complet'] ?? (!empty($peutParametres) ? 'Super administrateur' : 'Chef d\'équipe') }}</h6>
+                            <small class="text-body-secondary">{{ !empty($peutParametres) ? 'Super administrateur' : 'Chef d\'équipe' }}</small>
                           </div>
                         </div>
                       </a>
@@ -1637,5 +1647,19 @@
     <script async defer src="https://buttons.github.io/buttons.js"></script>
 
     @yield('page-scripts')
+
+    @if(!empty($ticketsSyncNecessaire))
+    <script>
+      fetch(@json(route('tickets.synchroniser')), {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': @json(csrf_token()),
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json'
+        },
+        credentials: 'same-origin'
+      }).catch(function () {});
+    </script>
+    @endif
   </body>
 </html>

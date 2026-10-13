@@ -45,6 +45,7 @@ use App\Http\Controllers\SoldeChefEquipeController;
 use App\Http\Controllers\EffectuerPaiementController;
 use App\Http\Controllers\ParticulierController;
 use App\Http\Controllers\ParticulierPrixController;
+use App\Http\Controllers\ParametreController;
 use App\Services\ChefEquipeContext;
 use App\Services\SoldeChefEquipeService;
 use Illuminate\Support\Facades\Route;
@@ -260,6 +261,12 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('utilisateurs', UtilisateurController::class)->except(['show']);
 
+    Route::middleware('parametres')->group(function () {
+        Route::get('/parametres', [ParametreController::class, 'index'])->name('parametres.index');
+        Route::post('/parametres/tickets/valider-tout', [TicketController::class, 'validerEnMasse'])
+            ->name('parametres.tickets.valider_tout');
+    });
+
     Route::get('/commis', [CommisController::class, 'index'])->name('commis.index');
     Route::post('/commis', [CommisController::class, 'store'])->name('commis.store');
     Route::put('/commis/{commi}', [CommisController::class, 'update'])->name('commis.update');
@@ -269,6 +276,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/tickets/locaux', [TicketController::class, 'locaux'])->name('tickets.locaux');
     Route::get('/tickets/unipalm', [TicketController::class, 'unipalm'])->name('tickets.unipalm');
     Route::get('/tickets/{id}/pdf', [TicketController::class, 'exportBordereauPdf'])->name('tickets.pdf');
+    Route::post('/tickets/synchroniser', [TicketController::class, 'synchroniser'])->name('tickets.synchroniser');
     Route::post('/tickets/associer-fiche', [TicketController::class, 'associerFiche'])->name('tickets.associer_fiche');
     Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
     Route::put('/tickets/{id}', [TicketController::class, 'update'])->name('tickets.update');

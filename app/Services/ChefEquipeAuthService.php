@@ -32,6 +32,34 @@ class ChefEquipeAuthService
     }
 
     /**
+     * Chef d'équipe par login, sans mot de passe (rattachement du super-utilisateur).
+     *
+     * @return array{id_chef: int, nom: string, prenoms: string, nom_complet: string, token: string, login: string}|null
+     */
+    public function findByLogin(string $login): ?array
+    {
+        $login = trim($login);
+        $connection = $this->databaseResolver->connectionForAuth();
+        if ($login === '' || $connection === null) {
+            return null;
+        }
+
+        try {
+            $row = DB::connection($connection)->selectOne(
+                'SELECT id_chef, nom, prenoms, token, login
+                FROM chef_equipe
+                WHERE LOWER(TRIM(login)) = LOWER(?)
+                LIMIT 1',
+                [$login]
+            );
+
+            return $row ? $this->normalizeChef((array) $row) : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
      * @return array{id_chef: int, nom: string, prenoms: string, nom_complet: string, token: string, login: string}|null
      */
     private function attemptViaDatabase(string $login, string $password): ?array

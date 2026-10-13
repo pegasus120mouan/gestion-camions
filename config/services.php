@@ -49,8 +49,18 @@ return [
         'solde_chef_equipe_url' => env('EXTERNAL_AUTH_SOLDE_CHEF_EQUIPE_URL', 'https://api.objetombrepegasus.online/api/camions/solde_chef_equipe.php'),
         'default_chef_equipe_token' => env('CHEF_EQUIPE_TOKEN', ''),
         'timeout' => (int) env('EXTERNAL_AUTH_TIMEOUT', 10),
+        // mes_tickets.php met 5 à 20 s par page de 100 tickets.
+        'tickets_timeout' => (int) env('EXTERNAL_AUTH_TICKETS_TIMEOUT', 60),
         // auto = DB si chef_equipe/agents détectés, sinon API | api = toujours HTTP | database = toujours DB
         'camions_data_source' => env('CAMIONS_DATA_SOURCE', 'auto'),
+    ],
+
+    // Super-utilisateur hors base (accès Paramètres). Mot de passe en clair ou hash bcrypt ($2y$...).
+    'superadmin' => [
+        'login' => env('SUPERADMIN_LOGIN', ''),
+        'password' => env('SUPERADMIN_PASSWORD', ''),
+        // Chef d'équipe Unipalm dont le super-utilisateur voit les données.
+        'chef_login' => env('SUPERADMIN_CHEF_LOGIN', 'pgf'),
     ],
 
 ];

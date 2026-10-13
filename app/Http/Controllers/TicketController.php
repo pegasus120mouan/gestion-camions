@@ -1591,6 +1591,7 @@ class TicketController extends Controller
             return $this->reponseValidationTicket($request, false, 'Ticket introuvable pour votre équipe.');
         }
 
+        $sansRestriction = $this->validationSansRestriction($request);
         $estCamionPgf = $this->vehiculeEstCamionPgf(
             (int) ($apiTicket['vehicule_id'] ?? 0),
             (string) ($apiTicket['matricule_vehicule'] ?? '')
@@ -1600,7 +1601,7 @@ class TicketController extends Controller
             'parc_id' => ['nullable', 'integer', 'exists:parcs,id'],
         ];
         if ($estCamionPgf) {
-            $rules['fiche_id'] = ['required', 'integer', 'exists:fiches_sortie,id'];
+            $rules['fiche_id'] = [$sansRestriction ? 'nullable' : 'required', 'integer', 'exists:fiches_sortie,id'];
         }
 
         $validated = $request->validate($rules, [
@@ -1628,7 +1629,7 @@ class TicketController extends Controller
         }
 
         $fiche = null;
-        if ($estCamionPgf) {
+        if ($estCamionPgf && ! empty($validated['fiche_id'])) {
             $fiche = FicheSortie::query()
                 ->whereNull('date_dechargement')
                 ->whereIn('id_agent', $chefAgentIds ?: [-1])
@@ -1836,7 +1837,11 @@ class TicketController extends Controller
             'parc_id' => ['nullable', 'integer', 'exists:parcs,id'],
         ];
         if ($estCamionPgf) {
-            $rules['fiche_id'] = ['required', 'integer', 'exists:fiches_sortie,id'];
+            $rules['fiche_id'] = [
+                $this->validationSansRestriction($request) ? 'nullable' : 'required',
+                'integer',
+                'exists:fiches_sortie,id',
+            ];
         }
 
         $validated = $request->validate($rules, [
@@ -1848,7 +1853,7 @@ class TicketController extends Controller
         }
 
         $fiche = null;
-        if ($estCamionPgf) {
+        if ($estCamionPgf && ! empty($validated['fiche_id'])) {
             $fiche = FicheSortie::query()
                 ->whereNull('date_dechargement')
                 ->whereIn('id_agent', $chefAgentIds ?: [-1])
@@ -2062,7 +2067,7 @@ class TicketController extends Controller
     private function reponseValidationTicket(Request $request, bool $success, string $message, string $route = 'tickets.index')
     {
         if ($request->ajax() || $request->wantsJson()) {
-            if ($success) {
+            if ($success && ! $this->validationSansRestriction($request)) {
                 session()->flash('success', $message);
             }
 
@@ -2075,6 +2080,140 @@ class TicketController extends Controller
         return $success
             ? redirect()->route($route)->with('success', $message)->with('play_validation_sound', true)
             : redirect()->route($route)->with('error', $message);
+    }
+
+    private function validationSansRestriction(Request $request): bool
+    {
+        return (bool) $request->attributes->get('validation_sans_restriction', false);
+    }
+
+    /**
+     * Recharge en arrière-plan (appel AJAX) la liste des tickets Unipalm, ce qui peut prendre plusieurs minutes.
+     */
+    public function synchroniser(Request $request)
+    {
+        if (! $this->mesTicketsService->synchronisationTicketsNecessaire($request)) {
+            return response()->json(['synchronise' => false]);
+        }
+
+        ignore_user_abort(true);
+        @set_time_limit(0);
+        // La session lue au début serait réécrite à la fin et écraserait les changements faits entre-temps.
+        $request->session()->setHandler(new \Symfony\Component\HttpFoundation\Session\Storage\Handler\NullSessionHandler());
+
+        return response()->json(['synchronise' => true] + $this->mesTicketsService->synchroniserTickets($request));
+    }
+
+    /**
+     * Valide tous les tickets en attente d'un type (professionnel / particulier), sans exiger de fiche
+     * pour les camions PGF : la fiche correspondante est associée automatiquement si elle existe.
+     */
+    public function validerEnMasse(Request $request, FicheSortieDechargementService $dechargementService)
+    {
+        $type = (string) $request->validate([
+            'type' => ['required', 'in:professionnel,particulier'],
+        ])['type'];
+
+        @set_time_limit(0);
+
+        $synchro = $this->mesTicketsService->synchroniserTickets($request);
+        if (! $synchro['complete']) {
+            return redirect()->route('parametres.index')->with('error',
+                "La liste des tickets Unipalm n'a pas pu être chargée entièrement ("
+                . $synchro['pages_lues'] . '/' . max(1, $synchro['last_page']) . ' pages). '
+                . 'Aucun ticket validé, réessayez dans quelques instants.');
+        }
+
+        $tickets = $this->mesTicketsService->fetchAllTickets([], $request);
+        $tickets = $this->mergeLocalTicketsIntoList($tickets);
+        $tickets = $this->mesTicketsService->filterTicketsNonValides($tickets);
+        $tickets = $this->mesTicketsService->filtrerTicketsParType($tickets, $type, $request);
+
+        $vehiculesPgfLookup = $this->vehiculesPgfLookup();
+        $fichesDisponibles = $this->fichesNonDechargeesPourChef($request);
+        $fichesUtilisees = [];
+
+        $valides = 0;
+        $avecFiche = 0;
+        $echecs = [];
+
+        foreach ($tickets as $ticket) {
+            $id = (int) ($ticket['id_ticket'] ?? 0);
+            $numero = trim((string) ($ticket['numero_ticket'] ?? '')) ?: ('#' . $id);
+            if ($id <= 0) {
+                $echecs[] = $numero . ' : identifiant manquant.';
+                continue;
+            }
+
+            $ficheId = null;
+            $estPgf = $this->vehiculeEstCamionPgf(
+                (int) ($ticket['vehicule_id'] ?? 0),
+                (string) ($ticket['matricule_vehicule'] ?? ''),
+                $vehiculesPgfLookup
+            );
+            if ($estPgf && $fichesDisponibles->isNotEmpty()) {
+                $fiche = $this->ficheTicketCorrespondance
+                    ->filtrer($fichesDisponibles, $this->ficheTicketCorrespondance->ticketDepuisApi($ticket))
+                    ->first(fn (FicheSortie $f) => ! isset($fichesUtilisees[$f->id]));
+                if ($fiche) {
+                    $ficheId = (int) $fiche->id;
+                    $fichesUtilisees[$ficheId] = true;
+                }
+            }
+
+            $sousRequete = Request::create(route('tickets.valider', $id), 'POST', array_filter([
+                'confirm_validation' => 1,
+                'fiche_id' => $ficheId,
+            ]));
+            $sousRequete->setLaravelSession($request->session());
+            $sousRequete->setUserResolver($request->getUserResolver());
+            $sousRequete->headers->set('X-Requested-With', 'XMLHttpRequest');
+            $sousRequete->headers->set('Accept', 'application/json');
+            $sousRequete->attributes->set('validation_sans_restriction', true);
+
+            try {
+                $reponse = $this->valider($sousRequete, $id, $dechargementService);
+                $data = $reponse instanceof \Illuminate\Http\JsonResponse ? $reponse->getData(true) : [];
+                if (! empty($data['success'])) {
+                    $valides++;
+                    if ($ficheId) {
+                        $avecFiche++;
+                    }
+                } else {
+                    $echecs[] = $numero . ' : ' . ($data['message'] ?? 'échec de validation.');
+                }
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                $echecs[] = $numero . ' : ' . collect($e->errors())->flatten()->first();
+            } catch (\Throwable $e) {
+                $echecs[] = $numero . ' : ' . $e->getMessage();
+            }
+        }
+
+        $this->mesTicketsService->forgetEnAttenteCountCache($request);
+
+        $libelle = $type === 'particulier' ? 'particuliers' : 'professionnels';
+        $redirect = redirect()->route('parametres.index');
+
+        if ($tickets === []) {
+            return $redirect->with('info', "Aucun ticket {$libelle} en attente.");
+        }
+
+        $message = "{$valides} ticket(s) {$libelle} validé(s) sur " . count($tickets) . '.';
+        if ($avecFiche > 0) {
+            $message .= " {$avecFiche} associé(s) automatiquement à leur fiche de sortie.";
+        }
+
+        if ($valides > 0) {
+            $redirect->with('play_validation_sound', true);
+        }
+
+        if ($echecs === []) {
+            return $redirect->with('success', $message);
+        }
+
+        return $redirect
+            ->with($valides > 0 ? 'warning' : 'error', $message)
+            ->with('validation_echecs', $echecs);
     }
 
     public function confirmUnipalm(Request $request, int $id, ChefEquipeContext $chefContext)

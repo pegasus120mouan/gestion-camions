@@ -36,12 +36,14 @@ class AppServiceProvider extends ServiceProvider
             $ticketsEnAttenteCount = 0;
             $ticketsEnAttenteProfessionnelCount = 0;
             $ticketsEnAttenteParticulierCount = 0;
+            $ticketsSyncNecessaire = false;
             try {
-                $counts = app(\App\Services\MesTicketsService::class)
-                    ->countsTicketsEnAttente(request());
+                $mesTickets = app(\App\Services\MesTicketsService::class);
+                $counts = $mesTickets->countsTicketsEnAttente(request());
                 $ticketsEnAttenteCount = (int) ($counts['total'] ?? 0);
                 $ticketsEnAttenteProfessionnelCount = (int) ($counts['professionnel'] ?? 0);
                 $ticketsEnAttenteParticulierCount = (int) ($counts['particulier'] ?? 0);
+                $ticketsSyncNecessaire = $mesTickets->synchronisationTicketsNecessaire(request());
             } catch (\Throwable) {
                 $ticketsEnAttenteCount = 0;
                 $ticketsEnAttenteProfessionnelCount = 0;
@@ -50,6 +52,7 @@ class AppServiceProvider extends ServiceProvider
 
             $chefSession = app(\App\Services\ChefEquipeSession::class);
             $authChef = $chefSession->chef();
+            $peutParametres = app(\App\Services\ParametresAccess::class)->allowed(request());
 
             $showSoldeChefBanner = request()->routeIs('gestionfinanciere.*', 'solde_chef_equipe.*', 'effectuer_paiement.*');
             $soldeChef = null;
@@ -73,6 +76,8 @@ class AppServiceProvider extends ServiceProvider
                 'soldeChef' => $soldeChef,
                 'soldeChefToken' => $soldeChefToken,
                 'authChef' => $authChef,
+                'peutParametres' => $peutParametres,
+                'ticketsSyncNecessaire' => $ticketsSyncNecessaire,
             ]);
         });
     }

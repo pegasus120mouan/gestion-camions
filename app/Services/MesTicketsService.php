@@ -12,6 +12,14 @@ use Illuminate\Support\Facades\Schema;
 
 class MesTicketsService
 {
+    private const TICKETS_STORE_PREFIX = 'mes_tickets_pages:';
+
+    private const TICKETS_PAGE_SIZE = 100;
+
+    private const TICKETS_FRESH_SECONDS = 300;
+
+    private const TICKETS_SYNC_BUDGET_SECONDS = 20;
+
     /** @var array<string, list<array<string, mixed>>> */
     private array $cachedAllTickets = [];
 
@@ -57,6 +65,10 @@ class MesTicketsService
 
 
     /**
+     * Liste complète des tickets du chef. L'API Unipalm met 5 à 20 s par page et coupe souvent :
+     * chaque page est conservée en cache et n'est remplacée que par une lecture réussie,
+     * pour ne jamais servir une liste tronquée.
+     *
      * @return list<array<string, mixed>>
      */
     public function fetchAllTickets(array $params = [], ?Request $request = null): array
@@ -66,31 +78,167 @@ class MesTicketsService
             return $this->cachedAllTickets[$cacheKey];
         }
 
-        $all = [];
-        $page = 1;
+        $etat = $this->etatTicketsEnCache($cacheKey)
+            ?? $this->synchroniserPages($params, $request, self::TICKETS_SYNC_BUDGET_SECONDS);
 
-        do {
-            $result = $this->listTickets(array_merge($params, ['page' => $page]), $request);
-            if ($result['error']) {
-                break;
+        return $this->cachedAllTickets[$cacheKey] = $this->assemblerPages($etat);
+    }
+
+    public function synchronisationTicketsNecessaire(?Request $request = null): bool
+    {
+        $etat = $this->etatTicketsEnCache($this->ticketsCacheKey([], $request));
+
+        return $etat === null
+            || ! $this->etatComplet($etat)
+            || time() - $etat['at'] >= self::TICKETS_FRESH_SECONDS;
+    }
+
+    /**
+     * @return array{complete: bool, tickets: int, pages_lues: int, last_page: int}
+     */
+    public function synchroniserTickets(?Request $request = null): array
+    {
+        $avant = $this->etatTicketsEnCache($this->ticketsCacheKey([], $request));
+        $etat = $this->synchroniserPages([], $request, null);
+
+        $this->cachedAllTickets = [];
+        if ($etat !== $avant) {
+            $this->forgetEnAttenteCountCache($request);
+        }
+
+        return [
+            'complete' => $this->etatComplet($etat),
+            'tickets' => count($this->assemblerPages($etat)),
+            'pages_lues' => count($etat['pages']),
+            'last_page' => $etat['last_page'],
+        ];
+    }
+
+    /**
+     * @return array{at: int, last_page: int, pages: array<int, list<array<string, mixed>>>}
+     */
+    private function synchroniserPages(array $params, ?Request $request, ?float $budgetSecondes): array
+    {
+        $request ??= request();
+        $cacheKey = $this->ticketsCacheKey($params, $request);
+        $storeKey = self::TICKETS_STORE_PREFIX.$cacheKey;
+        $fetchParams = array_merge($this->chefContext->apiQueryParams($request), $params);
+        $etat = $this->etatTicketsEnCache($cacheKey) ?? ['at' => 0, 'last_page' => 0, 'pages' => []];
+
+        if (! Cache::add($storeKey.':sync', 1, 900)) {
+            return $etat;
+        }
+
+        try {
+            $debut = microtime(true);
+            $lues = [];
+
+            while (($page = $this->prochainePageALire($etat, $lues)) !== null) {
+                if ($budgetSecondes !== null && $lues !== [] && microtime(true) - $debut > $budgetSecondes) {
+                    break;
+                }
+                $lues[] = $page;
+
+                $result = $this->listTickets(array_merge($fetchParams, [
+                    'page' => $page,
+                    'per_page' => self::TICKETS_PAGE_SIZE,
+                ]), $request);
+                if ($result['error']) {
+                    continue;
+                }
+
+                $lastPage = max(1, (int) ($result['pagination']['last_page'] ?? 1));
+                $etat['last_page'] = $lastPage;
+                $etat['pages'][$page] = $result['tickets'];
+                $etat['pages'] = array_filter($etat['pages'], static fn ($n) => $n <= $lastPage, ARRAY_FILTER_USE_KEY);
+
+                Cache::forever($storeKey, $etat);
             }
 
-            $batch = $result['tickets'];
-            if ($batch === []) {
-                break;
+            if ($page === null && $this->etatComplet($etat)) {
+                $etat['at'] = time();
+                Cache::forever($storeKey, $etat);
             }
+        } finally {
+            Cache::forget($storeKey.':sync');
+        }
 
-            $all = array_merge($all, $batch);
+        return $etat;
+    }
 
-            $pagination = $result['pagination'] ?? [];
-            $lastPage = (int) ($pagination['last_page'] ?? 1);
-            if ($page >= $lastPage) {
-                break;
+    /**
+     * Pages manquantes d'abord, puis rafraîchissement des pages déjà en cache.
+     *
+     * @param  list<int>  $lues
+     */
+    private function prochainePageALire(array $etat, array $lues): ?int
+    {
+        $pages = $etat['last_page'] > 0 ? range(1, $etat['last_page']) : [1];
+        $restantes = array_values(array_diff($pages, $lues));
+
+        foreach ($restantes as $page) {
+            if (! isset($etat['pages'][$page])) {
+                return $page;
             }
-            $page++;
-        } while ($page <= 100);
+        }
 
-        return $this->cachedAllTickets[$cacheKey] = $all;
+        return $restantes[0] ?? null;
+    }
+
+    /**
+     * @return array{at: int, last_page: int, pages: array<int, list<array<string, mixed>>>}|null
+     */
+    private function etatTicketsEnCache(string $cacheKey): ?array
+    {
+        $etat = Cache::get(self::TICKETS_STORE_PREFIX.$cacheKey);
+        if (! is_array($etat) || ! is_array($etat['pages'] ?? null)) {
+            return null;
+        }
+
+        return [
+            'at' => (int) ($etat['at'] ?? 0),
+            'last_page' => (int) ($etat['last_page'] ?? 0),
+            'pages' => $etat['pages'],
+        ];
+    }
+
+    private function etatComplet(array $etat): bool
+    {
+        if ($etat['last_page'] <= 0) {
+            return false;
+        }
+
+        foreach (range(1, $etat['last_page']) as $page) {
+            if (! isset($etat['pages'][$page])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function assemblerPages(array $etat): array
+    {
+        $pages = $etat['pages'];
+        ksort($pages);
+
+        $tickets = [];
+        $vus = [];
+        foreach ($pages as $batch) {
+            foreach ($batch as $ticket) {
+                $id = (string) ($ticket['id_ticket'] ?? '');
+                if ($id !== '' && isset($vus[$id])) {
+                    continue;
+                }
+                $vus[$id] = true;
+                $tickets[] = $ticket;
+            }
+        }
+
+        return $tickets;
     }
 
     /**
@@ -202,7 +350,8 @@ class MesTicketsService
         try {
             $response = Http::acceptJson()
                 ->withoutVerifying()
-                ->timeout((int) config('services.external_auth.timeout', 10))
+                ->timeout((int) config('services.external_auth.tickets_timeout', 60))
+                ->retry(2, 1000, null, false)
                 ->get($url, $query);
         } catch (\Throwable $e) {
             return $this->emptyResult('Impossible de joindre le service tickets.');

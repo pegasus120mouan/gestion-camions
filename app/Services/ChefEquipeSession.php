@@ -21,6 +21,15 @@ class ChefEquipeSession
         $request->session()->put('chef_equipe_token', (string) ($chef['token'] ?? ''));
     }
 
+    /**
+     * Session authentifiée sans chef d'équipe (super-utilisateur).
+     */
+    public function loginSansChef(Request $request): void
+    {
+        $request->session()->put(self::AUTH_KEY, true);
+        $request->session()->forget([self::SESSION_KEY, 'chef_equipe_id', 'chef_equipe_token']);
+    }
+
     public function logout(Request $request): void
     {
         $request->session()->forget([

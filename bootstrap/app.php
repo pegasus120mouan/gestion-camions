@@ -13,6 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'auth' => \App\Http\Middleware\AuthenticateChefEquipe::class,
+            'parametres' => \App\Http\Middleware\EnsureParametresAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
