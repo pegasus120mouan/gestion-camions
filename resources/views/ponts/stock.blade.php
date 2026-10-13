@@ -27,6 +27,10 @@
         <button type="button" class="btn btn-secondary" disabled title="Pont fermé — entrées de stock interdites">
           <i class="bx bx-lock me-1"></i> Pont fermé
         </button>
+      @elseif(($parcs ?? collect())->isEmpty())
+        <a href="{{ route('parcs.index') }}" class="btn btn-outline-primary" title="Ce pont n'a aucun parc actif">
+          <i class="bx bx-plus me-1"></i> Aucun parc — Créer un parc
+        </a>
       @elseif($parcsDisponibles->isEmpty())
         <button type="button" class="btn btn-secondary" disabled title="Tous les parcs ont un stock actif">
           <i class="bx bx-lock me-1"></i> Tous les parcs occupés
