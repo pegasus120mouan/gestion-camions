@@ -93,6 +93,59 @@
         </div>
       </div>
     </div>
+
+    <div class="card mt-4 border border-danger">
+      <div class="card-header">
+        <h5 class="mb-1 text-danger"><i class="bx bx-trash me-2"></i>Remise à zéro</h5>
+        <small class="text-muted">
+          Suppression définitive des données locales gest-camions. Les ponts eux-mêmes viennent d'Unipalm et restent dans la liste.
+        </small>
+      </div>
+      <div class="card-body">
+        <div class="row g-4">
+          @foreach([
+            'stocks' => [
+              'titre' => 'Stocks des ponts',
+              'description' => 'Supprime tous les stocks et leurs entrées : le « Stock disponible » de chaque pont revient à 0 kg.',
+              'libelle' => 'stock(s) et entrée(s) de stock des ponts',
+              'icone' => 'bx-package',
+            ],
+            'ponts' => [
+              'titre' => 'Soldes des ponts',
+              'description' => 'Supprime les approvisionnements et dépenses des ponts : avec les stocks vidés, le « Solde » revient à 0 FCFA.',
+              'libelle' => 'approvisionnement(s) et dépense(s) des ponts',
+              'icone' => 'bx-wallet',
+            ],
+            'parcs' => [
+              'titre' => 'Parcs',
+              'description' => 'Supprime tous les parcs. Les stocks et fiches de sortie liés perdent simplement leur parc.',
+              'libelle' => 'parc(s)',
+              'icone' => 'bx-map-pin',
+            ],
+          ] as $cible => $info)
+            <div class="col-md-4">
+              <div class="border rounded p-4 h-100 d-flex flex-column">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h6 class="mb-0"><i class="bx {{ $info['icone'] }} me-1"></i>{{ $info['titre'] }}</h6>
+                  <span class="badge rounded-pill bg-label-danger">{{ $remiseAZero[$cible] }}</span>
+                </div>
+                <p class="text-muted small mb-3">{{ $info['description'] }}</p>
+                <form method="POST" action="{{ route('parametres.vider') }}" class="mt-auto js-valider-tout"
+                  data-libelle="{{ $info['libelle'] }}" data-nombre="{{ $remiseAZero[$cible] }}"
+                  data-titre="Confirmer la suppression" data-verbe="supprimer" data-action="Vider" data-encours="Suppression en cours…"
+                  data-note="{{ $info['description'] }}">
+                  @csrf
+                  <input type="hidden" name="cible" value="{{ $cible }}" />
+                  <button type="submit" class="btn btn-danger w-100" @disabled($remiseAZero[$cible] === 0)>
+                    <i class="bx bx-trash me-1"></i>Vider : {{ mb_strtolower($info['titre']) }}
+                  </button>
+                </form>
+              </div>
+            </div>
+          @endforeach
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -151,10 +204,10 @@
       document.getElementById('confirmValiderToutNote').textContent = form.dataset.note + ' ';
 
       var boutonForm = form.querySelector('button[type="submit"]');
-      var classeBouton = ['btn-success', 'btn-warning'].find(function (c) {
+      var classeBouton = ['btn-success', 'btn-warning', 'btn-danger'].find(function (c) {
         return boutonForm.classList.contains(c);
       }) || 'btn-primary';
-      confirmBtn.classList.remove('btn-primary', 'btn-success', 'btn-warning');
+      confirmBtn.classList.remove('btn-primary', 'btn-success', 'btn-warning', 'btn-danger');
       confirmBtn.classList.add(classeBouton);
       confirmBtn.innerHTML = boutonForm.querySelector('i').outerHTML + form.dataset.action;
 

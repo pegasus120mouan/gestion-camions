@@ -267,6 +267,7 @@ Route::middleware('auth')->group(function () {
             ->name('parametres.tickets.valider_tout');
         Route::post('/parametres/fiches-sortie/decharger-tout', [TicketController::class, 'dechargerFichesEnMasse'])
             ->name('parametres.fiches.decharger_tout');
+        Route::post('/parametres/vider', [ParametreController::class, 'vider'])->name('parametres.vider');
     });
 
     Route::get('/commis', [CommisController::class, 'index'])->name('commis.index');
