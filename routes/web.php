@@ -265,6 +265,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/parametres', [ParametreController::class, 'index'])->name('parametres.index');
         Route::post('/parametres/tickets/valider-tout', [TicketController::class, 'validerEnMasse'])
             ->name('parametres.tickets.valider_tout');
+        Route::post('/parametres/fiches-sortie/decharger-tout', [TicketController::class, 'dechargerFichesEnMasse'])
+            ->name('parametres.fiches.decharger_tout');
     });
 
     Route::get('/commis', [CommisController::class, 'index'])->name('commis.index');

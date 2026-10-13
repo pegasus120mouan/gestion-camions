@@ -19,7 +19,7 @@
 
     @if(session('validation_echecs'))
       <div class="alert alert-danger" role="alert">
-        <strong>Tickets non validés :</strong>
+        <strong>{{ session('validation_echecs_titre', 'Tickets non validés :') }}</strong>
         <ul class="mb-0 mt-2">
           @foreach(session('validation_echecs') as $echec)
             <li>{{ $echec }}</li>
@@ -50,7 +50,9 @@
                   <span class="badge rounded-pill bg-danger">{{ $countsEnAttente[$type] ?? 0 }} en attente</span>
                 </div>
                 <form method="POST" action="{{ route('parametres.tickets.valider_tout') }}" class="mt-auto js-valider-tout"
-                  data-libelle="{{ mb_strtolower($info['libelle']) }}" data-nombre="{{ $countsEnAttente[$type] ?? 0 }}">
+                  data-libelle="{{ mb_strtolower($info['libelle']) }} en attente" data-nombre="{{ $countsEnAttente[$type] ?? 0 }}"
+                  data-titre="Confirmer la validation" data-verbe="valider" data-action="Valider" data-encours="Validation en cours…"
+                  data-note="Le prix, le montant, la fiche agent et le transporteur seront calculés pour chaque ticket.">
                   @csrf
                   <input type="hidden" name="type" value="{{ $type }}" />
                   <button type="submit" class="btn btn-{{ $info['couleur'] }} w-100" @disabled(($countsEnAttente[$type] ?? 0) === 0)>
@@ -60,6 +62,34 @@
               </div>
             </div>
           @endforeach
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-4">
+      <div class="card-header">
+        <h5 class="mb-1"><i class="bx bx-download me-2"></i>Déchargement des fiches de sortie</h5>
+        <small class="text-muted">
+          Décharge toutes les fiches de sortie non déchargées. Si un ticket Unipalm en attente correspond
+          (véhicule, agent, pont, usine), la fiche est déchargée avec ce ticket (camion PGF : ticket validé et stock déduit).
+          Sinon, la fiche est déchargée à la date du jour avec son poids, sans déduction de stock.
+        </small>
+      </div>
+      <div class="card-body">
+        <div class="border rounded p-4 d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+          <div class="d-flex align-items-center gap-3">
+            <h6 class="mb-0">Fiches de sortie non déchargées</h6>
+            <span class="badge rounded-pill bg-warning">{{ $fichesNonDechargees }} en attente</span>
+          </div>
+          <form method="POST" action="{{ route('parametres.fiches.decharger_tout') }}" class="js-valider-tout"
+            data-libelle="fiche(s) de sortie non déchargée(s)" data-nombre="{{ $fichesNonDechargees }}"
+            data-titre="Confirmer le déchargement" data-verbe="décharger" data-action="Décharger" data-encours="Déchargement en cours…"
+            data-note="Les fiches sans ticket correspondant seront déchargées à la date du jour, sans déduction de stock.">
+            @csrf
+            <button type="submit" class="btn btn-warning" @disabled($fichesNonDechargees === 0)>
+              <i class="bx bx-download me-1"></i>Décharger toutes les fiches
+            </button>
+          </form>
         </div>
       </div>
     </div>
@@ -74,26 +104,24 @@
           style="width: 72px; height: 72px;">
           <i class="bx bx-error text-warning" style="font-size: 2.5rem;"></i>
         </div>
-        <h4 class="mb-2">Confirmer la validation</h4>
+        <h4 class="mb-2" id="confirmValiderToutTitre">Confirmer la validation</h4>
         <p class="text-muted mb-4">
-          Vous êtes sur le point de valider
+          Vous êtes sur le point de <span id="confirmValiderToutVerbe">valider</span>
           <strong class="text-body" id="confirmValiderToutNombre">0</strong>
-          <span id="confirmValiderToutLibelle"></span> en attente.
+          <span id="confirmValiderToutLibelle"></span>.
         </p>
 
         <div class="alert alert-warning d-flex align-items-start text-start mb-4" role="alert">
           <i class="bx bx-info-circle me-2 mt-1"></i>
           <div>
-            Le prix, le montant, la fiche agent et le transporteur seront calculés pour chaque ticket.
+            <span id="confirmValiderToutNote"></span>
             <strong>Cette action est irréversible.</strong>
           </div>
         </div>
 
         <div class="d-flex justify-content-center gap-3">
           <button type="button" class="btn btn-outline-secondary px-4" data-bs-dismiss="modal">Annuler</button>
-          <button type="button" class="btn btn-primary px-4" id="confirmValiderToutBtn">
-            <i class="bx bx-check-double me-1"></i>Valider
-          </button>
+          <button type="button" class="btn btn-primary px-4" id="confirmValiderToutBtn"></button>
         </div>
       </div>
     </div>
@@ -116,11 +144,19 @@
       e.preventDefault();
       formEnCours = form;
 
+      document.getElementById('confirmValiderToutTitre').textContent = form.dataset.titre;
+      document.getElementById('confirmValiderToutVerbe').textContent = form.dataset.verbe;
       document.getElementById('confirmValiderToutNombre').textContent = form.dataset.nombre;
       document.getElementById('confirmValiderToutLibelle').textContent = form.dataset.libelle;
-      var classeBouton = form.querySelector('button[type="submit"]').classList.contains('btn-success') ? 'btn-success' : 'btn-primary';
-      confirmBtn.classList.remove('btn-primary', 'btn-success');
+      document.getElementById('confirmValiderToutNote').textContent = form.dataset.note + ' ';
+
+      var boutonForm = form.querySelector('button[type="submit"]');
+      var classeBouton = ['btn-success', 'btn-warning'].find(function (c) {
+        return boutonForm.classList.contains(c);
+      }) || 'btn-primary';
+      confirmBtn.classList.remove('btn-primary', 'btn-success', 'btn-warning');
       confirmBtn.classList.add(classeBouton);
+      confirmBtn.innerHTML = boutonForm.querySelector('i').outerHTML + form.dataset.action;
 
       bootstrap.Modal.getOrCreateInstance(modalEl).show();
     });
@@ -130,12 +166,12 @@
     if (!formEnCours) {
       return;
     }
+    var enCours = '<span class="spinner-border spinner-border-sm me-1"></span>' + formEnCours.dataset.encours;
     confirmBtn.disabled = true;
-    confirmBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Validation en cours…';
+    confirmBtn.innerHTML = enCours;
     modalEl.querySelector('[data-bs-dismiss="modal"]').disabled = true;
 
-    var btn = formEnCours.querySelector('button[type="submit"]');
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Validation en cours…';
+    formEnCours.querySelector('button[type="submit"]').innerHTML = enCours;
     document.querySelectorAll('form.js-valider-tout button').forEach(function (b) { b.disabled = true; });
 
     formEnCours.dataset.confirme = '1';

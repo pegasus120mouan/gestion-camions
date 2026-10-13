@@ -2083,6 +2083,173 @@ class TicketController extends Controller
     }
 
     /**
+     * @return array<string, mixed> réponse JSON de valider()
+     */
+    private function validerTicketSansRestriction(
+        Request $request,
+        int $id,
+        ?int $ficheId,
+        FicheSortieDechargementService $dechargementService
+    ): array {
+        $sousRequete = Request::create(route('tickets.valider', $id), 'POST', array_filter([
+            'confirm_validation' => 1,
+            'fiche_id' => $ficheId,
+        ]));
+        $sousRequete->setLaravelSession($request->session());
+        $sousRequete->setUserResolver($request->getUserResolver());
+        $sousRequete->headers->set('X-Requested-With', 'XMLHttpRequest');
+        $sousRequete->headers->set('Accept', 'application/json');
+        $sousRequete->attributes->set('validation_sans_restriction', true);
+
+        $reponse = $this->valider($sousRequete, $id, $dechargementService);
+
+        return $reponse instanceof \Illuminate\Http\JsonResponse ? $reponse->getData(true) : [];
+    }
+
+    /**
+     * Décharge toutes les fiches de sortie non déchargées. Une fiche dont un ticket Unipalm en attente correspond
+     * est déchargée avec ce ticket ; sinon elle est déchargée à la date du jour, sans déduction de stock.
+     */
+    public function dechargerFichesEnMasse(Request $request, FicheSortieDechargementService $dechargementService)
+    {
+        @set_time_limit(0);
+
+        $redirect = redirect()->route('parametres.index');
+        $fiches = FicheSortie::query()
+            ->whereNull('date_dechargement')
+            ->orderBy('date_chargement')
+            ->orderBy('id')
+            ->get();
+
+        if ($fiches->isEmpty()) {
+            return $redirect->with('info', 'Aucune fiche de sortie non déchargée.');
+        }
+
+        $synchro = $this->mesTicketsService->synchroniserTickets($request);
+        if (! $synchro['complete']) {
+            return $redirect->with('error',
+                "La liste des tickets Unipalm n'a pas pu être chargée entièrement ("
+                . $synchro['pages_lues'] . '/' . max(1, $synchro['last_page']) . ' pages). '
+                . 'Aucune fiche déchargée, réessayez dans quelques instants.');
+        }
+
+        $tickets = $this->mesTicketsService->filterTicketsNonValides(
+            $this->mergeLocalTicketsIntoList($this->mesTicketsService->fetchAllTickets([], $request))
+        );
+        $vehiculesPgfLookup = $this->vehiculesPgfLookup();
+        $ticketsUtilises = [];
+
+        $avecTicket = 0;
+        $sansTicket = 0;
+        $echecs = [];
+
+        foreach ($fiches as $fiche) {
+            $libelle = $fiche->numero_fiche ?: ('#' . $fiche->id);
+            $ticket = collect($tickets)->first(fn (array $t) => ! isset($ticketsUtilises[(int) ($t['id_ticket'] ?? 0)])
+                && $this->ficheTicketCorrespondance->correspond($this->ficheTicketCorrespondance->ticketDepuisApi($t), $fiche));
+
+            try {
+                if ($ticket && $this->dechargerFicheAvecTicket($request, $fiche, $ticket, $vehiculesPgfLookup, $dechargementService)) {
+                    $ticketsUtilises[(int) $ticket['id_ticket']] = true;
+                    $avecTicket++;
+
+                    continue;
+                }
+
+                $this->dechargerFicheSansTicket($fiche->refresh());
+                $sansTicket++;
+            } catch (\Throwable $e) {
+                $echecs[] = $libelle . ' : ' . $e->getMessage();
+            }
+        }
+
+        $this->mesTicketsService->forgetEnAttenteCountCache($request);
+
+        $decharges = $avecTicket + $sansTicket;
+        $message = "{$decharges} fiche(s) de sortie déchargée(s) sur " . $fiches->count() . '.';
+        if ($avecTicket > 0) {
+            $message .= " {$avecTicket} avec leur ticket Unipalm.";
+        }
+        if ($sansTicket > 0) {
+            $message .= " {$sansTicket} sans ticket correspondant (date du jour, sans déduction de stock).";
+        }
+
+        if ($decharges > 0) {
+            $redirect->with('play_validation_sound', true);
+        }
+
+        if ($echecs === []) {
+            return $redirect->with('success', $message);
+        }
+
+        return $redirect
+            ->with($decharges > 0 ? 'warning' : 'error', $message)
+            ->with('validation_echecs', $echecs)
+            ->with('validation_echecs_titre', 'Fiches non déchargées :');
+    }
+
+    /**
+     * @param  array<string, mixed>  $ticket
+     * @param  array{ids: array<int, true>, matricules: array<string, true>}  $vehiculesPgfLookup
+     */
+    private function dechargerFicheAvecTicket(
+        Request $request,
+        FicheSortie $fiche,
+        array $ticket,
+        array $vehiculesPgfLookup,
+        FicheSortieDechargementService $dechargementService
+    ): bool {
+        $id = (int) ($ticket['id_ticket'] ?? 0);
+        if ($id <= 0) {
+            return false;
+        }
+
+        $estPgf = $this->vehiculeEstCamionPgf(
+            (int) ($ticket['vehicule_id'] ?? 0),
+            (string) ($ticket['matricule_vehicule'] ?? ''),
+            $vehiculesPgfLookup
+        );
+
+        if ($estPgf) {
+            $data = $this->validerTicketSansRestriction($request, $id, (int) $fiche->id, $dechargementService);
+
+            return ! empty($data['success']) && $fiche->refresh()->date_dechargement !== null;
+        }
+
+        try {
+            $dechargementService->decharger(
+                $fiche,
+                (string) ($ticket['numero_ticket'] ?? ''),
+                (string) ($ticket['date_ticket'] ?? now()->toDateString()),
+                (float) ($ticket['poids'] ?? 0),
+                $id,
+                isset($ticket['nom_usine']) ? (string) $ticket['nom_usine'] : null,
+            );
+
+            return true;
+        } catch (\InvalidArgumentException) {
+            return false;
+        }
+    }
+
+    private function dechargerFicheSansTicket(FicheSortie $fiche): void
+    {
+        if ($fiche->date_dechargement !== null) {
+            return;
+        }
+
+        $poids = (float) ($fiche->poids_pont ?? 0);
+        $montantAgent = $poids > 0
+            ? app(MontantAgentFicheService::class)->calculerMontantPourFiche($fiche, $poids)
+            : null;
+
+        $fiche->update([
+            'date_dechargement' => now()->toDateString(),
+            'montant_agent' => $montantAgent !== null ? round($montantAgent, 2) : $fiche->montant_agent,
+        ]);
+    }
+
+    /**
      * Valide tous les tickets en attente d'un type (professionnel / particulier), sans exiger de fiche
      * pour les camions PGF : la fiche correspondante est associée automatiquement si elle existe.
      */
@@ -2140,19 +2307,8 @@ class TicketController extends Controller
                 }
             }
 
-            $sousRequete = Request::create(route('tickets.valider', $id), 'POST', array_filter([
-                'confirm_validation' => 1,
-                'fiche_id' => $ficheId,
-            ]));
-            $sousRequete->setLaravelSession($request->session());
-            $sousRequete->setUserResolver($request->getUserResolver());
-            $sousRequete->headers->set('X-Requested-With', 'XMLHttpRequest');
-            $sousRequete->headers->set('Accept', 'application/json');
-            $sousRequete->attributes->set('validation_sans_restriction', true);
-
             try {
-                $reponse = $this->valider($sousRequete, $id, $dechargementService);
-                $data = $reponse instanceof \Illuminate\Http\JsonResponse ? $reponse->getData(true) : [];
+                $data = $this->validerTicketSansRestriction($request, $id, $ficheId, $dechargementService);
                 if (! empty($data['success'])) {
                     $valides++;
                     if ($ficheId) {

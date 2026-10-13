@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\FicheSortie;
 use App\Services\MesTicketsService;
 use Illuminate\Http\Request;
 
@@ -17,6 +18,7 @@ class ParametreController extends Controller
 
         return view('parametres.index', [
             'countsEnAttente' => $counts,
+            'fichesNonDechargees' => FicheSortie::query()->whereNull('date_dechargement')->count(),
         ]);
     }
 }
