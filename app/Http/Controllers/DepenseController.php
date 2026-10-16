@@ -25,11 +25,12 @@ use Illuminate\Support\Facades\Schema;
 
 class DepenseController extends Controller
 {
-    private function vehiculeEstEnCoursUtilisation(int $vehiculeId): bool
+    private function vehiculeEstEnCoursUtilisation(int $vehiculeId, ?int $exclureFicheId = null): bool
     {
         return FicheSortie::query()
             ->where('vehicule_id', $vehiculeId)
             ->whereNull('date_dechargement')
+            ->when($exclureFicheId, fn ($q) => $q->where('id', '!=', $exclureFicheId))
             ->exists();
     }
 
@@ -672,6 +673,7 @@ class DepenseController extends Controller
             'filtresActifs' => $filtresActifs,
             'ponts' => $ponts,
             'agents' => $agents,
+            'agentsPontsMap' => $this->buildAgentsPontsMap($ponts, $agents),
             'usines' => $donneesUsinesProduits['usinesFiltre'],
             'produits' => $donneesUsinesProduits['produits'],
             'usinesParProduit' => $donneesUsinesProduits['usinesParProduit'],
@@ -752,6 +754,12 @@ class DepenseController extends Controller
 
         $donneesUsinesProduits = $this->chargerDonneesUsinesProduitsFiches();
 
+        $agents = [];
+        try {
+            $agents = app(MesAgentsService::class)->fetchAllAgents([], $request);
+        } catch (\Throwable $e) {
+        }
+
         // Récupérer tous les parcs actifs groupés par pont
         $parcsParPont = \App\Models\Parc::where('statut', 'actif')
             ->get()
@@ -761,7 +769,12 @@ class DepenseController extends Controller
             'fiches' => $fiches,
             'vehicules' => $vehicules,
             'ponts' => $ponts,
+            'agents' => $agents,
+            'agentsPontsMap' => $this->buildAgentsPontsMap($ponts, $agents),
             'usines' => $donneesUsinesProduits['usinesFiltre'],
+            'produits' => $donneesUsinesProduits['produits'],
+            'usinesParProduit' => $donneesUsinesProduits['usinesParProduit'],
+            'chefChargeurs' => \App\Models\ChefChargeur::orderBy('nom')->get(),
             'parcsParPont' => $parcsParPont,
             'gerableParPont' => $this->gerableParPontMap(),
             'external_error' => null,
@@ -1554,11 +1567,14 @@ class DepenseController extends Controller
         $ficheSortie = FicheSortie::findOrFail($ficheId);
 
         $validated = $request->validate([
+            'vehicule_id' => ['required', 'integer'],
+            'matricule_vehicule' => ['nullable', 'string', 'max:50'],
             'id_pont' => ['required', 'integer'],
             'id_agent' => ['required', 'integer'],
             'id_chef_chargeur' => ['nullable', 'integer'],
             'produit_id' => ['required', 'integer', 'exists:produits,id'],
             'usine' => ['nullable', 'string', 'max:255'],
+            'date_chargement' => ['nullable', 'date'],
             'date_dechargement' => ['nullable', 'date'],
             'poids_pont' => ['nullable', 'numeric', 'min:0'],
             'carburant' => ['nullable', 'integer', 'min:0'],
@@ -1569,21 +1585,34 @@ class DepenseController extends Controller
             return back()->withErrors(['usine' => "L'usine sélectionnée n'est pas associée à ce produit."])->withInput();
         }
 
+        $vehiculeId = (int) $validated['vehicule_id'];
+        $etatVehicule = CamionEtat::query()
+            ->where('vehicule_id', $vehiculeId)
+            ->value('etat');
+        if (in_array($etatVehicule, ['en_panne', 'inactif'], true)) {
+            return back()->withErrors(['vehicule_id' => "Ce camion est en panne ou inactif."])->withInput();
+        }
+
+        if ($this->vehiculeEstEnCoursUtilisation($vehiculeId, $ficheSortie->id)) {
+            return back()->withErrors(['vehicule_id' => "Ce camion a déjà une fiche de sortie non déchargée."])->withInput();
+        }
+
         $produit = \App\Models\Produit::find($validated['produit_id']);
         $nomProduit = $produit ? $produit->nom : null;
 
-        // Récupérer les infos du pont depuis l'API
-        $timeout = 10;
+        $timeout = (int) config('services.external_auth.timeout', 10);
+        $matricule = trim((string) ($validated['matricule_vehicule'] ?? ''));
         $nomPont = $ficheSortie->nom_pont;
         $codePont = $ficheSortie->code_pont;
         $nomAgent = $ficheSortie->nom_agent;
         $numeroAgent = $ficheSortie->numero_agent;
 
         try {
+            $mesPontsUrl = (string) config('services.external_auth.mes_ponts_url');
             $pontsResponse = Http::acceptJson()
                 ->withoutVerifying()
                 ->timeout($timeout)
-                ->get('https://api.objetombrepegasus.online/api/camions/mes_ponts.php');
+                ->get($mesPontsUrl);
             if ($pontsResponse->successful()) {
                 $ponts = $pontsResponse->json('ponts') ?? [];
                 foreach ($ponts as $p) {
@@ -1598,13 +1627,38 @@ class DepenseController extends Controller
             // Ignorer l'erreur
         }
 
+        if ($matricule === '' || $vehiculeId !== (int) ($ficheSortie->vehicule_id ?? 0)) {
+            try {
+                $mesCamionsUrl = (string) config('services.external_auth.mes_camions_url');
+                $camionsResponse = Http::acceptJson()
+                    ->withoutVerifying()
+                    ->timeout($timeout)
+                    ->get($mesCamionsUrl);
+                if ($camionsResponse->successful()) {
+                    foreach ($camionsResponse->json('vehicules') ?? [] as $v) {
+                        if ((int) ($v['id_vehicule'] ?? 0) === $vehiculeId) {
+                            $matricule = trim((string) ($v['matricule_vehicule'] ?? ''));
+                            break;
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        if ($matricule === '') {
+            $matricule = (string) ($ficheSortie->matricule_vehicule ?? '');
+        }
+
         $apiAgent = app(MesAgentsService::class)->findAgentById((int) $validated['id_agent']);
         if ($apiAgent) {
             $nomAgent = $apiAgent['nom_complet'] ?? '';
             $numeroAgent = $apiAgent['numero_agent'] ?? '';
         }
 
-        $ficheSortie->update([
+        $updates = [
+            'vehicule_id' => $vehiculeId,
+            'matricule_vehicule' => $matricule,
             'id_pont' => $validated['id_pont'],
             'nom_pont' => $nomPont,
             'code_pont' => $codePont,
@@ -1615,13 +1669,25 @@ class DepenseController extends Controller
             'produit_id' => $validated['produit_id'],
             'nom_produit' => $nomProduit,
             'usine' => $validated['usine'] ?? null,
-            'date_dechargement' => $validated['date_dechargement'] ?? null,
-            'poids_pont' => $validated['poids_pont'] ?? null,
             'carburant' => $validated['carburant'] ?? null,
             'frais_route' => $validated['frais_route'] ?? null,
-        ]);
+        ];
 
-        return redirect()->route('fiches_sortie.index')->with('success', 'Fiche de sortie modifiée avec succès.');
+        if (array_key_exists('date_chargement', $validated) && $validated['date_chargement']) {
+            $updates['date_chargement'] = $validated['date_chargement'];
+        }
+
+        // Ne pas écraser un déchargement existant si le champ n'est pas envoyé (page non déchargées).
+        if ($request->exists('date_dechargement')) {
+            $updates['date_dechargement'] = $validated['date_dechargement'] ?? null;
+        }
+        if ($request->exists('poids_pont')) {
+            $updates['poids_pont'] = $validated['poids_pont'] ?? null;
+        }
+
+        $ficheSortie->update($updates);
+
+        return back()->with('success', 'Fiche de sortie modifiée avec succès.');
     }
 
     public function destroyFicheSortie(int $ficheId)

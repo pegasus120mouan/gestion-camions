@@ -384,45 +384,74 @@
         @method('PUT')
         <div class="modal-body">
           <div class="row g-3">
+            @php
+              $ficheVehiculeId = (int) ($f->vehicule_id ?? 0);
+              $ficheMatricule = trim((string) ($f->matricule_vehicule ?? ''));
+              $fichePontId = (int) ($f->id_pont ?? 0);
+              $ficheAgentId = (int) ($f->id_agent ?? 0);
+              $ficheProduitNom = trim((string) ($f->nom_produit ?? ''));
+              $vehiculeIds = collect($vehicules ?? [])->map(fn ($v) => (int) ($v['id_vehicule'] ?? 0))->all();
+              $pontIds = collect($ponts ?? [])->map(fn ($p) => (int) ($p['id_pont'] ?? 0))->all();
+              $agentIds = collect($agents ?? [])->map(fn ($a) => (int) ($a['id_agent'] ?? 0))->all();
+              $produitSelectionne = (int) ($f->produit_id ?? 0);
+              if ($produitSelectionne <= 0 && $ficheProduitNom !== '') {
+                $produitSelectionne = (int) (collect($produits ?? [])->first(fn ($p) => strcasecmp((string) $p->nom, $ficheProduitNom) === 0)?->id ?? 0);
+              }
+            @endphp
             <div class="col-md-6">
-              <label class="form-label">Pont de pesage <span class="text-danger">*</span></label>
-              <select name="id_pont" class="form-select" required>
-                <option value="">-- Sélectionner un pont --</option>
-                @foreach($ponts as $p)
+              <label class="form-label">Camion <span class="text-danger">*</span></label>
+              <select name="vehicule_id" class="form-select js-edit-vehicule js-select2-edit" data-placeholder="Rechercher un camion…" required>
+                <option value="">-- Sélectionner un camion --</option>
+                @if($ficheVehiculeId > 0 && ! in_array($ficheVehiculeId, $vehiculeIds, true))
+                  <option value="{{ $ficheVehiculeId }}" data-matricule="{{ $ficheMatricule }}" selected>{{ $ficheMatricule !== '' ? $ficheMatricule : ('Véhicule #'.$ficheVehiculeId) }}</option>
+                @endif
+                @foreach($vehicules ?? [] as $v)
                   @php
-                    $pontNom = trim($p['nom_pont'] ?? '');
-                    $ficheNomPont = trim($f->nom_pont ?? '');
-                    $isSelectedPont = ($f->id_pont == ($p['id_pont'] ?? '')) || (strtolower($pontNom) == strtolower($ficheNomPont));
+                    $vid = (int) ($v['id_vehicule'] ?? 0);
+                    $mat = trim((string) ($v['matricule_vehicule'] ?? ''));
+                    $selected = ($vid > 0 && $vid === $ficheVehiculeId)
+                      || ($mat !== '' && strcasecmp($mat, $ficheMatricule) === 0);
                   @endphp
-                  <option value="{{ $p['id_pont'] ?? '' }}" data-nom="{{ $pontNom }}" data-code="{{ $p['code_pont'] ?? '' }}" {{ $isSelectedPont ? 'selected' : '' }}>
-                    {{ $pontNom }} ({{ $p['code_pont'] ?? '' }})
-                  </option>
+                  <option value="{{ $vid }}" data-matricule="{{ $mat }}" {{ $selected ? 'selected' : '' }}>{{ $mat }}</option>
                 @endforeach
               </select>
+              <input type="hidden" name="matricule_vehicule" class="js-edit-matricule" value="{{ $ficheMatricule }}" />
             </div>
             <div class="col-md-6">
               <label class="form-label">Agent <span class="text-danger">*</span></label>
-              <select name="id_agent" class="form-select" required>
+              <select name="id_agent" class="form-select js-edit-agent js-select2-edit" data-placeholder="Rechercher un agent…" required>
                 <option value="">-- Sélectionner un agent --</option>
+                @if($ficheAgentId > 0 && ! in_array($ficheAgentId, $agentIds, true))
+                  <option value="{{ $ficheAgentId }}" selected>{{ $f->nom_agent }}{{ $f->numero_agent ? ' (' . $f->numero_agent . ')' : '' }}</option>
+                @endif
                 @foreach($agents as $a)
                   @php
-                    $nomComplet = $a['nom_complet'] ?? (($a['nom_agent'] ?? '') . ' ' . ($a['prenom_agent'] ?? ''));
-                    $numeroAgent = $a['numero_agent'] ?? '';
-                    $ficheNomAgent = trim($f->nom_agent ?? '');
-                    $isSelectedAgent = ($f->id_agent == ($a['id_agent'] ?? '')) || (strtolower(trim($nomComplet)) == strtolower($ficheNomAgent));
+                    $nomComplet = trim((string) ($a['nom_complet'] ?? (($a['nom_agent'] ?? '') . ' ' . ($a['prenom_agent'] ?? ''))));
+                    $numeroAgent = (string) ($a['numero_agent'] ?? '');
+                    $isSelectedAgent = ((int) ($a['id_agent'] ?? 0) === $ficheAgentId)
+                      || ($nomComplet !== '' && strcasecmp($nomComplet, trim((string) ($f->nom_agent ?? ''))) === 0);
                   @endphp
-                  <option value="{{ $a['id_agent'] ?? '' }}" data-nom="{{ $nomComplet }}" data-numero="{{ $numeroAgent }}" {{ $isSelectedAgent ? 'selected' : '' }}>
+                  <option value="{{ $a['id_agent'] ?? '' }}" {{ $isSelectedAgent ? 'selected' : '' }}>
                     {{ $nomComplet }} ({{ $numeroAgent }})
                   </option>
                 @endforeach
               </select>
             </div>
             <div class="col-md-6">
+              <label class="form-label">Pont de pesage <span class="text-danger">*</span></label>
+              <select name="id_pont" class="form-select js-edit-pont js-select2-edit" data-placeholder="Rechercher un pont…"
+                data-pont-selectionne="{{ $fichePontId }}"
+                data-pont-label="{{ trim(($f->nom_pont ?? '').($f->code_pont ? ' ('.$f->code_pont.')' : '')) }}"
+                required>
+                <option value="">-- Sélectionner d'abord un agent --</option>
+              </select>
+            </div>
+            <div class="col-md-6">
               <label class="form-label">Produit <span class="text-danger">*</span></label>
-              <select name="produit_id" class="form-select produit-select-fiche" data-fiche="{{ $f->id }}" required>
+              <select name="produit_id" class="form-select produit-select-fiche js-select2-edit" data-fiche="{{ $f->id }}" data-placeholder="Rechercher un produit…" required>
                 <option value="">-- Sélectionner un produit --</option>
                 @foreach($produits ?? [] as $produit)
-                  <option value="{{ $produit->id }}" {{ (int) ($f->produit_id ?? 0) === (int) $produit->id ? 'selected' : '' }}>
+                  <option value="{{ $produit->id }}" {{ (int) $produit->id === $produitSelectionne ? 'selected' : '' }}>
                     {{ $produit->nom }}
                   </option>
                 @endforeach
@@ -430,8 +459,11 @@
             </div>
             <div class="col-md-6">
               <label class="form-label">Usine</label>
-              <select name="usine" class="form-select usine-select-fiche" data-fiche="{{ $f->id }}" data-usine-selectionnee="{{ $f->usine }}" disabled>
+              <select name="usine" class="form-select usine-select-fiche js-select2-edit" data-fiche="{{ $f->id }}" data-usine-selectionnee="{{ $f->usine }}" data-placeholder="Rechercher une usine…" disabled>
                 <option value="">-- Sélectionner d'abord un produit --</option>
+                @if(trim((string) ($f->usine ?? '')) !== '')
+                  <option value="{{ $f->usine }}" selected>{{ $f->usine }}</option>
+                @endif
               </select>
             </div>
             <div class="col-md-6">
@@ -645,34 +677,101 @@
 <script>
 var usinesParProduit = {!! json_encode($usinesParProduit ?? []) !!};
 var toutesUsinesFiltre = {!! json_encode($usines ?? []) !!};
+var agentsPontsMap = {!! json_encode($agentsPontsMap ?? []) !!};
 
 function usinesPourProduit(produitId) {
   if (!produitId) return [];
   return usinesParProduit[produitId] || usinesParProduit[String(produitId)] || [];
 }
 
+function pontsPourAgent(agentId) {
+  if (!agentId) return [];
+  return agentsPontsMap[String(agentId)] || agentsPontsMap[agentId] || [];
+}
+
+function refreshSelect2(select) {
+  if (window.jQuery && jQuery(select).hasClass('select2-hidden-accessible')) {
+    jQuery(select).trigger('change.select2');
+  }
+}
+
+function remplirSelectPonts(selectPont, agentId, garderSelection) {
+  if (!selectPont) return;
+  var ponts = pontsPourAgent(agentId);
+  var pontActuel = garderSelection
+    ? String(selectPont.dataset.pontSelectionne || selectPont.value || '')
+    : '';
+  var pontLabel = selectPont.dataset.pontLabel || '';
+
+  selectPont.innerHTML = '<option value="">-- Sélectionner un pont --</option>';
+
+  if (!agentId) {
+    selectPont.options[0].textContent = '-- Sélectionner d\'abord un agent --';
+    selectPont.value = '';
+    refreshSelect2(selectPont);
+    return;
+  }
+
+  var trouve = false;
+  ponts.forEach(function (pont) {
+    var opt = document.createElement('option');
+    opt.value = pont.id;
+    opt.textContent = pont.label;
+    if (pontActuel && String(pont.id) === pontActuel) {
+      opt.selected = true;
+      trouve = true;
+    }
+    selectPont.appendChild(opt);
+  });
+
+  if (pontActuel && !trouve) {
+    var keep = document.createElement('option');
+    keep.value = pontActuel;
+    keep.textContent = pontLabel || ('Pont #' + pontActuel);
+    keep.selected = true;
+    selectPont.appendChild(keep);
+  } else if (!trouve && ponts.length === 1) {
+    selectPont.value = String(ponts[0].id);
+  } else if (!trouve && ponts.length === 0) {
+    selectPont.options[0].textContent = '-- Aucun pont pour cet agent --';
+  }
+
+  refreshSelect2(selectPont);
+}
+
 function remplirSelectUsines(selectUsine, produitId, valeurSelectionnee) {
   if (!selectUsine) return;
   var liste = usinesPourProduit(produitId);
+  var usineActuelle = valeurSelectionnee || selectUsine.dataset.usineSelectionnee || '';
   selectUsine.innerHTML = '<option value="">-- Sélectionner une usine --</option>';
+  var trouvee = false;
   liste.forEach(function(u) {
     var opt = document.createElement('option');
     opt.value = u.nom || '';
     opt.textContent = u.code ? (u.nom + ' (' + u.code + ')') : (u.nom || '');
-    if (valeurSelectionnee && u.nom === valeurSelectionnee) {
+    if (usineActuelle && String(u.nom).toUpperCase() === String(usineActuelle).toUpperCase()) {
       opt.selected = true;
+      trouvee = true;
     }
     selectUsine.appendChild(opt);
   });
+  if (usineActuelle && !trouvee) {
+    var keep = document.createElement('option');
+    keep.value = usineActuelle;
+    keep.textContent = usineActuelle;
+    keep.selected = true;
+    selectUsine.appendChild(keep);
+  }
   if (!produitId) {
     selectUsine.disabled = true;
     selectUsine.options[0].textContent = '-- Sélectionner d\'abord un produit --';
   } else {
     selectUsine.disabled = false;
-    if (liste.length === 0) {
+    if (liste.length === 0 && !usineActuelle) {
       selectUsine.options[0].textContent = '-- Aucune usine pour ce produit --';
     }
   }
+  refreshSelect2(selectUsine);
 }
 
 function initUsineParProduit(produitSelect) {
@@ -691,6 +790,68 @@ function initUsineParProduit(produitSelect) {
 
 document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.produit-select-fiche').forEach(initUsineParProduit);
+
+  document.querySelectorAll('.js-edit-vehicule').forEach(function (select) {
+    select.addEventListener('change', function () {
+      var option = this.options[this.selectedIndex];
+      var hidden = this.closest('form').querySelector('.js-edit-matricule');
+      if (hidden) {
+        hidden.value = option ? (option.dataset.matricule || '') : '';
+      }
+    });
+  });
+
+  document.querySelectorAll('.js-edit-agent').forEach(function (agentSelect) {
+    var form = agentSelect.closest('form');
+    var pontSelect = form ? form.querySelector('.js-edit-pont') : null;
+    remplirSelectPonts(pontSelect, agentSelect.value, true);
+  });
+
+  document.querySelectorAll('.modal').forEach(function (modal) {
+    modal.addEventListener('shown.bs.modal', function () {
+      if (!window.jQuery) return;
+      var $modal = jQuery(modal);
+      var agentSelect = $modal.find('.js-edit-agent')[0];
+      var pontSelect = $modal.find('.js-edit-pont')[0];
+      if (agentSelect && pontSelect) {
+        remplirSelectPonts(pontSelect, agentSelect.value, true);
+      }
+      $modal.find('.js-select2-edit').each(function () {
+        var $el = jQuery(this);
+        if ($el.hasClass('select2-hidden-accessible')) return;
+        $el.select2({
+          theme: 'bootstrap-5',
+          width: '100%',
+          dropdownParent: $modal,
+          placeholder: $el.data('placeholder') || 'Rechercher…',
+          allowClear: !$el.prop('required'),
+          language: {
+            noResults: function () { return 'Aucun résultat'; },
+            searching: function () { return 'Recherche…'; }
+          }
+        });
+      });
+    });
+  });
+
+  document.querySelectorAll('.js-edit-agent').forEach(function (agentSelect) {
+    agentSelect.addEventListener('change', function () {
+      var form = this.closest('form');
+      var pontSelect = form ? form.querySelector('.js-edit-pont') : null;
+      if (pontSelect) {
+        pontSelect.dataset.pontSelectionne = '';
+        remplirSelectPonts(pontSelect, this.value, false);
+      }
+    });
+  });
+
+  document.querySelectorAll('form').forEach(function (form) {
+    form.addEventListener('submit', function () {
+      form.querySelectorAll('.usine-select-fiche').forEach(function (el) {
+        el.disabled = false;
+      });
+    });
+  });
 
   var filtreProduit = document.getElementById('filtre_produit');
   var filtreUsine = document.getElementById('filtre_usine');
