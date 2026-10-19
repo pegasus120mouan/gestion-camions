@@ -5,14 +5,17 @@ namespace App\Http\Controllers;
 use App\Models\ParticulierAgent;
 use App\Models\Produit;
 use App\Models\Usine;
+use App\Services\AccesPlateforme;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 
 class ProduitController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, AccesPlateforme $acces)
     {
+        abort_unless($acces->peut('produits.voir', 'produits.creer', 'produits.modifier', 'produits.supprimer'), 403);
+
         $query = Produit::query()->latest();
 
         if ($request->filled('q')) {
@@ -28,6 +31,10 @@ class ProduitController extends Controller
 
         return view('produits.index', [
             'produits' => $produits,
+            'peutCreerProduit' => $acces->peut('produits.creer'),
+            'peutModifierProduit' => $acces->peut('produits.modifier'),
+            'peutSupprimerProduit' => $acces->peut('produits.supprimer'),
+            'profilAcces' => $acces->profilCourant($request),
         ]);
     }
 
@@ -140,8 +147,10 @@ class ProduitController extends Controller
         return $prefix . '-' . str_pad((string) ($max + 1), 4, '0', STR_PAD_LEFT);
     }
 
-    public function edit(Request $request, Produit $produit)
+    public function edit(Request $request, Produit $produit, AccesPlateforme $acces)
     {
+        abort_unless($acces->peut('produits.modifier'), 403);
+
         if ($request->wantsJson()) {
             return response()->json(['data' => $produit]);
         }
@@ -151,15 +160,18 @@ class ProduitController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, AccesPlateforme $acces)
     {
+        abort_unless($acces->peut('produits.creer'), 403);
+
+        $request->merge([
+            'nom' => $this->normaliserNom((string) $request->input('nom', '')),
+        ]);
+
         $validated = $request->validate([
             'nom' => ['required', 'string', 'max:255', 'unique:produits,nom'],
             'tare' => ['required', 'numeric', 'min:0'],
         ]);
-
-        // Normaliser le nom : première lettre majuscule, reste minuscule
-        $validated['nom'] = $this->normaliserNom($validated['nom']);
 
         $produit = Produit::create($validated);
 
@@ -167,20 +179,23 @@ class ProduitController extends Controller
             return response()->json(['data' => $produit], 201);
         }
 
-        return redirect()->back();
+        return redirect()
+            ->route('produits.index')
+            ->with('success', 'Produit « ' . $produit->nom . ' » créé.');
     }
 
-    public function update(Request $request, Produit $produit)
+    public function update(Request $request, Produit $produit, AccesPlateforme $acces)
     {
-        $validated = $request->validate([
-            'nom' => ['sometimes', 'required', 'string', 'max:255', 'unique:produits,nom,' . $produit->id],
-            'tare' => ['sometimes', 'required', 'numeric', 'min:0'],
+        abort_unless($acces->peut('produits.modifier'), 403);
+
+        $request->merge([
+            'nom' => $this->normaliserNom((string) $request->input('nom', $produit->nom)),
         ]);
 
-        // Normaliser le nom si présent
-        if (isset($validated['nom'])) {
-            $validated['nom'] = $this->normaliserNom($validated['nom']);
-        }
+        $validated = $request->validate([
+            'nom' => ['required', 'string', 'max:255', 'unique:produits,nom,' . $produit->id],
+            'tare' => ['required', 'numeric', 'min:0'],
+        ]);
 
         $produit->update($validated);
 
@@ -188,26 +203,46 @@ class ProduitController extends Controller
             return response()->json(['data' => $produit->refresh()]);
         }
 
-        return redirect()->back();
+        return redirect()
+            ->route('produits.index')
+            ->with('success', 'Produit « ' . $produit->nom . ' » modifié.');
     }
 
     /**
-     * Normalise le nom du produit : première lettre majuscule, reste minuscule
-     * Exemple: "HEVEA" ou "hevea" ou "HeVeA" => "Hevea"
+     * Normalise le nom du produit : première lettre de chaque mot en majuscule.
+     * Exemple: "HEVEA" ou "hevea" => "Hevea"
      */
     private function normaliserNom(string $nom): string
     {
         return mb_convert_case(trim($nom), MB_CASE_TITLE, 'UTF-8');
     }
 
-    public function destroy(Produit $produit)
+    public function destroy(Request $request, Produit $produit, AccesPlateforme $acces)
     {
-        $produit->delete();
+        abort_unless($acces->peut('produits.supprimer'), 403);
 
-        if (request()->wantsJson()) {
+        $nom = $produit->nom;
+
+        try {
+            $produit->delete();
+        } catch (\Throwable $e) {
+            $message = 'Impossible de supprimer « ' . $nom . ' » : ce produit est encore utilisé.';
+
+            if ($request->wantsJson()) {
+                return response()->json(['message' => $message], 422);
+            }
+
+            return redirect()
+                ->route('produits.index')
+                ->withErrors(['delete' => $message]);
+        }
+
+        if ($request->wantsJson()) {
             return response()->json(null, 204);
         }
 
-        return redirect()->back();
+        return redirect()
+            ->route('produits.index')
+            ->with('success', 'Produit « ' . $nom . ' » supprimé.');
     }
 }

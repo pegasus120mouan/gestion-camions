@@ -83,6 +83,7 @@
 
           <ul class="menu-inner py-1">
             <!-- Dashboards -->
+            @peut('dashboard')
             <li class="menu-item active open">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-home-smile" style="color: #7367f0;"></i>
@@ -133,8 +134,10 @@
                 </li>-->
               </ul>
             </li>
+            @endpeut
 
             <!-- Layouts -->
+            @peut('flotte.voir', 'flotte.gerer')
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-layout" style="color: #7367f0;"></i>
@@ -159,9 +162,9 @@
                 </li>
               </ul>
             </li>
+            @endpeut
 
-
-
+            @peut('transferts.liste', 'transferts.clients', 'transferts.financier')
             <li class="menu-item {{ request()->routeIs('transferts.*') || request()->routeIs('clients.*') ? 'active open' : '' }}">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-transfer-alt" style="color: #7367f0;"></i>
@@ -169,27 +172,32 @@
               </a>
 
               <ul class="menu-sub">
+                @peut('transferts.liste')
                 <li class="menu-item {{ request()->routeIs('transferts.*') && !request()->routeIs('transferts.financier.*') ? 'active' : '' }}">
                   <a href="{{ route('transferts.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Without menu">Liste des transferts</div>
                   </a>
                 </li>
+                @endpeut
+                @peut('transferts.clients')
                 <li class="menu-item {{ request()->routeIs('clients.*') ? 'active' : '' }}">
                   <a href="{{ route('clients.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Without menu">Liste des clients</div>
                   </a>
                 </li>
+                @endpeut
+                @peut('transferts.financier')
                 <li class="menu-item {{ request()->routeIs('transferts.financier.*') ? 'active' : '' }}">
                   <a href="{{ route('transferts.financier.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Without menu">Gestion Financière des transferts</div>
                   </a>
                 </li>
+                @endpeut
               </ul>
             </li>
+            @endpeut
 
-
-
-
+            @peut('fiches.liste', 'fiches.creer', 'fiches.modifier', 'fiches.decharger')
            <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-export" style="color: #00cfe8;"></i>
@@ -197,12 +205,6 @@
               </a>
 
               <ul class="menu-sub" style="list-style: none;">
-              <!--  <li class="menu-item" style="list-style: none;">
-                  <a href="{{ route('fiches_sortie.index') }}" class="menu-link">
-                    <i class="bx bxs-file me-2"></i>
-                    <div class="text-truncate" data-i18n="Weighbridges list">Liste des fiches</div>
-                  </a>
-                </li>-->
                 <li class="menu-item" style="list-style: none;">
                   <a href="{{ route('fiches_sortie.dechargees') }}" class="menu-link">
                     <i class="bx bxs-check-circle me-2 text-success"></i>
@@ -217,9 +219,9 @@
                 </li>
               </ul>
             </li>
+            @endpeut
 
-
-
+            @peut('tickets.tous', 'tickets.locaux', 'tickets.en_attente', 'tickets.unipalm')
              <li class="menu-item {{ request()->routeIs('tickets.*') ? 'open' : '' }}">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-map" style="color: #00cfe8;"></i>
@@ -230,16 +232,21 @@
               </a>
 
               <ul class="menu-sub">
+                @peut('tickets.tous', 'tickets.unipalm')
                 <li class="menu-item {{ request()->routeIs('tickets.index') && request('statut') !== 'en_attente' ? 'active' : '' }}">
                   <a href="{{ route('tickets.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets Unipalm</div>
                   </a>
                 </li>
+                @endpeut
+                @peut('tickets.locaux')
                 <li class="menu-item {{ request()->routeIs('tickets.locaux') ? 'active' : '' }}">
                   <a href="{{ route('tickets.locaux') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets locaux</div>
                   </a>
                 </li>
+                @endpeut
+                @peut('tickets.en_attente')
                 <li class="menu-item {{ request()->routeIs('tickets.index') && request('statut') === 'en_attente' ? 'active open' : '' }}">
                   <a href="javascript:void(0);" class="menu-link menu-toggle">
                     <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets en attente</div>
@@ -266,14 +273,19 @@
                     </li>
                   </ul>
                 </li>
+                @endpeut
+                @peut('tickets.unipalm')
                 <li class="menu-item {{ request()->routeIs('tickets.unipalm') ? 'active' : '' }}">
                   <a href="{{ route('tickets.unipalm') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Weighbridges list">Mes Tickets Unipalm</div>
                   </a>
                 </li>
+                @endpeut
               </ul>
             </li>
+            @endpeut
 
+            @peut('ponts.liste', 'ponts.gerer', 'ponts.stocks')
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-map" style="color: #28c76f;"></i>
@@ -294,6 +306,7 @@
                 </li>
               </ul>
             </li>
+            @endpeut
 
            
 
@@ -326,6 +339,7 @@
 
       
             <!-- Front Pages -->
+            @peut('pesage.liste', 'pesage.creer')
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-store" style="color: #ea5455;"></i>
@@ -338,14 +352,11 @@
                     <div class="text-truncate" data-i18n="Pesages">Liste des pesées</div>
                   </a>
                 </li>
-            <!--    <li class="menu-item">
-                  <a href="{{ route('ponts_pesage.index') }}" class="menu-link">
-                    <div class="text-truncate" data-i18n="Weighbridges">Ponts de pesage</div>
-                  </a>
-                </li> -->   
               </ul>
             </li>
+            @endpeut
 
+            @peut('finances.vue', 'finances.montant_pisteur', 'finances.montant_hors_pgf', 'finances.montant_particulier', 'finances.sorties', 'finances.recus', 'finances.salaires')
              <li class="menu-item">
               <a href="javascript:void(0)" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-box" style="color: #28c76f;"></i>
@@ -507,8 +518,9 @@
                 </li>-->
               </ul>
             </li>
+            @endpeut
 
-
+            @peut('paiements.effectuer', 'paiements.historique')
             <li class="menu-item">
               <a href="javascript:void(0)" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-box" style="color: #28c76f;"></i>
@@ -654,14 +666,16 @@
                 </li>-->
               </ul>
             </li>
+            @endpeut
 
             <!-- Apps & Pages -->
+            @peut('pisteurs.pgf', 'pisteurs.autres', 'chargeurs.chefs', 'chargeurs.liste', 'chauffeurs.gerer', 'transporteurs.gerer', 'bilan.camion', 'usines.gerer')
             <li class="menu-header small text-uppercase">
               <span class="menu-header-text">Gestions</span>
             </li>
+            @endpeut
 
-
-
+            @peut('pisteurs.pgf')
             <li class="menu-item {{ request()->routeIs('agents.index') && ! request()->boolean('hors_pgf') && in_array(request('sous_groupe'), ['professionnel', 'particulier'], true) ? 'open active' : '' }}">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-lock-open-alt" style="color: #7367f0;"></i>
@@ -680,9 +694,9 @@
                 </li>
               </ul>
             </li>
+            @endpeut
 
-
-
+            @peut('pisteurs.autres')
             <li class="menu-item {{ request()->routeIs('agents.index') && request()->boolean('hors_pgf') ? 'open active' : '' }}">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-group" style="color: #28c76f;"></i>
@@ -696,44 +710,50 @@
                 </li>
               </ul>
             </li>
+            @endpeut
 
-
-
-
-
+            @peut('chargeurs.chefs')
             <li class="menu-item">
               <a href="{{ route('chef_chargeurs.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-user-check" style="color: #00cfe8;"></i>
                 <div class="text-truncate" data-i18n="ChefChargeurs">Chef des chargeurs</div>
               </a>
             </li>
+            @endpeut
+            @peut('chargeurs.liste')
             <li class="menu-item">
               <a href="{{ route('chargeurs.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-group" style="color: #ff9f43;"></i>
                 <div class="text-truncate" data-i18n="Chargeurs">Chargeurs</div>
               </a>
             </li>
+            @endpeut
+            @peut('chauffeurs.gerer')
             <li class="menu-item {{ request()->routeIs('chauffeurs.*') ? 'active' : '' }}">
               <a href="{{ route('chauffeurs.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-car" style="color: #ff9f43;"></i>
                 <div class="text-truncate" data-i18n="Chauffeurs">Gestion Chauffeurs</div>
               </a>
             </li>
+            @endpeut
 
+            @peut('transporteurs.gerer')
             <li class="menu-item {{ request()->routeIs('transporteurs.*') ? 'active' : '' }}">
               <a href="{{ route('transporteurs.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-bus" style="color: #7367f0;"></i>
                 <div class="text-truncate" data-i18n="Transporteurs">Gestion Transporteurs</div>
               </a>
             </li>
+            @endpeut
 
-
+            @peut('bilan.camion')
             <li class="menu-item {{ request()->routeIs('bilan-vehicule.*') ? 'active' : '' }}">
               <a href="{{ route('bilan-vehicule.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-bar-chart-alt-2" style="color: #28c76f;"></i>
                 <div class="text-truncate" data-i18n="BilanVehicule">Bilan par camion</div>
               </a>
             </li>
+            @endpeut
            <!--  <li class="menu-item {{ request()->routeIs('pisteurs.*') ? 'active' : '' }}">
               <a href="{{ route('pisteurs.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-leaf" style="color: #3d6fb9;"></i>
@@ -747,12 +767,14 @@
               </a>
             </li>-->
 
+            @peut('usines.gerer')
             <li class="menu-item">
               <a href="{{ route('usines.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-building" style="color: #82868b;"></i>
                 <div class="text-truncate" data-i18n="Usines">Usines</div>
               </a>
             </li>
+            @endpeut
             <!--  <li class="menu-item">
               <a
                 href="https://demos.themeselection.com/sneat-bootstrap-html-admin-template/html/vertical-menu-template/app-kanban.html"
@@ -787,37 +809,55 @@
                 </li>
               </ul>
             </li>-->
+            @peut('utilisateurs.liste', 'utilisateurs.admins', 'utilisateurs.gestionnaires', 'utilisateurs.commis', 'utilisateurs.agents', 'utilisateurs.chauffeurs')
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-lock-open-alt" style="color: #7367f0;"></i>
                 <div class="text-truncate" data-i18n="Authentications">Utilisateurs</div>
               </a>
               <ul class="menu-sub">
+                @peut('utilisateurs.liste')
                 <li class="menu-item">
                   <a href="{{ route('utilisateurs.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Basic">Tous les utilisateurs</div>
                   </a>
                 </li>
+                @endpeut
+                @peut('utilisateurs.admins')
                 <li class="menu-item">
                   <a href="{{ route('utilisateurs.admins') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Basic">Administrateurs</div>
                   </a>
                 </li>
+                @endpeut
+                @peut('utilisateurs.gestionnaires')
+                <li class="menu-item">
+                  <a href="{{ route('utilisateurs.gestionnaires') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Basic">Gestionnaires</div>
+                  </a>
+                </li>
+                @endpeut
+                @peut('utilisateurs.commis')
                 <li class="menu-item">
                   <a href="{{ route('commis.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Basic">Commis</div>
                   </a>
                 </li>
+                @endpeut
+                @peut('utilisateurs.chauffeurs')
                 <li class="menu-item">
                   <a href="{{ route('utilisateurs.chauffeurs') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Basic">Chauffeurs</div>
                   </a>
                 </li>
+                @endpeut
+                @peut('utilisateurs.agents')
                 <li class="menu-item">
                   <a href="{{ route('utilisateurs.agents') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Basic">Agents</div>
                   </a>
                 </li>
+                @endpeut
        <!--         <li class="menu-item">
                   <a href="{{ route('utilisateurs.create') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Basic">Créer</div>
@@ -825,12 +865,9 @@
                 </li>-->
               </ul>
             </li>
+            @endpeut
 
-
-
-
-
-
+            @peut('fournisseurs.gerer')
             <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-lock-open-alt" style="color: #ff9f43;"></i>
@@ -864,8 +901,9 @@
                 </li>-->
               </ul>
             </li>
+            @endpeut
 
-
+            @peut('parcs.gerer')
            <li class="menu-item">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-car" style="color: #ff9f43;"></i>
@@ -879,8 +917,9 @@
                 </li>
               </ul>
             </li>
+            @endpeut
 
-
+            @peut('approvisionnements.gerer')
             <li class="menu-item {{ request()->routeIs('approvisionnements.*') ? 'active open' : '' }}">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-wallet" style="color: #ff9f43;"></i>
@@ -899,23 +938,36 @@
                 </li>
               </ul>
             </li>
+            @endpeut
 
+            @peut('caisse.gerer')
             <li class="menu-item {{ request()->routeIs('caisse.*') ? 'active' : '' }}">
               <a href="{{ route('caisse.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-wallet" style="color: #28c76f;"></i>
                 <div class="text-truncate" data-i18n="Usines">Gestion de caisse</div>
               </a>
             </li>
+            @endpeut
 
-            @if(!empty($peutParametres))
+            @peut('acces.gerer', 'parametres.systeme')
             <li class="menu-header small text-uppercase"><span class="menu-header-text">System</span></li>
+            @endpeut
+            @peut('acces.gerer')
+            <li class="menu-item {{ request()->routeIs('acces.*') ? 'active' : '' }}">
+              <a href="{{ route('acces.index') }}" class="menu-link">
+                <i class="menu-icon tf-icons bx bx-shield-quarter" style="color: #28c76f;"></i>
+                <div class="text-truncate">Gestion des accès</div>
+              </a>
+            </li>
+            @endpeut
+            @peut('parametres.systeme')
             <li class="menu-item {{ request()->routeIs('parametres.*') ? 'active' : '' }}">
               <a href="{{ route('parametres.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-cog" style="color: #7367f0;"></i>
                 <div class="text-truncate">Paramètres</div>
               </a>
             </li>
-            @endif
+            @endpeut
 
 
 
@@ -946,12 +998,14 @@
                 <div class="text-truncate" data-i18n="Basic">Groupe PGF</div>
               </a>
             </li> -->
+            @peut('produits.voir', 'produits.creer', 'produits.modifier', 'produits.supprimer')
             <li class="menu-item">
               <a href="{{ route('produits.index') }}" class="menu-link">
                 <i class="menu-icon tf-icons bx bx-package" style="color: #28c76f;"></i>
                 <div class="text-truncate" data-i18n="Basic">Produits</div>
               </a>
             </li>
+            @endpeut
             <!-- User interface -->
            
 
@@ -1532,12 +1586,17 @@
 
                 <!-- User -->
                 <li class="nav-item navbar-dropdown dropdown-user dropdown">
+                  @php
+                    $authAvatar = $authIdentite['avatar_url'] ?? asset('img/avatars/default.png');
+                    $authName = $authIdentite['name'] ?? ($authChef['nom_complet'] ?? (!empty($peutParametres) ? 'Super administrateur' : 'Chef d\'équipe'));
+                    $authRoleLabel = $authIdentite['role_label'] ?? (!empty($peutParametres) ? 'Super administrateur' : 'Chef d\'équipe');
+                  @endphp
                   <a
                     class="nav-link dropdown-toggle hide-arrow p-0"
                     href="javascript:void(0);"
                     data-bs-toggle="dropdown">
                     <div class="avatar avatar-online">
-                      <img src="{{ asset('img/avatars/default.png') }}" alt class="w-px-40 h-auto rounded-circle" />
+                      <img src="{{ $authAvatar }}" alt class="w-px-40 h-auto rounded-circle" />
                     </div>
                   </a>
                   <ul class="dropdown-menu dropdown-menu-end">
@@ -1546,12 +1605,12 @@
                         <div class="d-flex">
                           <div class="flex-shrink-0 me-3">
                             <div class="avatar avatar-online">
-                              <img src="{{ asset('img/avatars/default.png') }}" alt class="w-px-40 h-auto rounded-circle" />
+                              <img src="{{ $authAvatar }}" alt class="w-px-40 h-auto rounded-circle" />
                             </div>
                           </div>
                           <div class="flex-grow-1">
-                            <h6 class="mb-0">{{ $authChef['nom_complet'] ?? (!empty($peutParametres) ? 'Super administrateur' : 'Chef d\'équipe') }}</h6>
-                            <small class="text-body-secondary">{{ !empty($peutParametres) ? 'Super administrateur' : 'Chef d\'équipe' }}</small>
+                            <h6 class="mb-0">{{ $authName }}</h6>
+                            <small class="text-body-secondary">{{ $authRoleLabel }}</small>
                           </div>
                         </div>
                       </a>

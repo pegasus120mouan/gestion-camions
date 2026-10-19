@@ -237,7 +237,7 @@ class UsinesParProduitService
      */
     private function fetchApiUsinesEnrichies(): array
     {
-        return Cache::remember('usines_api_enrichies', 3600, fn () => $this->doFetchApiUsinesEnrichies());
+        return Cache::remember('usines_api_enrichies_v2', 3600, fn () => $this->doFetchApiUsinesEnrichies());
     }
 
     private function doFetchApiUsinesEnrichies(): array
@@ -245,10 +245,7 @@ class UsinesParProduitService
         $mesUsinesUrl = (string) config('services.external_auth.mes_usines_url', 'https://api.objetombrepegasus.online/api/camions/mes_usines.php');
         $timeout = (int) config('services.external_auth.timeout', 10);
 
-        $produits = Produit::query()->orderBy('nom')->get();
-        $produitPalmier = $produits->first(
-            fn ($produit) => mb_strtolower((string) $produit->nom, 'UTF-8') === 'palmier'
-        );
+        $produitPalmier = Produit::graineDePalme();
 
         $usineProduits = FicheSortie::query()
             ->whereNotNull('usine')

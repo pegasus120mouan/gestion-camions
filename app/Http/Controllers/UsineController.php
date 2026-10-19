@@ -20,7 +20,7 @@ class UsineController extends Controller
         $search = trim((string) $request->query('search', ''));
         $produitId = $request->filled('produit_id') ? (int) $request->query('produit_id') : null;
         $produits = Produit::query()->orderBy('nom')->get();
-        $produitPalmier = $produits->first(fn ($produit) => mb_strtolower((string) $produit->nom, 'UTF-8') === 'palmier');
+        $produitPalmier = Produit::graineDePalme();
         $usineProduits = FicheSortie::query()
             ->whereNotNull('usine')
             ->where('usine', '<>', '')

@@ -11,9 +11,13 @@
                       <div class="col-sm-7">
                         <div class="card-body">
                           @if(!empty($soldeChef))
+                            @php $identite = app(\App\Services\AccesPlateforme::class)->identiteAffichee(); @endphp
                             <h5 class="card-title text-primary mb-2">Solde actuel</h5>
+                            <p class="text-muted small mb-1">
+                              {{ $identite['name'] }} — {{ $identite['role_label'] }}
+                            </p>
                             @if(!empty($soldeChef['nom']))
-                              <p class="text-muted small mb-3">{{ trim($soldeChef['nom'] . ' ' . $soldeChef['prenoms']) }}</p>
+                              <p class="text-muted small mb-3">Périmètre : {{ trim($soldeChef['nom'] . ' ' . $soldeChef['prenoms']) }}</p>
                             @endif
                             <h2 class="mb-2 {{ ($soldeChef['reste_a_payer'] ?? 0) > 0 ? 'text-danger' : 'text-success' }}">
                               {{ number_format($soldeChef['reste_a_payer'], 0, ',', ' ') }} FCFA

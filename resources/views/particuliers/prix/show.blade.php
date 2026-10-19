@@ -577,7 +577,9 @@ function filterUsinesByProduit(selectProduit) {
   var produitNom = selectProduit.options[selectProduit.selectedIndex]?.text?.toLowerCase() || '';
   var usineSelect = document.getElementById('selectUsineAdd');
   var options = usineSelect.querySelectorAll('option');
-  var isPalmier = produitNom.includes('palmier');
+  var isGraineDePalme = produitNom.includes('palmier')
+    || produitNom.includes('palme')
+    || produitNom.includes('graine');
 
   options.forEach(function(option) {
     if (option.value === '' || option.value === 'all') {
@@ -585,9 +587,9 @@ function filterUsinesByProduit(selectProduit) {
     } else {
       var optionProduitId = option.getAttribute('data-produit');
 
-      if (isPalmier) {
-        // Palmier: afficher uniquement usines API (sans produit_id)
-        option.style.display = !optionProduitId ? 'block' : 'none';
+      if (isGraineDePalme) {
+        // Graine De Palme : usines API (sans produit_id local) + usines liées à ce produit
+        option.style.display = (!optionProduitId || optionProduitId === produitId) ? 'block' : 'none';
       } else {
         // Autre produit: afficher uniquement usines locales de CE produit
         option.style.display = optionProduitId === produitId ? 'block' : 'none';

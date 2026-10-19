@@ -46,6 +46,7 @@ use App\Http\Controllers\EffectuerPaiementController;
 use App\Http\Controllers\ParticulierController;
 use App\Http\Controllers\ParticulierPrixController;
 use App\Http\Controllers\ParametreController;
+use App\Http\Controllers\AccesController;
 use App\Services\ChefEquipeContext;
 use App\Services\SoldeChefEquipeService;
 use Illuminate\Support\Facades\Route;
@@ -216,6 +217,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/api/mes-agents', [AgentController::class, 'apiIndex'])->name('api.mes_agents');
 
     Route::get('/utilisateurs/admins', [UtilisateurController::class, 'admins'])->name('utilisateurs.admins');
+    Route::get('/utilisateurs/gestionnaires', [UtilisateurController::class, 'gestionnaires'])->name('utilisateurs.gestionnaires');
     Route::get('/utilisateurs/agents', [UtilisateurController::class, 'agents'])->name('utilisateurs.agents');
     Route::get('/utilisateurs/chauffeurs', [UtilisateurController::class, 'chauffeurs'])->name('utilisateurs.chauffeurs');
 
@@ -268,6 +270,12 @@ Route::middleware('auth')->group(function () {
         Route::post('/parametres/fiches-sortie/decharger-tout', [TicketController::class, 'dechargerFichesEnMasse'])
             ->name('parametres.fiches.decharger_tout');
         Route::post('/parametres/vider', [ParametreController::class, 'vider'])->name('parametres.vider');
+    });
+
+    Route::middleware('gestion_acces')->group(function () {
+        Route::get('/gestion-acces', [AccesController::class, 'index'])->name('acces.index');
+        Route::get('/gestion-acces/{role}', [AccesController::class, 'edit'])->name('acces.edit');
+        Route::put('/gestion-acces/{role}', [AccesController::class, 'update'])->name('acces.update');
     });
 
     Route::get('/commis', [CommisController::class, 'index'])->name('commis.index');

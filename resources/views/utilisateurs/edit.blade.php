@@ -73,6 +73,7 @@
               <label class="form-label">Rôle</label>
               <select name="role" class="form-select" required>
                 <option value="admin" {{ old('role', $utilisateur->role) === 'admin' ? 'selected' : '' }}>admin</option>
+                <option value="gestionnaire" {{ old('role', $utilisateur->role) === 'gestionnaire' ? 'selected' : '' }}>gestionnaire</option>
                 <option value="agent" {{ old('role', $utilisateur->role) === 'agent' ? 'selected' : '' }}>agent</option>
                 <option value="driver" {{ old('role', $utilisateur->role) === 'driver' ? 'selected' : '' }}>driver</option>
               </select>

@@ -12,12 +12,6 @@ class UtilisateurController extends Controller
     public function __construct(
         private ChefEquipeContext $chefContext,
     ) {
-        $this->middleware(function ($request, $next) {
-            abort_unless(auth()->check(), 401);
-            abort_unless(auth()->user()->role === 'admin', 403);
-
-            return $next($request);
-        });
     }
 
     public function index(Request $request)
@@ -28,6 +22,11 @@ class UtilisateurController extends Controller
     public function admins(Request $request)
     {
         return $this->renderListe($request, 'admin', 'utilisateurs.admins');
+    }
+
+    public function gestionnaires(Request $request)
+    {
+        return $this->renderListe($request, 'gestionnaire', 'utilisateurs.gestionnaires');
     }
 
     public function agents(Request $request)
@@ -80,7 +79,7 @@ class UtilisateurController extends Controller
             'contact' => ['nullable', 'string', 'max:255', 'unique:users,contact'],
             'matricule' => ['nullable', 'string', 'max:255', 'unique:users,matricule'],
             'id_chef' => ['nullable', 'integer', 'min:1'],
-            'role' => ['required', 'in:admin,agent,driver'],
+            'role' => ['required', 'in:admin,agent,driver,gestionnaire'],
             'password' => ['required', 'string', 'min:6', 'confirmed'],
             'avatar' => ['nullable', 'image', 'max:2048'],
         ]);
@@ -93,8 +92,10 @@ class UtilisateurController extends Controller
         $user->login = $validated['login'];
         $user->contact = $validated['contact'] ?? null;
         $user->matricule = $validated['matricule'] ?? null;
-        $user->id_chef = $this->validateIdChef($validated['id_chef'] ?? null);
         $user->role = $validated['role'];
+        $user->id_chef = $validated['role'] === 'gestionnaire'
+            ? $this->idChefPgf()
+            : $this->validateIdChef($validated['id_chef'] ?? null);
         $user->password = Hash::make($validated['password']);
         $user->code_pin = Hash::make($pin);
 
@@ -106,7 +107,12 @@ class UtilisateurController extends Controller
 
         $user->save();
 
-        return redirect()->back()->with('code_pin_clair', $pin);
+        $redirect = $validated['role'] === 'gestionnaire'
+            ? redirect()->route('utilisateurs.gestionnaires')
+            : redirect()->back();
+
+        return $redirect->with('code_pin_clair', $pin)
+            ->with('success', 'Utilisateur créé avec succès.');
     }
 
     public function edit(User $utilisateur)
@@ -126,7 +132,7 @@ class UtilisateurController extends Controller
             'contact' => ['nullable', 'string', 'max:255', 'unique:users,contact,' . $utilisateur->id],
             'matricule' => ['nullable', 'string', 'max:255', 'unique:users,matricule,' . $utilisateur->id],
             'id_chef' => ['nullable', 'integer', 'min:1'],
-            'role' => ['required', 'in:admin,agent,driver'],
+            'role' => ['required', 'in:admin,agent,driver,gestionnaire'],
             'password' => ['nullable', 'string', 'min:6', 'confirmed'],
             'avatar' => ['nullable', 'image', 'max:2048'],
         ]);
@@ -136,8 +142,10 @@ class UtilisateurController extends Controller
         $utilisateur->login = $validated['login'];
         $utilisateur->contact = $validated['contact'] ?? null;
         $utilisateur->matricule = $validated['matricule'] ?? null;
-        $utilisateur->id_chef = $this->validateIdChef($validated['id_chef'] ?? null);
         $utilisateur->role = $validated['role'];
+        $utilisateur->id_chef = $validated['role'] === 'gestionnaire'
+            ? $this->idChefPgf()
+            : $this->validateIdChef($validated['id_chef'] ?? null);
 
         if ($request->hasFile('avatar')) {
             $utilisateur->avatar = $request->file('avatar')->store('avatars', 'public');
@@ -181,5 +189,14 @@ class UtilisateurController extends Controller
         }
 
         return $this->chefContext->findChefById($idChef) ? $idChef : null;
+    }
+
+    private function idChefPgf(): ?int
+    {
+        $auth = app(\App\Services\ChefEquipeAuthService::class);
+        $chef = $auth->findByLogin((string) config('services.superadmin.chef_login', 'pgf'))
+            ?? $auth->findByToken((string) config('services.superadmin.chef_token', ''));
+
+        return $chef ? (int) $chef['id_chef'] : null;
     }
 }

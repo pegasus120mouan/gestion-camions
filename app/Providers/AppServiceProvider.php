@@ -3,10 +3,12 @@
 namespace App\Providers;
 
 use App\Models\Pesee;
+use App\Services\AccesPlateforme;
 use App\Services\ChefEquipeContext;
 use App\Services\SoldeChefEquipeService;
 use Carbon\Carbon;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -27,6 +29,10 @@ class AppServiceProvider extends ServiceProvider
     {
         // Utiliser Bootstrap 5 pour la pagination
         Paginator::useBootstrapFive();
+
+        Blade::if('peut', function (string ...$permissions) {
+            return app(AccesPlateforme::class)->peut(...$permissions);
+        });
 
         View::composer('layout.main', function ($view) {
             $peseesTodayCount = Pesee::query()
@@ -51,8 +57,12 @@ class AppServiceProvider extends ServiceProvider
             }
 
             $chefSession = app(\App\Services\ChefEquipeSession::class);
+            $acces = app(AccesPlateforme::class);
             $authChef = $chefSession->chef();
             $peutParametres = app(\App\Services\ParametresAccess::class)->allowed(request());
+            $peutGererAcces = $acces->peutGererAcces(request());
+            $authIdentite = $acces->identiteAffichee(request());
+            $authProfil = $acces->profilCourant(request());
 
             $showSoldeChefBanner = request()->routeIs('gestionfinanciere.*', 'solde_chef_equipe.*', 'effectuer_paiement.*');
             $soldeChef = null;
@@ -76,7 +86,10 @@ class AppServiceProvider extends ServiceProvider
                 'soldeChef' => $soldeChef,
                 'soldeChefToken' => $soldeChefToken,
                 'authChef' => $authChef,
+                'authIdentite' => $authIdentite,
+                'authProfil' => $authProfil,
                 'peutParametres' => $peutParametres,
+                'peutGererAcces' => $peutGererAcces,
                 'ticketsSyncNecessaire' => $ticketsSyncNecessaire,
             ]);
         });

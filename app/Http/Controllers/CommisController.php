@@ -8,16 +8,6 @@ use Illuminate\Support\Facades\Http;
 
 class CommisController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware(function ($request, $next) {
-            abort_unless(auth()->check(), 401);
-            abort_unless(auth()->user()->role === 'admin', 403);
-
-            return $next($request);
-        });
-    }
-
     private function fetchPonts(): array
     {
         try {

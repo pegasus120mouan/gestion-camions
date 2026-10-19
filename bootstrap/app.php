@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'auth' => \App\Http\Middleware\AuthenticateChefEquipe::class,
             'parametres' => \App\Http\Middleware\EnsureParametresAccess::class,
+            'gestion_acces' => \App\Http\Middleware\EnsureAccesGestion::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
