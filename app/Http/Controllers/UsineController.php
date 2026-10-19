@@ -208,4 +208,24 @@ class UsineController extends Controller
             'produits' => $produits,
         ]);
     }
+
+    public function destroy(Request $request, int $id_usine)
+    {
+        $usine = Usine::query()->where('id_usine', $id_usine)->first();
+        abort_unless($usine !== null, 404);
+        abort_unless(Usine::isLocalId((int) $usine->id_usine), 403, 'Seules les usines locales peuvent être supprimées.');
+
+        $nom = (string) $usine->nom_usine;
+        $usine->delete();
+
+        \Illuminate\Support\Facades\Cache::forget('usines_api_enrichies');
+        \Illuminate\Support\Facades\Cache::forget('usines_api_enrichies_v2');
+
+        return redirect()
+            ->route('usines.index', array_filter([
+                'produit_id' => $request->input('produit_id'),
+                'search' => $request->input('search'),
+            ]))
+            ->with('success', 'Usine « ' . $nom . ' » supprimée.');
+    }
 }

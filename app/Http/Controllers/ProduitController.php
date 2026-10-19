@@ -125,6 +125,22 @@ class ProduitController extends Controller
         return redirect()->route('produits.show', $produit)->with('success', 'Usine ajoutée au produit avec succès.');
     }
 
+    public function destroyUsine(Produit $produit, Usine $usine)
+    {
+        abort_unless((int) $usine->produit_id === (int) $produit->id, 404);
+        abort_unless(Usine::isLocalId((int) $usine->id_usine), 403);
+
+        $nom = (string) $usine->nom_usine;
+        $usine->delete();
+
+        \Illuminate\Support\Facades\Cache::forget('usines_api_enrichies');
+        \Illuminate\Support\Facades\Cache::forget('usines_api_enrichies_v2');
+
+        return redirect()
+            ->route('produits.show', $produit)
+            ->with('success', 'Usine « ' . $nom . ' » retirée du produit.');
+    }
+
     private function genererCodeUsine(Produit $produit): string
     {
         $prefix = strtoupper(preg_replace('/[^A-Z0-9]/u', '', mb_substr($produit->nom, 0, 3)));

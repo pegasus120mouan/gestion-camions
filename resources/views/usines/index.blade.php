@@ -6,6 +6,13 @@
       <h4 class="mb-0">Liste des Usines</h4>
     </div>
 
+    @if (session('success'))
+      <div class="alert alert-success alert-dismissible fade show" role="alert">
+        {{ session('success') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    @endif
+
     <!-- Formulaire de recherche -->
     <div class="card mb-4">
       <div class="card-body">
@@ -89,18 +96,38 @@
                           <th>Nom usine</th>
                           <th>Code</th>
                           <th>Source</th>
+                          <th class="text-end">Actions</th>
                         </tr>
                       </thead>
                       <tbody class="table-border-bottom-0">
                         @foreach($groupe['usines'] as $u)
                           <tr>
                             <td><strong>{{ $u['nom_usine'] ?? '-' }}</strong></td>
-                            <td><code>{{ $u['code_usine'] ?? '-' }}</code></td>
+                            <td>
+                              @if(($u['source'] ?? '') === 'local' && !empty($u['code_usine']))
+                                <code class="text-danger">{{ $u['code_usine'] }}</code>
+                              @else
+                                <code>{{ $u['code_usine'] ?? '-' }}</code>
+                              @endif
+                            </td>
                             <td>
                               @if(($u['source'] ?? '') === 'local')
                                 <span class="badge bg-label-primary">Attribuée au produit</span>
                               @else
                                 <span class="badge bg-label-secondary">API</span>
+                              @endif
+                            </td>
+                            <td class="text-end">
+                              @if(($u['source'] ?? '') === 'local' && !empty($u['id_usine']))
+                                <form class="d-inline" method="POST" action="{{ route('usines.destroy', $u['id_usine']) }}" onsubmit="return confirm('Supprimer l\'usine « {{ $u['nom_usine'] ?? '' }} » ?');">
+                                  @csrf
+                                  @method('DELETE')
+                                  <input type="hidden" name="produit_id" value="{{ request('produit_id') }}" />
+                                  <input type="hidden" name="search" value="{{ request('search') }}" />
+                                  <button type="submit" class="btn btn-sm btn-outline-danger">Supprimer</button>
+                                </form>
+                              @else
+                                <span class="text-muted small">—</span>
                               @endif
                             </td>
                           </tr>

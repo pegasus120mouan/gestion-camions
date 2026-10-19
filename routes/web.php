@@ -245,6 +245,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('pesees', PeseeController::class)->except(['create']);
     Route::resource('produits', ProduitController::class)->except(['create']);
     Route::post('/produits/{produit}/usines', [ProduitController::class, 'storeUsine'])->name('produits.usines.store');
+    Route::delete('/produits/{produit}/usines/{usine}', [ProduitController::class, 'destroyUsine'])->name('produits.usines.destroy');
     Route::post('/usines/{code_usine}/gerable', [UsineController::class, 'toggleGerable'])->name('usines.gerable');
 
     Route::get('/gestionfinanciere', [GestionFinanciereController::class, 'index'])->name('gestionfinanciere.index');
@@ -339,6 +340,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/avances-transporteur/{transporteur}', [AvanceTransporteurController::class, 'show'])->name('avances_transporteur.show');
 
     Route::get('/usines', [UsineController::class, 'index'])->name('usines.index');
+    Route::delete('/usines/{id_usine}', [UsineController::class, 'destroy'])->name('usines.destroy');
 
     Route::get('/depenses', [DepenseController::class, 'listeDepenses'])->name('depenses.liste');
     Route::post('/depenses', [DepenseController::class, 'storeFromList'])->name('depenses.store');

@@ -36,11 +36,18 @@
       </div>
       <div class="card-body">
         @forelse($usines ?? [] as $usine)
-          <span class="badge bg-label-primary me-1 mb-1" title="{{ $usine->code_usine ?? '' }}">
+          <span class="badge bg-label-primary me-1 mb-2 d-inline-flex align-items-center gap-1" title="{{ $usine->code_usine ?? '' }}">
             {{ $usine->nom_usine }}
             @if($usine->code_usine)
               <small class="opacity-75">({{ $usine->code_usine }})</small>
             @endif
+            <form class="d-inline" method="POST" action="{{ route('produits.usines.destroy', [$produit, $usine]) }}" onsubmit="return confirm('Retirer l\'usine « {{ $usine->nom_usine }} » ?');">
+              @csrf
+              @method('DELETE')
+              <button type="submit" class="btn btn-sm p-0 border-0 bg-transparent text-danger" title="Supprimer" style="line-height:1;">
+                <i class="bx bx-x-circle"></i>
+              </button>
+            </form>
           </span>
         @empty
           <span class="text-muted">Aucune usine attribuée à ce produit</span>
