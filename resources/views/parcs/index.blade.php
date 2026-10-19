@@ -153,7 +153,7 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Pont associé <span class="text-danger">*</span></label>
-            <select name="id_pont" class="form-select" required>
+            <select name="id_pont" class="form-select js-select2-pont" data-placeholder="Rechercher un pont…" required>
               <option value="">-- Sélectionner un pont --</option>
               @foreach($ponts as $pont)
                 <option value="{{ $pont['id_pont'] ?? '' }}">{{ $pont['nom_pont'] ?? '' }} ({{ $pont['code_pont'] ?? '' }})</option>
@@ -198,7 +198,7 @@
           </div>
           <div class="mb-3">
             <label class="form-label">Pont associé <span class="text-danger">*</span></label>
-            <select name="id_pont" class="form-select" required>
+            <select name="id_pont" class="form-select js-select2-pont" data-placeholder="Rechercher un pont…" required>
               <option value="">-- Sélectionner un pont --</option>
               @foreach($ponts as $pont)
                 <option value="{{ $pont['id_pont'] ?? '' }}" {{ $parc->id_pont == ($pont['id_pont'] ?? '') ? 'selected' : '' }}>
@@ -260,4 +260,45 @@
 </div>
 @endforeach
 
+@endsection
+
+@section('page-styles')
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<style>
+  .select2-container--bootstrap-5 .select2-selection { min-height: 38px; }
+  .select2-container { width: 100% !important; }
+  .modal .select2-container { z-index: 1060; }
+</style>
+@endsection
+
+@section('page-scripts')
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+$(function () {
+  function initSelect2Pont($select, $modal) {
+    if (!$select.length || $select.hasClass('select2-hidden-accessible')) {
+      return;
+    }
+    $select.select2({
+      theme: 'bootstrap-5',
+      width: '100%',
+      dropdownParent: $modal,
+      placeholder: $select.data('placeholder') || 'Rechercher un pont…',
+      allowClear: true,
+      language: {
+        noResults: function () { return 'Aucun résultat'; },
+        searching: function () { return 'Recherche…'; }
+      }
+    });
+  }
+
+  $('.modal').on('shown.bs.modal', function () {
+    var $modal = $(this);
+    $modal.find('.js-select2-pont').each(function () {
+      initSelect2Pont($(this), $modal);
+    });
+  });
+});
+</script>
 @endsection
