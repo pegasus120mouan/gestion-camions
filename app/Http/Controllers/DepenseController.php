@@ -27,10 +27,17 @@ class DepenseController extends Controller
 {
     private function vehiculeEstEnCoursUtilisation(int $vehiculeId, ?int $exclureFicheId = null): bool
     {
+        if ($vehiculeId <= 0) {
+            return false;
+        }
+
         return FicheSortie::query()
             ->where('vehicule_id', $vehiculeId)
             ->whereNull('date_dechargement')
-            ->when($exclureFicheId, fn ($q) => $q->where('id', '!=', $exclureFicheId))
+            ->when(
+                $exclureFicheId !== null && $exclureFicheId > 0,
+                fn ($q) => $q->where('id', '!=', $exclureFicheId)
+            )
             ->exists();
     }
 
@@ -1586,6 +1593,12 @@ class DepenseController extends Controller
         }
 
         $vehiculeId = (int) $validated['vehicule_id'];
+        $matriculeSoumis = strtoupper(trim((string) ($validated['matricule_vehicule'] ?? '')));
+        $vehiculeActuelId = (int) ($ficheSortie->vehicule_id ?? 0);
+        $matriculeActuel = strtoupper(trim((string) ($ficheSortie->matricule_vehicule ?? '')));
+        $memeCamion = ($vehiculeId > 0 && $vehiculeId === $vehiculeActuelId)
+            || ($matriculeSoumis !== '' && $matriculeActuel !== '' && $matriculeSoumis === $matriculeActuel);
+
         $etatVehicule = CamionEtat::query()
             ->where('vehicule_id', $vehiculeId)
             ->value('etat');
@@ -1593,7 +1606,8 @@ class DepenseController extends Controller
             return back()->withErrors(['vehicule_id' => "Ce camion est en panne ou inactif."])->withInput();
         }
 
-        if ($this->vehiculeEstEnCoursUtilisation($vehiculeId, $ficheSortie->id)) {
+        // Ce contrôle ne s'applique que si on change de camion (pas pour agent/pont/etc.).
+        if (! $memeCamion && $this->vehiculeEstEnCoursUtilisation($vehiculeId, (int) $ficheSortie->id)) {
             return back()->withErrors(['vehicule_id' => "Ce camion a déjà une fiche de sortie non déchargée."])->withInput();
         }
 
