@@ -242,7 +242,7 @@
                 @peut('tickets.locaux')
                 <li class="menu-item {{ request()->routeIs('tickets.locaux') ? 'active' : '' }}">
                   <a href="{{ route('tickets.locaux') }}" class="menu-link">
-                    <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets locaux</div>
+                    <div class="text-truncate" data-i18n="Weighbridges list">Mes tickets Hévéas</div>
                   </a>
                 </li>
                 @endpeut
