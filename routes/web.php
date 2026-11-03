@@ -510,6 +510,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/transferts/{transfert}/prix-unitaire', [TransfertController::class, 'updatePrixUnitaire'])->name('transferts.prix_unitaire');
     Route::delete('/transferts/{transfert}', [TransfertController::class, 'destroy'])->name('transferts.destroy');
 
+    Route::get('/transferts-ponts', [\App\Http\Controllers\TransfertPontController::class, 'index'])->name('transferts_ponts.index');
+    Route::post('/transferts-ponts', [\App\Http\Controllers\TransfertPontController::class, 'store'])->name('transferts_ponts.store');
+    Route::get('/api/transferts-ponts/stocks-pont-produit', [\App\Http\Controllers\TransfertPontController::class, 'stocksPontProduit'])->name('transferts_ponts.stocks_pont_produit');
+
     // Gestion financière des transferts
     Route::get('/transferts-financier', [TransfertFinancierController::class, 'index'])->name('transferts.financier.index');
     Route::get('/transferts-financier/{type}/{id}', [TransfertFinancierController::class, 'show'])->name('transferts.financier.show');

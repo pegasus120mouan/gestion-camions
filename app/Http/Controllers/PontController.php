@@ -131,44 +131,6 @@ class PontController extends Controller
             $ponts = [];
         }
 
-        $etatsParPont = PontEtat::query()->pluck('etat', 'id_pont')->toArray();
-        $gerableParPont = PontEtat::query()->pluck('gerable', 'id_pont')->toArray();
-
-        // Calculer le stock disponible et le solde pour chaque pont
-        foreach ($ponts as &$pont) {
-            $idPont = (int) ($pont['id_pont'] ?? 0);
-            $etatPont = $etatsParPont[$idPont] ?? PontEtat::etatDepuisApi($pont['statut'] ?? 'Actif');
-            $pont['etat_pont'] = $etatPont;
-            $pont['gerable'] = (bool) ($gerableParPont[$idPont] ?? false);
-            $pont['peut_entrer_stock'] = in_array($etatPont, ['actif', 'inactif'], true);
-            
-            // Trouver TOUS les stocks ouverts pour ce pont (un par parc)
-            $stocksOuverts = Stock::where('id_pont', $idPont)
-                ->where('type', 'entree')
-                ->where('statut', 'ouvert')
-                ->get();
-            
-            $transfertGroupe = app(TransfertGroupeService::class);
-            $totalStockDisponible = 0;
-
-            foreach ($stocksOuverts as $stockOuvert) {
-                // Inclut les fiches groupées dès le chargement (pas seulement les déchargées).
-                $totalStockDisponible += $transfertGroupe->calculerStockDisponible($stockOuvert);
-            }
-
-            $pont['stock_disponible'] = $totalStockDisponible;
-
-            // Calculer le solde (total approvisionnements - total dépenses stocks - total dépenses entrées - dépenses pont)
-            $totalApprovisionnements = \App\Models\Approvisionnement::where('pont_id', $idPont)->sum('montant');
-            $totalDepensesStocks = Stock::where('id_pont', $idPont)->where('type', 'entree')->sum('montant_total');
-            $totalDepensesEntrees = \App\Models\EntreeStock::whereHas('stock', function($q) use ($idPont) {
-                $q->where('id_pont', $idPont);
-            })->sum('montant_total');
-            $totalDepensesPont = \App\Models\DepensePont::where('id_pont', $idPont)->sum('montant');
-            $pont['solde'] = $totalApprovisionnements - $totalDepensesStocks - $totalDepensesEntrees - $totalDepensesPont;
-        }
-        unset($pont);
-
         $pontNoms = collect($ponts)
             ->pluck('nom_pont')
             ->filter()
@@ -177,15 +139,52 @@ class PontController extends Controller
             ->values()
             ->all();
 
-        $search = trim((string) $request->query('q', ''));
+        // Filtrer AVANT les calculs stock/solde (sinon timeout sur ~180 ponts).
+        $search = trim(preg_replace('/\s+/u', ' ', (string) $request->query('q', '')) ?? '');
         if ($search !== '') {
             $needle = mb_strtolower($search);
             $ponts = array_values(array_filter($ponts, function ($pont) use ($needle) {
-                $nomPont = mb_strtolower((string) ($pont['nom_pont'] ?? ''));
+                $haystack = mb_strtolower(trim(implode(' ', [
+                    (string) ($pont['nom_pont'] ?? ''),
+                    (string) ($pont['code_pont'] ?? ''),
+                    (string) ($pont['gerant'] ?? ''),
+                ])));
 
-                return str_contains($nomPont, $needle);
+                return $haystack !== '' && str_contains($haystack, $needle);
             }));
         }
+
+        $etatsParPont = PontEtat::query()->pluck('etat', 'id_pont')->toArray();
+        $gerableParPont = PontEtat::query()->pluck('gerable', 'id_pont')->toArray();
+        $transfertGroupe = app(TransfertGroupeService::class);
+
+        foreach ($ponts as &$pont) {
+            $idPont = (int) ($pont['id_pont'] ?? 0);
+            $etatPont = $etatsParPont[$idPont] ?? PontEtat::etatDepuisApi($pont['statut'] ?? 'Actif');
+            $pont['etat_pont'] = $etatPont;
+            $pont['gerable'] = (bool) ($gerableParPont[$idPont] ?? false);
+            $pont['peut_entrer_stock'] = in_array($etatPont, ['actif', 'inactif'], true);
+
+            $stocksOuverts = Stock::where('id_pont', $idPont)
+                ->where('type', 'entree')
+                ->where('statut', 'ouvert')
+                ->get();
+
+            $totalStockDisponible = 0;
+            foreach ($stocksOuverts as $stockOuvert) {
+                $totalStockDisponible += $transfertGroupe->calculerStockDisponible($stockOuvert);
+            }
+            $pont['stock_disponible'] = $totalStockDisponible;
+
+            $totalApprovisionnements = \App\Models\Approvisionnement::where('pont_id', $idPont)->sum('montant');
+            $totalDepensesStocks = Stock::where('id_pont', $idPont)->where('type', 'entree')->sum('montant_total');
+            $totalDepensesEntrees = \App\Models\EntreeStock::whereHas('stock', function ($q) use ($idPont) {
+                $q->where('id_pont', $idPont);
+            })->sum('montant_total');
+            $totalDepensesPont = \App\Models\DepensePont::where('id_pont', $idPont)->sum('montant');
+            $pont['solde'] = $totalApprovisionnements - $totalDepensesStocks - $totalDepensesEntrees - $totalDepensesPont;
+        }
+        unset($pont);
 
         return view('ponts.index', [
             'ponts' => $ponts,

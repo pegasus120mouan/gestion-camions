@@ -230,59 +230,60 @@
             <h5 class="mb-0 text-white">Clôturer vers une usine</h5>
           </div>
           <div class="card-body">
-            <p class="text-muted small">
-              Sélectionnez l’agent, son pont, le parc (produit de départ), le poids ≤ stock disponible, puis l’usine.
-              Aucun ajout de stock parc — déduction du parc choisi et clôture de la fiche.
-            </p>
             @php
               $clotureAgentDisplay = trim(($fiche->nom_agent ?? '') . ($fiche->numero_agent ? ' (' . $fiche->numero_agent . ')' : ''));
+              $clotureSurParc = $stockLocalisation !== null;
+              $cloturePontLabel = $clotureSurParc
+                ? trim(($stockLocalisation->nom_pont ?? '') . ($stockLocalisation->code_pont ? ' (' . $stockLocalisation->code_pont . ')' : ''))
+                : '';
+              $clotureParcLabel = $clotureSurParc
+                ? (($stockLocalisation->nom_parc ?? 'Parc') . ' — stock actuel ' . number_format((float) ($stockActuelChaine ?? 0), 0, ',', ' ') . ' kg')
+                : '';
+              $clotureMaxPoids = (float) ($stockActuelChaine ?? 0);
             @endphp
+            <p class="text-muted small">
+              @if($clotureSurParc)
+                Clôture sur le <strong>même agent</strong>, le <strong>même pont</strong> et le <strong>même parc</strong> où se trouve la marchandise.
+                Saisissez uniquement le poids et l’usine.
+              @else
+                La marchandise est encore en transit : transférez-la d’abord vers un parc avant de clôturer.
+              @endif
+            </p>
             <form method="POST" action="{{ route('sorties_groupees.cloture_usine', $fiche->id) }}" id="formClotureUsine">
               @csrf
               <input type="hidden" name="id_agent" id="cloture_id_agent" value="{{ old('id_agent', $fiche->id_agent) }}" required>
-              <input type="hidden" name="id_pont" id="cloture_id_pont" value="">
+              <input type="hidden" name="agent_display" id="cloture_agent_display" value="{{ old('agent_display', $clotureAgentDisplay) }}">
+              <input type="hidden" name="id_pont" id="cloture_id_pont" value="{{ $clotureSurParc ? $stockLocalisation->id_pont : '' }}">
+              <input type="hidden" name="stock_id" id="cloture_stock_id" value="{{ $clotureSurParc ? $stockLocalisation->id : '' }}" @if($clotureSurParc) required @endif>
+
               <div class="mb-3">
-                <label class="form-label">Agent <span class="text-danger">*</span></label>
-                <input type="text" id="cloture_agent_search" name="agent_display" class="form-control"
-                       value="{{ old('agent_display', $clotureAgentDisplay) }}"
-                       placeholder="Rechercher par N° ou nom..." autocomplete="off" required>
-                <div id="cloture_agent_dropdown" class="dropdown-menu w-100" style="max-height: 220px; overflow-y: auto; display: none;">
-                  @foreach($agents as $agent)
-                    <a href="#" class="dropdown-item cloture-agent-option"
-                      data-id="{{ $agent['id_agent'] }}"
-                      data-display="{{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})"
-                      data-numero="{{ strtolower($agent['numero_agent'] ?? '') }}"
-                      data-nom="{{ strtolower($agent['nom_complet'] ?? '') }}">
-                      {{ $agent['nom_complet'] }} ({{ $agent['numero_agent'] }})
-                    </a>
-                  @endforeach
-                </div>
-                <small class="text-muted">Agent actuel de la fiche (modifiable).</small>
-              </div>
-              <div class="mb-3" id="cloture_pont_section">
-                <label class="form-label">Pont <span class="text-danger">*</span></label>
-                <input type="text" id="cloture_pont_readonly" class="form-control bg-light d-none" readonly>
-                <select id="cloture_pont_select" class="form-select d-none">
-                  <option value="">— Sélectionner un pont —</option>
-                </select>
-                <div id="cloture_pont_empty" class="form-text text-muted">
-                  Sélectionnez un agent pour afficher ses ponts.
-                </div>
+                <label class="form-label">Agent</label>
+                <input type="text" class="form-control bg-light" value="{{ $clotureAgentDisplay ?: '—' }}" readonly>
               </div>
               <div class="mb-3">
-                <label class="form-label">Parc / stock source <span class="text-danger">*</span></label>
-                <select name="stock_id" id="cloture_stock_select" class="form-select" required>
-                  <option value="">-- Choisir d'abord un agent / pont --</option>
-                </select>
-                <small class="text-muted" id="cloture_parc_hint">Parcs ouverts pour le produit de départ.</small>
+                <label class="form-label">Pont</label>
+                <input type="text" class="form-control bg-light" value="{{ $cloturePontLabel ?: '—' }}" readonly>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Parc / stock source</label>
+                <input type="text" class="form-control bg-light" value="{{ $clotureParcLabel ?: '—' }}" readonly>
+                @if($clotureSurParc)
+                  <small class="text-muted" id="cloture_poids_hint_base">Figé sur la localisation actuelle de la fiche.</small>
+                @endif
               </div>
               <div class="mb-3">
                 <label class="form-label">Poids (kg) <span class="text-danger">*</span></label>
                 <input type="number" name="poids" id="cloture_poids" class="form-control" min="0.01" step="0.01" required
                        placeholder="Saisir le poids"
-                       value="{{ old('poids') }}">
+                       value="{{ old('poids') }}"
+                       @if($clotureSurParc && $clotureMaxPoids > 0) max="{{ $clotureMaxPoids }}" @endif
+                       @if(!$clotureSurParc) disabled @endif>
                 <small class="text-muted" id="cloture_poids_hint">
-                  À renseigner manuellement — max = stock disponible du parc choisi.
+                  @if($clotureSurParc)
+                    À renseigner manuellement — max {{ number_format($clotureMaxPoids, 0, ',', ' ') }} kg.
+                  @else
+                    Transfert vers un parc requis avant clôture.
+                  @endif
                 </small>
                 <div class="text-danger small mt-1 d-none" id="cloture_poids_error"></div>
               </div>
@@ -306,7 +307,7 @@
                 <label class="form-label">Commentaire</label>
                 <input type="text" name="commentaire" class="form-control" maxlength="500">
               </div>
-              <button type="submit" class="btn btn-danger" id="btnClotureUsine">
+              <button type="submit" class="btn btn-danger" id="btnClotureUsine" @if(!$clotureSurParc) disabled @endif>
                 <i class="bx bx-check me-1"></i>Clôturer la fiche
               </button>
             </form>
@@ -593,7 +594,35 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   var transfertUi = createPontUi('transfert', 'transfert');
-  var clotureUi = createPontUi('cloture', 'cloture');
+  var clotureMaxPoids = {{ (float) ($stockActuelChaine ?? 0) }};
+  var clotureSurParc = {{ $stockLocalisation ? 'true' : 'false' }};
+
+  function validerPoidsCloture() {
+    var poidsInput = document.getElementById('cloture_poids');
+    var poidsError = document.getElementById('cloture_poids_error');
+    if (!poidsInput) return false;
+    var poids = parseFloat(poidsInput.value || '');
+    if (poidsError) {
+      poidsError.classList.add('d-none');
+      poidsError.textContent = '';
+    }
+    poidsInput.classList.remove('is-invalid');
+    if (!poids || poids <= 0) return false;
+    if (clotureMaxPoids > 0 && poids > clotureMaxPoids + 0.0001) {
+      if (poidsError) {
+        poidsError.textContent = 'Le poids ne peut pas dépasser le stock actuel (' + formatKg(clotureMaxPoids) + ' kg).';
+        poidsError.classList.remove('d-none');
+      }
+      poidsInput.classList.add('is-invalid');
+      return false;
+    }
+    return true;
+  }
+
+  var cloturePoidsInput = document.getElementById('cloture_poids');
+  if (cloturePoidsInput) {
+    cloturePoidsInput.addEventListener('input', validerPoidsCloture);
+  }
 
   function bindAgentSearch(inputId, dropdownId, hiddenId, optionClass, onSelect) {
     var input = document.getElementById(inputId);
@@ -642,19 +671,6 @@ document.addEventListener('DOMContentLoaded', function () {
     'transfert-agent-option',
     transfertUi.updatePourAgent
   );
-  bindAgentSearch(
-    'cloture_agent_search',
-    'cloture_agent_dropdown',
-    'cloture_id_agent',
-    'cloture-agent-option',
-    clotureUi.updatePourAgent
-  );
-
-  // Préremplir agent actuel + son pont
-  var clotureAgentInit = document.getElementById('cloture_id_agent');
-  if (clotureAgentInit && clotureAgentInit.value) {
-    clotureUi.updatePourAgent(clotureAgentInit.value);
-  }
 
   var formTransfert = document.getElementById('formTransfertPont');
   if (formTransfert) {
@@ -691,17 +707,14 @@ document.addEventListener('DOMContentLoaded', function () {
       if (clotureConfirmed) return;
 
       e.preventDefault();
-      var hidden = formCloture.querySelector('input[name="id_agent"]');
-      if (!hidden || !hidden.value) {
-        alert('Sélectionnez un agent dans la liste.');
+      if (!clotureSurParc) {
+        alert('Transférez d\'abord la marchandise vers un parc avant de clôturer.');
         return;
       }
-      if (!clotureUi.idPontHidden || !clotureUi.idPontHidden.value) {
-        alert('Sélectionnez le pont de l\'agent.');
-        return;
-      }
-      if (!clotureUi.stockSelect || !clotureUi.stockSelect.value) {
-        alert('Sélectionnez un parc / stock source.');
+      var stockId = formCloture.querySelector('input[name="stock_id"]');
+      var agentId = formCloture.querySelector('input[name="id_agent"]');
+      if (!agentId || !agentId.value || !stockId || !stockId.value) {
+        alert('Localisation agent / parc manquante sur la fiche.');
         return;
       }
       var poidsInputCheck = document.getElementById('cloture_poids');
@@ -711,20 +724,20 @@ document.addEventListener('DOMContentLoaded', function () {
         if (poidsInputCheck) poidsInputCheck.focus();
         return;
       }
-      if (!clotureUi.validerPoids()) {
-        alert('Le poids dépasse le stock disponible du parc.');
+      if (!validerPoidsCloture()) {
+        alert('Le poids dépasse le stock actuel du parc.');
         return;
       }
 
       var usineSelect = formCloture.querySelector('select[name="usine"]');
-      var agentInput = document.getElementById('cloture_agent_search');
+      var agentDisplay = document.getElementById('cloture_agent_display');
       var poidsInput = document.getElementById('cloture_poids');
       var usineLabel = document.getElementById('confirmClotureUsineLabel');
       var agentLabel = document.getElementById('confirmClotureAgentLabel');
       var poidsLabel = document.getElementById('confirmCloturePoidsLabel');
 
       if (usineLabel) usineLabel.textContent = (usineSelect && usineSelect.value) ? usineSelect.value : '—';
-      if (agentLabel) agentLabel.textContent = (agentInput && agentInput.value) ? agentInput.value : '—';
+      if (agentLabel) agentLabel.textContent = (agentDisplay && agentDisplay.value) ? agentDisplay.value : '—';
       if (poidsLabel) poidsLabel.textContent = formatKgConfirm(parseFloat((poidsInput && poidsInput.value) || 0));
 
       var modal = bootstrap.Modal.getOrCreateInstance(modalClotureEl);

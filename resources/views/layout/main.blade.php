@@ -169,8 +169,8 @@
             </li>
             @endpeut
 
-            @peut('transferts.liste', 'transferts.clients', 'transferts.financier')
-            <li class="menu-item {{ request()->routeIs('transferts.*') || request()->routeIs('clients.*') ? 'active open' : '' }}">
+            @peut('transferts.liste', 'transferts.clients', 'transferts.financier', 'flotte.voir', 'flotte.gerer')
+            <li class="menu-item {{ request()->routeIs('transferts.*') || request()->routeIs('clients.*') || request()->routeIs('transferts_ponts.*') ? 'active open' : '' }}">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-transfer-alt" style="color: #7367f0;"></i>
                 <div class="text-truncate" data-i18n="Layouts">Gestion des transferts</div>
@@ -181,6 +181,13 @@
                 <li class="menu-item {{ request()->routeIs('transferts.*') && !request()->routeIs('transferts.financier.*') ? 'active' : '' }}">
                   <a href="{{ route('transferts.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Without menu">Liste des transferts</div>
+                  </a>
+                </li>
+                @endpeut
+                @peut('flotte.voir', 'flotte.gerer', 'transferts.liste')
+                <li class="menu-item {{ request()->routeIs('transferts_ponts.*') ? 'active' : '' }}">
+                  <a href="{{ route('transferts_ponts.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Without menu">Transfert d'un pont vers un autre</div>
                   </a>
                 </li>
                 @endpeut

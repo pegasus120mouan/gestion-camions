@@ -197,24 +197,26 @@ class SortiesGroupeesController extends Controller
         }
 
         $validated = $request->validate([
-            'id_agent' => ['required', 'integer'],
-            'agent_display' => ['nullable', 'string', 'max:255'],
-            'stock_id' => ['required', 'integer', 'exists:stocks,id'],
             'poids' => ['required', 'numeric', 'min:0.01'],
             'usine' => ['required', 'string', 'max:255'],
             'date_etape' => ['required', 'date'],
             'commentaire' => ['nullable', 'string', 'max:500'],
         ]);
 
-        [$nomAgent, $numeroAgent] = $this->parseAgentDisplay($validated['agent_display'] ?? '');
+        // Clôture figée : agent + pont + parc de la localisation actuelle.
+        if ($fiche->localisation_type !== FicheSortie::LOCALISATION_PARC || ! $fiche->localisation_stock_id) {
+            return back()
+                ->withErrors(['error' => 'La marchandise doit être localisée sur un parc pour clôturer vers une usine.'])
+                ->withInput();
+        }
 
-        $stockSource = Stock::query()->findOrFail((int) $validated['stock_id']);
+        $stockSource = Stock::query()->findOrFail((int) $fiche->localisation_stock_id);
 
         try {
             $this->transfertGroupe->cloturerVersUsine($fiche, [
-                'id_agent' => (int) $validated['id_agent'],
-                'nom_agent' => $nomAgent,
-                'numero_agent' => $numeroAgent,
+                'id_agent' => (int) $fiche->id_agent,
+                'nom_agent' => $fiche->nom_agent,
+                'numero_agent' => $fiche->numero_agent,
                 'usine' => $validated['usine'],
                 'date_etape' => $validated['date_etape'],
                 'commentaire' => $validated['commentaire'] ?? null,
