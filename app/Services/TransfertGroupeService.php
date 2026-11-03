@@ -358,12 +358,17 @@ class TransfertGroupeService
                 'commentaire' => $data['commentaire'] ?? 'Clôture — destination usine',
             ]);
 
-            // Clôture groupée = usine + fin des transferts, mais la fiche reste
-            // « non déchargée » jusqu'au déchargement usine classique.
+            // Clôture groupée = infos de la dernière étape (agent + pont/parc source),
+            // usine de destination, puis fiche en « non déchargée ».
             $fiche->update([
                 'id_agent' => $data['id_agent'],
                 'nom_agent' => $data['nom_agent'] ?? $fiche->nom_agent,
                 'numero_agent' => $data['numero_agent'] ?? $fiche->numero_agent,
+                'id_pont' => $stockSource->id_pont,
+                'nom_pont' => $stockSource->nom_pont,
+                'code_pont' => $stockSource->code_pont,
+                'parc_id' => $stockSource->parc_id,
+                'nom_parc' => $stockSource->nom_parc,
                 'usine' => $usine,
                 'poids_pont' => $poids,
                 'statut_groupe' => FicheSortie::STATUT_GROUPE_CLOTUREE,
