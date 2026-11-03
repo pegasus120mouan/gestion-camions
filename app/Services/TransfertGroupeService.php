@@ -399,4 +399,56 @@ class TransfertGroupeService
             ->orderBy('id')
             ->first();
     }
+
+    /**
+     * Supprime une fiche groupée et annule ses mouvements de stock (crédits / débits ponts).
+     *
+     * @return array{entrees_supprimees: int, etapes: int}
+     */
+    public function supprimerFicheGroupee(FicheSortie $fiche): array
+    {
+        if (! $fiche->estGroupee()) {
+            throw new InvalidArgumentException('Cette fiche n\'est pas une fiche groupée.');
+        }
+
+        return DB::transaction(function () use ($fiche) {
+            $fiche->load('etapesTransfertGroupe');
+            $ref = (string) ($fiche->numero_fiche ?: $fiche->id);
+            $entreeIds = $fiche->etapesTransfertGroupe
+                ->pluck('entree_stock_id')
+                ->filter()
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values()
+                ->all();
+
+            $entreesSupprimees = 0;
+
+            if ($entreeIds !== []) {
+                $entreesSupprimees += EntreeStock::query()->whereIn('id', $entreeIds)->delete();
+            }
+
+            // Débits physiques liés à cette fiche (transferts pont + clôture usine)
+            $entreesSupprimees += EntreeStock::query()
+                ->where(function ($q) use ($ref, $fiche) {
+                    $q->where('commentaire', 'like', 'Débit transfert groupé fiche ' . $ref . '%')
+                        ->orWhere('commentaire', 'like', 'Débit clôture usine fiche ' . $ref . '%')
+                        ->orWhere('commentaire', 'like', 'Transfert groupé fiche ' . $ref . '%');
+                    if ((string) $fiche->id !== $ref) {
+                        $q->orWhere('commentaire', 'like', 'Débit transfert groupé fiche ' . $fiche->id . '%')
+                            ->orWhere('commentaire', 'like', 'Débit clôture usine fiche ' . $fiche->id . '%')
+                            ->orWhere('commentaire', 'like', 'Transfert groupé fiche ' . $fiche->id . '%');
+                    }
+                })
+                ->delete();
+
+            $etapes = $fiche->etapesTransfertGroupe->count();
+            $fiche->delete(); // cascade etapes_transfert_groupe
+
+            return [
+                'entrees_supprimees' => $entreesSupprimees,
+                'etapes' => $etapes,
+            ];
+        });
+    }
 }

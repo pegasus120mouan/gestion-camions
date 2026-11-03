@@ -79,6 +79,7 @@
               <th>Pont destination</th>
               <th>Parc dest.</th>
               <th class="text-end">Poids arrivée</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -93,10 +94,20 @@
                 <td>{{ $t->nom_pont_destination ?: '—' }}</td>
                 <td>{{ $t->nom_parc_destination ?: '—' }}</td>
                 <td class="text-end text-success fw-semibold">+{{ number_format((float) $t->poids_arrivee, 0, ',', ' ') }}</td>
+                <td class="text-end">
+                  <form method="POST" action="{{ route('transferts_ponts.destroy', $t->id) }}" class="d-inline"
+                        onsubmit="return confirm('Supprimer ce transfert {{ $t->matricule_vehicule }} ({{ $t->nom_pont_source }} → {{ $t->nom_pont_destination }}) ?\nLes mouvements de stock liés seront annulés.');">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer le transfert et ses mouvements de stock">
+                      <i class="bx bx-trash"></i>
+                    </button>
+                  </form>
+                </td>
               </tr>
             @empty
               <tr>
-                <td colspan="9" class="text-center text-muted py-4">Aucun transfert pont enregistré</td>
+                <td colspan="10" class="text-center text-muted py-4">Aucun transfert pont enregistré</td>
               </tr>
             @endforelse
           </tbody>

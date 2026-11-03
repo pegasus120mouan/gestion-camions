@@ -17,6 +17,13 @@
     @if(session('success'))
       <div class="alert alert-success">{{ session('success') }}</div>
     @endif
+    @if($errors->any())
+      <div class="alert alert-danger">
+        @foreach($errors->all() as $error)
+          <div>{{ $error }}</div>
+        @endforeach
+      </div>
+    @endif
 
     <div class="card mb-4">
       <div class="card-body">
@@ -103,10 +110,18 @@
                     <span class="text-muted">En transit</span>
                   @endif
                 </td>
-                <td class="text-end">
+                <td class="text-end text-nowrap">
                   <a href="{{ route('sorties_groupees.show', $fiche->id) }}" class="btn btn-sm btn-outline-primary" title="Transferts & historique">
                     <i class="bx bx-transfer"></i>
                   </a>
+                  <form method="POST" action="{{ route('sorties_groupees.destroy', $fiche->id) }}" class="d-inline"
+                        onsubmit="return confirm('Supprimer la fiche {{ $fiche->numero_fiche }} ?\nLes mouvements de stock des ponts liés (crédits / débits) seront aussi annulés.');">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Supprimer la fiche et ses mouvements de stock">
+                      <i class="bx bx-trash"></i>
+                    </button>
+                  </form>
                 </td>
               </tr>
             @empty

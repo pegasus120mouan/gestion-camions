@@ -189,6 +189,34 @@ class SortiesGroupeesController extends Controller
             );
     }
 
+    public function destroy(int $ficheId)
+    {
+        $fiche = FicheSortie::query()->findOrFail($ficheId);
+        if (! $fiche->estGroupee()) {
+            abort(404);
+        }
+
+        $numero = $fiche->numero_fiche ?: ('#' . $fiche->id);
+
+        try {
+            $result = $this->transfertGroupe->supprimerFicheGroupee($fiche);
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+
+        return redirect()
+            ->route('sorties_groupees.index')
+            ->with(
+                'success',
+                sprintf(
+                    'Fiche %s supprimée (%d étape(s), %d mouvement(s) de stock annulé(s)).',
+                    $numero,
+                    $result['etapes'],
+                    $result['entrees_supprimees']
+                )
+            );
+    }
+
     public function cloturerUsine(Request $request, int $ficheId)
     {
         $fiche = FicheSortie::query()->findOrFail($ficheId);

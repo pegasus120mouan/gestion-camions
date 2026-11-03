@@ -252,6 +252,61 @@ class TransfertPontController extends Controller
             ->with('success', $message);
     }
 
+    public function destroy(int $id)
+    {
+        $transfert = TransfertPont::query()->findOrFail($id);
+        $matricule = $transfert->matricule_vehicule;
+        $date = $transfert->date_transfert?->toDateString();
+        $nomSource = $transfert->nom_pont_source ?: 'provenance';
+        $nomDest = $transfert->nom_pont_destination ?: 'destination';
+
+        $entreesSupprimees = 0;
+
+        DB::transaction(function () use ($transfert, $matricule, $date, &$entreesSupprimees) {
+            // Crédit destination
+            if ($transfert->entree_stock_id) {
+                $entreesSupprimees += EntreeStock::query()
+                    ->where('id', (int) $transfert->entree_stock_id)
+                    ->delete();
+            }
+
+            // Débit provenance (entrée négative liée au transfert)
+            if ($transfert->stock_source_id && $date) {
+                $debitQuery = EntreeStock::query()
+                    ->where('stock_id', (int) $transfert->stock_source_id)
+                    ->whereDate('date_entree', $date)
+                    ->where('quantite', -1 * abs((float) $transfert->poids_depart))
+                    ->where('commentaire', 'like', 'Débit transfert pont%')
+                    ->orderByDesc('id');
+
+                if ($matricule !== '') {
+                    $debitQuery->where('commentaire', 'like', '%' . $matricule . '%');
+                }
+
+                $debit = $debitQuery->first();
+                if ($debit) {
+                    $debit->delete();
+                    $entreesSupprimees++;
+                }
+            }
+
+            $transfert->delete();
+        });
+
+        return redirect()
+            ->route('transferts_ponts.index')
+            ->with(
+                'success',
+                sprintf(
+                    'Transfert %s (%s → %s) supprimé — %d mouvement(s) de stock annulé(s).',
+                    $matricule,
+                    $nomSource,
+                    $nomDest,
+                    $entreesSupprimees
+                )
+            );
+    }
+
     public function stocksPontProduit(Request $request)
     {
         $validated = $request->validate([

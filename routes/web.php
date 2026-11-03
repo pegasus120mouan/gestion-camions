@@ -227,6 +227,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/sorties-groupees/fiche/{ficheId}', [\App\Http\Controllers\SortiesGroupeesController::class, 'show'])->name('sorties_groupees.show');
     Route::post('/sorties-groupees/fiche/{ficheId}/transfert-pont', [\App\Http\Controllers\SortiesGroupeesController::class, 'transfererVersPont'])->name('sorties_groupees.transfert_pont');
     Route::post('/sorties-groupees/fiche/{ficheId}/cloture-usine', [\App\Http\Controllers\SortiesGroupeesController::class, 'cloturerUsine'])->name('sorties_groupees.cloture_usine');
+    Route::delete('/sorties-groupees/fiche/{ficheId}', [\App\Http\Controllers\SortiesGroupeesController::class, 'destroy'])->name('sorties_groupees.destroy');
     Route::get('/api/sorties-groupees/stocks-pont-produit', [\App\Http\Controllers\SortiesGroupeesController::class, 'stocksPontProduit'])->name('sorties_groupees.stocks_pont_produit');
     Route::get('/sorties-groupees/{vehicule_id}/depenses', [DepenseController::class, 'indexSortiesGroupees'])->name('sorties_groupees.depenses');
     Route::post('/sorties-groupees/{vehicule_id}/depenses', [DepenseController::class, 'store'])->name('sorties_groupees.depenses.store');
@@ -512,6 +513,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/transferts-ponts', [\App\Http\Controllers\TransfertPontController::class, 'index'])->name('transferts_ponts.index');
     Route::post('/transferts-ponts', [\App\Http\Controllers\TransfertPontController::class, 'store'])->name('transferts_ponts.store');
+    Route::delete('/transferts-ponts/{id}', [\App\Http\Controllers\TransfertPontController::class, 'destroy'])->name('transferts_ponts.destroy');
     Route::get('/api/transferts-ponts/stocks-pont-produit', [\App\Http\Controllers\TransfertPontController::class, 'stocksPontProduit'])->name('transferts_ponts.stocks_pont_produit');
 
     // Gestion financière des transferts
