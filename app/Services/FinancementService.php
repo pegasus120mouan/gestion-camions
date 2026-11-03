@@ -268,6 +268,12 @@ class FinancementService
             throw new \RuntimeException('Table financement indisponible.');
         }
 
+        if (! $this->agentExistePourFinancement($connection, $agentId)) {
+            throw new \RuntimeException(
+                "Impossible d'enregistrer le financement : l'agent #{$agentId} n'existe pas dans Unipalm (agents)."
+            );
+        }
+
         return DB::connection($connection)->transaction(function () use ($connection, $agentId, $montant, $motif, $dateFinancement) {
             Financement::on($connection)
                 ->orderByDesc('Numero_financement')
@@ -357,9 +363,15 @@ class FinancementService
             return null;
         }
 
+        $agentId = (int) $paiement->id_agent;
+        if ($agentId <= 0 || ! $this->agentExistePourFinancement($connection, $agentId)) {
+            // Avance locale liée à un agent absent d'Unipalm : on ignore (évite FK 1452).
+            return null;
+        }
+
         $ref = $this->referenceAvancePaiement($paiementId);
         $exists = Financement::on($connection)
-            ->where('id_agent', (int) $paiement->id_agent)
+            ->where('id_agent', $agentId)
             ->where('motif', 'like', '%' . $ref . '%')
             ->exists();
 
@@ -377,12 +389,16 @@ class FinancementService
         }
         $motifParts[] = $ref;
 
-        return $this->createAt(
-            (int) $paiement->id_agent,
-            (float) $paiement->montant,
-            implode(' — ', $motifParts),
-            $paiement->date_paiement ?? now(),
-        );
+        try {
+            return $this->createAt(
+                $agentId,
+                (float) $paiement->montant,
+                implode(' — ', $motifParts),
+                $paiement->date_paiement ?? now(),
+            );
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**
@@ -403,8 +419,12 @@ class FinancementService
             ->get();
 
         foreach ($paiements as $paiement) {
-            if ($this->enregistrerFinancementDepuisAvance($paiement) !== null) {
-                $count++;
+            try {
+                if ($this->enregistrerFinancementDepuisAvance($paiement) !== null) {
+                    $count++;
+                }
+            } catch (\Throwable) {
+                // Un agent manquant / FK ne doit pas bloquer toute la page.
             }
         }
 
@@ -623,6 +643,30 @@ class FinancementService
         try {
             return Schema::connection($connection)->hasTable('financement');
         } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    /**
+     * La FK fk_financement_agent exige que id_agent existe dans agents (même base Unipalm).
+     */
+    private function agentExistePourFinancement(string $connection, int $agentId): bool
+    {
+        if ($agentId <= 0) {
+            return false;
+        }
+
+        try {
+            if (! Schema::connection($connection)->hasTable('agents')) {
+                // Pas de table agents sur cette connexion : on laisse MySQL décider.
+                return true;
+            }
+
+            return DB::connection($connection)
+                ->table('agents')
+                ->where('id_agent', $agentId)
+                ->exists();
+        } catch (\Throwable) {
             return false;
         }
     }

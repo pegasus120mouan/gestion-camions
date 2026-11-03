@@ -138,24 +138,29 @@
 
             <!-- Layouts -->
             @peut('flotte.voir', 'flotte.gerer')
-            <li class="menu-item">
+            <li class="menu-item {{ request()->routeIs('camions.index', 'camions.show', 'vehicules.depenses*', 'sorties_groupees.*', 'depenses.liste', 'fiches_sortie.*') ? 'active open' : '' }}">
               <a href="javascript:void(0);" class="menu-link menu-toggle">
                 <i class="menu-icon tf-icons bx bx-layout" style="color: #7367f0;"></i>
                 <div class="text-truncate" data-i18n="Layouts">Gestion Flotte PGF</div>
               </a>
 
               <ul class="menu-sub">
-                <li class="menu-item">
+                <li class="menu-item {{ request()->routeIs('camions.index', 'vehicules.depenses*') ? 'active' : '' }}">
                   <a href="{{ route('camions.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Without menu">Depenses & Fiche de Sortie</div>
                   </a>
                 </li>
-                <li class="menu-item">
+                <li class="menu-item {{ request()->routeIs('sorties_groupees.index', 'sorties_groupees.show', 'sorties_groupees.creer', 'sorties_groupees.depenses*') ? 'active' : '' }}">
+                  <a href="{{ route('sorties_groupees.index') }}" class="menu-link">
+                    <div class="text-truncate" data-i18n="Without menu">Fiches de sorties Groupés</div>
+                  </a>
+                </li>
+                <li class="menu-item {{ request()->routeIs('depenses.liste') ? 'active' : '' }}">
                   <a href="{{ route('depenses.liste') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Without menu">Historique des Dépenses</div>
                   </a>
                 </li>
-                <li class="menu-item">
+                <li class="menu-item {{ request()->routeIs('fiches_sortie.*') ? 'active' : '' }}">
                   <a href="{{ route('fiches_sortie.index') }}" class="menu-link">
                     <div class="text-truncate" data-i18n="Without menu">Historique des Sorties</div>
                   </a>

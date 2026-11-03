@@ -214,16 +214,17 @@ class MesAgentsService
                         ce.prenoms AS chef_prenoms,
                         ce.token AS chef_token
                     FROM agents a
-                    INNER JOIN chef_equipe ce ON ce.id_chef = a.id_chef
+                    LEFT JOIN chef_equipe ce ON ce.id_chef = a.id_chef
                     WHERE a.id_agent = ?
-                      AND a.date_suppression IS NULL
+                      AND (a.date_suppression IS NULL OR a.date_suppression = \'0000-00-00\' OR a.date_suppression = \'0000-00-00 00:00:00\')
                     LIMIT 1',
                     [$idAgent]
                 );
 
-                $agent = $row ? $this->normalizeAgentRow((array) $row) : null;
-
-                return $this->cachedAgentsById[$idAgent] = $agent;
+                if ($row) {
+                    return $this->cachedAgentsById[$idAgent] = $this->normalizeAgentRow((array) $row);
+                }
+                // Absent en DB locale → retomber sur l’API (liste Montant Agent peut venir de l’API).
             } catch (\Throwable $e) {
                 // Fallback API ci-dessous.
             }

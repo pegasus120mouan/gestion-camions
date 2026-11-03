@@ -166,6 +166,27 @@ class DepenseController extends Controller
     /**
      * @return array<int, list<array{id: int, label: string, code: string, nom: string, gerable: bool}>>
      */
+    /**
+     * Carte agent → ponts (réutilisable hors fiches classiques).
+     *
+     * @param  list<array<string, mixed>>  $ponts
+     * @param  list<array<string, mixed>>  $agents
+     * @return array<int, list<array{id: int, label: string, code: string, nom: string, gerable: bool}>>
+     */
+    public function agentsPontsMapPour(array $ponts, array $agents): array
+    {
+        return $this->buildAgentsPontsMap($ponts, $agents);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $ponts
+     * @return list<array<string, mixed>>
+     */
+    public function annoterPontsGerablePublic(array $ponts): array
+    {
+        return $this->annoterPontsGerable($ponts);
+    }
+
     private function buildAgentsPontsMap(array $ponts, array $agents): array
     {
         $ponts = $this->enrichirPontsAvecAgents($ponts);
@@ -300,20 +321,8 @@ class DepenseController extends Controller
 
     private function calculerStockDisponible(Stock $stock, ?int $excludeFicheId = null): float
     {
-        $entrees = (float) $stock->total_entrees;
-
-        $query = FicheSortie::query()
-            ->where('stock_id', $stock->id)
-            ->whereNotNull('date_dechargement')
-            ->whereNotNull('poids_pont');
-
-        if ($excludeFicheId) {
-            $query->where('id', '!=', $excludeFicheId);
-        }
-
-        $sorties = (float) $query->sum('poids_pont');
-
-        return max(0, $entrees - $sorties);
+        return app(\App\Services\TransfertGroupeService::class)
+            ->calculerStockDisponible($stock, $excludeFicheId);
     }
 
     private function resoudreStockPourDechargement(FicheSortie $fiche, int $parcId): ?Stock
@@ -475,18 +484,22 @@ class DepenseController extends Controller
             ]);
         }
 
+        $disponible = $this->calculerStockDisponible($stock);
+
         return response()->json([
             'valid' => true,
             'gerable' => true,
             'message' => sprintf(
-                'Stock actif — Parc %s (%s)',
+                'Stock actif — Parc %s (%s) — disponible %s kg',
                 $stock->nom_parc ?? '-',
-                $stock->nom_produit ?? '-'
+                $stock->nom_produit ?? '-',
+                number_format($disponible, 0, ',', ' ')
             ),
             'stock_id' => $stock->id,
             'parc_id' => $stock->parc_id,
             'nom_parc' => $stock->nom_parc,
             'nom_produit' => $stock->nom_produit,
+            'disponible' => $disponible,
         ]);
     }
 
@@ -866,6 +879,16 @@ class DepenseController extends Controller
 
     public function index(Request $request, int $vehiculeId)
     {
+        return $this->renderDepensesIndex($request, $vehiculeId, sortiesGroupees: false);
+    }
+
+    public function indexSortiesGroupees(Request $request, int $vehiculeId)
+    {
+        return $this->renderDepensesIndex($request, $vehiculeId, sortiesGroupees: true);
+    }
+
+    private function renderDepensesIndex(Request $request, int $vehiculeId, bool $sortiesGroupees = false)
+    {
         $matricule = (string) $request->query('matricule', '');
         $etatVehicule = CamionEtat::query()
             ->where('vehicule_id', $vehiculeId)
@@ -919,7 +942,9 @@ class DepenseController extends Controller
 
         // Charger les produits
         $produits = \App\Models\Produit::orderBy('nom')->get();
-        $usinesParProduit = app(UsinesParProduitService::class)->usinesParProduitPourSelect();
+        $usinesParProduit = $sortiesGroupees
+            ? []
+            : app(UsinesParProduitService::class)->usinesParProduitPourSelect();
 
         return view('depenses.index', [
             'depenses' => $depenses,
@@ -938,7 +963,176 @@ class DepenseController extends Controller
             'produits' => $produits,
             'vehicule_en_panne' => $vehiculeEnPanne,
             'vehicule_en_cours' => $vehiculeEnCours,
+            'sortiesGroupees' => $sortiesGroupees,
             'external_error' => null,
+        ]);
+    }
+
+    public function storeFicheSortieGroupee(Request $request, int $vehiculeId)
+    {
+        $etatVehicule = CamionEtat::query()
+            ->where('vehicule_id', $vehiculeId)
+            ->value('etat');
+        if (in_array($etatVehicule, ['en_panne', 'inactif'], true)) {
+            return response()->json([
+                'success' => false,
+                'message' => "Ce camion est en panne. Impossible de créer une fiche de sortie.",
+            ], 422);
+        }
+
+        if ($this->vehiculeEstEnCoursUtilisation($vehiculeId)) {
+            return response()->json([
+                'success' => false,
+                'message' => "Ce camion est en cours d'utilisation. Impossible de créer une fiche de sortie.",
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'id_pont' => ['required', 'integer'],
+            'id_agent' => ['required', 'integer'],
+            'date_chargement' => ['required', 'date'],
+            'poids_pont' => ['required', 'numeric', 'min:0.01'],
+            'produit_id' => ['required', 'integer', 'exists:produits,id'],
+            'id_chef_chargeur' => ['nullable', 'integer'],
+            'carburant' => ['nullable', 'integer', 'min:0'],
+            'frais_route' => ['nullable', 'integer', 'min:0'],
+            'pont_display' => ['nullable', 'string'],
+            'agent_display' => ['nullable', 'string'],
+            'matricule_vehicule' => ['required', 'string', 'max:50'],
+            'stock_id' => ['nullable', 'integer', 'exists:stocks,id'],
+            'parc_id' => ['nullable', 'integer', 'exists:parcs,id'],
+        ]);
+
+        $poids = (float) $validated['poids_pont'];
+        $pontGerable = $this->pontEstGerable((int) $validated['id_pont']);
+        $stockActif = null;
+        $transfertGroupe = app(\App\Services\TransfertGroupeService::class);
+
+        if ($pontGerable) {
+            if (! empty($validated['stock_id'])) {
+                $stockActif = Stock::query()->find((int) $validated['stock_id']);
+            } elseif (! empty($validated['parc_id'])) {
+                $stockActif = $transfertGroupe->resoudreStockParc(
+                    (int) $validated['parc_id'],
+                    (int) $validated['produit_id']
+                );
+            } else {
+                $stockActif = $this->trouverStockActifPourPontEtProduit(
+                    (int) $validated['id_pont'],
+                    (int) $validated['produit_id']
+                );
+            }
+
+            if (! $stockActif
+                || (int) $stockActif->id_pont !== (int) $validated['id_pont']
+                || (int) $stockActif->produit_id !== (int) $validated['produit_id']
+                || ! $stockActif->accepteEntrees()
+            ) {
+                $message = $this->messageStockIndisponiblePourFiche(
+                    (int) $validated['id_pont'],
+                    (int) $validated['produit_id']
+                );
+                return response()->json(['success' => false, 'message' => $message], 422);
+            }
+
+            $dispo = $transfertGroupe->calculerStockDisponible($stockActif);
+            if ($poids > $dispo + 0.0001) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Stock insuffisant sur le parc sélectionné (disponible : '
+                        . number_format($dispo, 0, ',', ' ') . ' kg).',
+                ], 422);
+            }
+        }
+
+        $matricule = $validated['matricule_vehicule'];
+        $pontDisplay = $validated['pont_display'] ?? '';
+        $agentDisplay = $validated['agent_display'] ?? '';
+
+        $nomPont = '';
+        $codePont = '';
+        if (preg_match('/^(.+)\s+\(([^)]+)\)$/', $pontDisplay, $matches)) {
+            $nomPont = trim($matches[1]);
+            $codePont = trim($matches[2]);
+        }
+        if ($nomPont === '') {
+            $nomPont = PontEtat::query()
+                ->where('id_pont', (int) $validated['id_pont'])
+                ->value('nom_pont') ?? '';
+        }
+
+        $nomAgent = '';
+        $numeroAgent = '';
+        if (preg_match('/^(.+)\s+\(([^)]+)\)$/', $agentDisplay, $matches)) {
+            $nomAgent = trim($matches[1]);
+            $numeroAgent = trim($matches[2]);
+        }
+
+        $produit = \App\Models\Produit::find((int) $validated['produit_id']);
+        $nomProduit = $produit?->nom ?? $stockActif?->nom_produit;
+        $numeroFiche = app(FicheSortieNumeroService::class)->generer($nomPont, (int) $validated['id_pont']);
+
+        try {
+            $ficheSortie = \Illuminate\Support\Facades\DB::transaction(function () use (
+                $numeroFiche,
+                $vehiculeId,
+                $matricule,
+                $stockActif,
+                $validated,
+                $nomPont,
+                $codePont,
+                $nomProduit,
+                $nomAgent,
+                $numeroAgent,
+                $poids,
+                $transfertGroupe
+            ) {
+                $fiche = FicheSortie::create([
+                    'numero_fiche' => $numeroFiche,
+                    'type_fiche' => FicheSortie::TYPE_GROUPEE,
+                    'statut_groupe' => FicheSortie::STATUT_GROUPE_EN_COURS,
+                    'localisation_type' => FicheSortie::LOCALISATION_TRANSIT,
+                    'localisation_parc_id' => null,
+                    'localisation_stock_id' => null,
+                    'vehicule_id' => $vehiculeId,
+                    'matricule_vehicule' => $matricule,
+                    'stock_id' => $stockActif?->id,
+                    'parc_id' => $stockActif?->parc_id,
+                    'nom_parc' => $stockActif?->nom_parc,
+                    'id_pont' => $validated['id_pont'],
+                    'nom_pont' => $nomPont,
+                    'code_pont' => $codePont,
+                    'usine' => null,
+                    'produit_id' => $validated['produit_id'],
+                    'nom_produit' => $nomProduit,
+                    'id_agent' => $validated['id_agent'],
+                    'nom_agent' => $nomAgent,
+                    'numero_agent' => $numeroAgent,
+                    'id_chef_chargeur' => $validated['id_chef_chargeur'] ?? null,
+                    'date_chargement' => $validated['date_chargement'],
+                    'poids_pont' => $poids,
+                    'carburant' => $validated['carburant'] ?? null,
+                    'frais_route' => $validated['frais_route'] ?? null,
+                ]);
+
+                $transfertGroupe->enregistrerChargement($fiche, [
+                    'id_agent' => (int) $validated['id_agent'],
+                    'nom_agent' => $nomAgent,
+                    'numero_agent' => $numeroAgent,
+                ], $stockActif, $poids);
+
+                return $fiche;
+            });
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Fiche de sortie groupée créée avec succès.',
+            'fiche_id' => $ficheSortie->id,
+            'numero_fiche' => $numeroFiche,
+            'redirect_url' => route('sorties_groupees.show', $ficheSortie->id),
         ]);
     }
 

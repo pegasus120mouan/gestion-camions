@@ -565,12 +565,8 @@
             }
             $stockDispoFiche = 0;
             if ($stockFiche) {
-              $sortiesStock = \App\Models\FicheSortie::where('stock_id', $stockFiche->id)
-                ->whereNotNull('date_dechargement')
-                ->whereNotNull('poids_pont')
-                ->when($f->date_dechargement, fn($q) => $q->where('id', '!=', $f->id))
-                ->sum('poids_pont');
-              $stockDispoFiche = max(0, (float) $stockFiche->total_entrees - (float) $sortiesStock);
+              $stockDispoFiche = app(\App\Services\TransfertGroupeService::class)
+                ->calculerStockDisponible($stockFiche, $f->id);
             }
           @endphp
           <div class="mb-3">

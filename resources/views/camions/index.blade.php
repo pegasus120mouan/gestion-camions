@@ -1,12 +1,31 @@
 @extends('layout.main')
 @section('content')
+@php
+  $sortiesGroupees = !empty($sortiesGroupees);
+  $listeRoute = $sortiesGroupees ? 'sorties_groupees.creer' : 'camions.index';
+  $detailRoute = $sortiesGroupees ? 'sorties_groupees.depenses' : 'vehicules.depenses';
+@endphp
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <h4 class="mb-0">Camions</h4>
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+      <div>
+        <h4 class="mb-0">{{ $sortiesGroupees ? 'Nouvelle fiche groupée' : 'Camions' }}</h4>
+        @if($sortiesGroupees)
+          <small class="text-muted">Choisissez un camion pour créer une fiche de sortie groupée</small>
+        @endif
+      </div>
+      @if($sortiesGroupees)
+        <a href="{{ route('sorties_groupees.index') }}" class="btn btn-outline-primary">
+          <i class="bx bx-list-ul me-1"></i>Voir les fiches
+        </a>
+      @endif
     </div>
 
-    <form method="GET" action="{{ route('camions.index') }}" class="mb-3">
+    @if($sortiesGroupees)
+      @include('sorties_groupees._onglets', ['onglet' => 'creer'])
+    @endif
+
+    <form method="GET" action="{{ route($listeRoute) }}" class="mb-3">
       <div class="row g-2 align-items-end" style="max-width: 720px;">
         <div class="col-md-6">
           <label class="form-label mb-1">Recherche</label>
@@ -27,7 +46,7 @@
         <div class="col-md-2 d-flex gap-2">
           <button type="submit" class="btn btn-primary w-100">Rechercher</button>
           @if(request('q') || request('etat'))
-            <a href="{{ route('camions.index') }}" class="btn btn-outline-secondary w-100">Effacer</a>
+            <a href="{{ route($listeRoute) }}" class="btn btn-outline-secondary w-100">Effacer</a>
           @endif
         </div>
       </div>
@@ -72,7 +91,7 @@
                     @if($estEnPanne)
                       <span class="text-muted">{{ $v['matricule_vehicule'] ?? '' }}</span>
                     @else
-                      <a href="{{ route('vehicules.depenses', ['vehicule_id' => $v['vehicules_id'] ?? 0, 'matricule' => $v['matricule_vehicule'] ?? '']) }}">
+                      <a href="{{ route($detailRoute, ['vehicule_id' => $v['vehicules_id'] ?? 0, 'matricule' => $v['matricule_vehicule'] ?? '']) }}">
                         {{ $v['matricule_vehicule'] ?? '' }}
                       </a>
                     @endif
@@ -132,7 +151,7 @@
                           <i class="bx bx-show"></i> Détails
                         </button>
                       @else
-                        <a class="btn btn-sm btn-outline-primary" href="{{ route('vehicules.depenses', ['vehicule_id' => $v['vehicules_id'] ?? 0, 'matricule' => $v['matricule_vehicule'] ?? '']) }}">
+                        <a class="btn btn-sm btn-outline-primary" href="{{ route($detailRoute, ['vehicule_id' => $v['vehicules_id'] ?? 0, 'matricule' => $v['matricule_vehicule'] ?? '']) }}">
                           <i class="bx bx-show"></i> Détails
                         </a>
                       @endif
@@ -160,7 +179,7 @@
       @if($lastPage > 1)
         <div class="d-flex justify-content-center align-items-center mt-4 p-3 bg-white rounded shadow-sm">
           <nav class="d-flex align-items-center gap-2">
-            <a href="{{ route('camions.index', array_merge(request()->query(), ['page' => max(1, $page - 1)])) }}" 
+            <a href="{{ route($listeRoute, array_merge(request()->query(), ['page' => max(1, $page - 1)])) }}" 
                class="btn btn-sm btn-outline-secondary {{ $page <= 1 ? 'disabled' : '' }}">
               <i class="bx bx-chevron-left"></i>
             </a>
@@ -172,7 +191,7 @@
                 @php $displayPage = $lastPage; @endphp
               @endif
               @if($lastPage <= 5 || $i <= 3 || $i == 5)
-                <a href="{{ route('camions.index', array_merge(request()->query(), ['page' => $displayPage])) }}" 
+                <a href="{{ route($listeRoute, array_merge(request()->query(), ['page' => $displayPage])) }}" 
                    class="btn btn-sm {{ $page == $displayPage ? 'btn-primary rounded-circle' : 'btn-outline-secondary' }}" 
                    style="{{ $page == $displayPage ? 'width: 36px; height: 36px;' : '' }}">
                   {{ $displayPage }}
@@ -183,13 +202,13 @@
               @endif
             @endfor
             
-            <a href="{{ route('camions.index', array_merge(request()->query(), ['page' => min($lastPage, $page + 1)])) }}" 
+            <a href="{{ route($listeRoute, array_merge(request()->query(), ['page' => min($lastPage, $page + 1)])) }}" 
                class="btn btn-sm btn-outline-secondary {{ $page >= $lastPage ? 'disabled' : '' }}">
               <i class="bx bx-chevron-right"></i>
             </a>
             
             <span class="ms-3 text-muted">Go to</span>
-            <form action="{{ route('camions.index') }}" method="GET" class="d-inline">
+            <form action="{{ route($listeRoute) }}" method="GET" class="d-inline">
               @foreach(request()->query() as $key => $value)
                 @if($key !== 'page')
                   <input type="hidden" name="{{ $key }}" value="{{ $value }}">

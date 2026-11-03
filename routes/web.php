@@ -222,6 +222,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/utilisateurs/chauffeurs', [UtilisateurController::class, 'chauffeurs'])->name('utilisateurs.chauffeurs');
 
     Route::resource('camions', CamionController::class)->except(['create']);
+    Route::get('/sorties-groupees', [\App\Http\Controllers\SortiesGroupeesController::class, 'index'])->name('sorties_groupees.index');
+    Route::get('/sorties-groupees/creer', [CamionController::class, 'indexSortiesGroupees'])->name('sorties_groupees.creer');
+    Route::get('/sorties-groupees/fiche/{ficheId}', [\App\Http\Controllers\SortiesGroupeesController::class, 'show'])->name('sorties_groupees.show');
+    Route::post('/sorties-groupees/fiche/{ficheId}/transfert-pont', [\App\Http\Controllers\SortiesGroupeesController::class, 'transfererVersPont'])->name('sorties_groupees.transfert_pont');
+    Route::post('/sorties-groupees/fiche/{ficheId}/cloture-usine', [\App\Http\Controllers\SortiesGroupeesController::class, 'cloturerUsine'])->name('sorties_groupees.cloture_usine');
+    Route::get('/api/sorties-groupees/stocks-pont-produit', [\App\Http\Controllers\SortiesGroupeesController::class, 'stocksPontProduit'])->name('sorties_groupees.stocks_pont_produit');
+    Route::get('/sorties-groupees/{vehicule_id}/depenses', [DepenseController::class, 'indexSortiesGroupees'])->name('sorties_groupees.depenses');
+    Route::post('/sorties-groupees/{vehicule_id}/depenses', [DepenseController::class, 'store'])->name('sorties_groupees.depenses.store');
+    Route::post('/sorties-groupees/{vehicule_id}/fiche-sortie', [DepenseController::class, 'storeFicheSortieGroupee'])->name('sorties_groupees.fiche_sortie.store');
     Route::post('/vehicules/{vehicule_id}/etat', [CamionController::class, 'updateVehiculeEtat'])->name('vehicules.etat.update');
     Route::get('/camions-pgf', [CamionController::class, 'camionsPgf'])->name('camions.camions_pgf');
     Route::get('/camions-pgf/ajouter', [CamionController::class, 'ajouterCamionsPgf'])->name('camions.camions_pgf.ajouter');

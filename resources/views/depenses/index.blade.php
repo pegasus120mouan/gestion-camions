@@ -1,7 +1,16 @@
 @extends('layout.main')
 @section('content')
+@php
+  $sortiesGroupees = !empty($sortiesGroupees);
+  $listeCamionsRoute = $sortiesGroupees ? 'sorties_groupees.creer' : 'camions.index';
+  $depensesStoreRoute = $sortiesGroupees ? 'sorties_groupees.depenses.store' : 'vehicules.depenses.store';
+  $ficheStoreRoute = $sortiesGroupees ? 'sorties_groupees.fiche_sortie.store' : 'vehicules.fiche_sortie.store';
+@endphp
 <div class="content-wrapper">
   <div class="container-xxl flex-grow-1 container-p-y">
+    @if($sortiesGroupees)
+      @include('sorties_groupees._onglets', ['onglet' => 'creer'])
+    @endif
     <div class="d-flex justify-content-between align-items-center mb-4">
       <div>
         <h4 class="mb-0">Depenses du vehicule</h4>
@@ -120,8 +129,11 @@
       </div>
     @endif
 
-    <div class="mt-3">
-      <a href="{{ route('camions.index') }}" class="btn btn-outline-secondary">Retour aux camions</a>
+    <div class="mt-3 d-flex gap-2 flex-wrap">
+      <a href="{{ route($listeCamionsRoute) }}" class="btn btn-outline-secondary">Retour aux camions</a>
+      @if($sortiesGroupees)
+        <a href="{{ route('sorties_groupees.index') }}" class="btn btn-outline-primary">Liste des fiches groupées</a>
+      @endif
     </div>
   </div>
 </div>
@@ -136,7 +148,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <form method="POST" action="{{ route('vehicules.fiche_sortie.store', ['vehicule_id' => $vehicule_id]) }}" id="formFicheSortie">
+        <form method="POST" action="{{ route($ficheStoreRoute, ['vehicule_id' => $vehicule_id]) }}" id="formFicheSortie">
           @csrf
           <input type="hidden" name="id_pont" id="id_pont_hidden" />
           <input type="hidden" name="id_agent" id="id_agent_hidden" />
@@ -190,12 +202,31 @@
             <div id="stock_pont_produit_alert" class="mt-2" style="display: none;"></div>
           </div>
 
+          @unless($sortiesGroupees)
           <div class="mb-3">
             <label class="form-label">Usine</label>
             <select name="usine" id="usine_select" class="form-select" disabled>
               <option value="">-- Sélectionner d'abord un produit --</option>
             </select>
           </div>
+          @endunless
+
+          @if($sortiesGroupees)
+          <div class="mb-3 d-none" id="parc_groupe_section">
+            <label class="form-label">Parc source <span class="text-danger">*</span></label>
+            <select name="stock_id" id="stock_groupe_select" class="form-select">
+              <option value="">-- Sélectionner un parc --</option>
+            </select>
+            <input type="hidden" name="parc_id" id="parc_groupe_hidden" value="">
+            <small class="text-muted" id="parc_groupe_hint">Le poids saisi sera déduit du parc choisi.</small>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Poids (kg) <span class="text-danger">*</span></label>
+            <input type="number" name="poids_pont" id="poids_pont_groupe" class="form-control" min="0.01" step="0.01" required placeholder="Ex: 25000" />
+            <small class="text-muted" id="poids_groupe_hint">Ne peut pas dépasser le stock disponible du parc source.</small>
+            <div class="text-danger small mt-1 d-none" id="poids_groupe_error"></div>
+          </div>
+          @endif
 
           <div class="mb-3">
             <label class="form-label">Chef des chargeurs</label>
@@ -252,26 +283,194 @@ document.addEventListener('DOMContentLoaded', function() {
   var produitSelect = document.getElementById('produit_select');
   var usineSelect = document.getElementById('usine_select');
   var usinesParProduit = {!! json_encode($usinesParProduit ?? []) !!};
+  var sortiesGroupees = {{ $sortiesGroupees ? 'true' : 'false' }};
   var nomProduitHidden = document.getElementById('nom_produit_hidden');
   var stockAlert = document.getElementById('stock_pont_produit_alert');
   var stockPontProduitValide = false;
   var btnEnregistrerFiche = document.getElementById('btnEnregistrerFiche');
   var verifierStockUrl = '{{ route('api.verifier_stock_pont_produit') }}';
+  var stocksPontProduitUrl = @json(route('sorties_groupees.stocks_pont_produit'));
+  var parcGroupeSection = document.getElementById('parc_groupe_section');
+  var stockGroupeSelect = document.getElementById('stock_groupe_select');
+  var parcGroupeHidden = document.getElementById('parc_groupe_hidden');
+  var parcGroupeHint = document.getElementById('parc_groupe_hint');
+  var poidsGroupeInput = document.getElementById('poids_pont_groupe');
+  var poidsGroupeHint = document.getElementById('poids_groupe_hint');
+  var poidsGroupeError = document.getElementById('poids_groupe_error');
+  var poidsDisponibleParc = null;
+
+  function formatKg(n) {
+    return new Intl.NumberFormat('fr-FR').format(Math.round(n || 0));
+  }
+
+  function getPoidsDisponibleSelectionne() {
+    if (!stockGroupeSelect || !stockGroupeSelect.value) {
+      return poidsDisponibleParc;
+    }
+    var opt = stockGroupeSelect.options[stockGroupeSelect.selectedIndex];
+    if (!opt) return poidsDisponibleParc;
+    var dispo = parseFloat(opt.dataset.disponible || '');
+    return isNaN(dispo) ? poidsDisponibleParc : dispo;
+  }
+
+  function validerPoidsContreParc() {
+    if (!sortiesGroupees || !poidsGroupeInput) {
+      return true;
+    }
+    var poids = parseFloat(poidsGroupeInput.value || '');
+    var dispo = getPoidsDisponibleSelectionne();
+    var idPont = idPontHidden ? idPontHidden.value : '';
+    var pontGerable = idPont && pontsGerableMap[idPont];
+
+    if (poidsGroupeError) {
+      poidsGroupeError.classList.add('d-none');
+      poidsGroupeError.textContent = '';
+    }
+    poidsGroupeInput.classList.remove('is-invalid');
+
+    if (!poids || poids <= 0) {
+      return false;
+    }
+    if (pontGerable && dispo !== null && !isNaN(dispo) && poids > dispo + 0.0001) {
+      if (poidsGroupeError) {
+        poidsGroupeError.textContent = 'Le poids ne peut pas dépasser le disponible du parc (' + formatKg(dispo) + ' kg).';
+        poidsGroupeError.classList.remove('d-none');
+      }
+      poidsGroupeInput.classList.add('is-invalid');
+      return false;
+    }
+    return true;
+  }
 
   function mettreAJourBoutonEnregistrer() {
     if (!btnEnregistrerFiche) return;
     var idPont = idPontHidden ? idPontHidden.value : '';
     var pontGerable = idPont && pontsGerableMap[idPont];
+    var poidsValide = validerPoidsContreParc();
+    var poidsOk = !sortiesGroupees || (poidsGroupeInput && parseFloat(poidsGroupeInput.value) > 0 && poidsValide);
+    var parcOk = !sortiesGroupees || !pontGerable || (stockGroupeSelect && stockGroupeSelect.value);
     var peutEnregistrer = stockPontProduitValide
       && idPont
       && produitSelect && produitSelect.value
-      && idAgentHidden && idAgentHidden.value;
+      && idAgentHidden && idAgentHidden.value
+      && poidsOk
+      && parcOk;
     btnEnregistrerFiche.disabled = !peutEnregistrer;
     btnEnregistrerFiche.title = peutEnregistrer
       ? ''
-      : (pontGerable
-        ? 'Aucun stock actif pour ce produit sur ce pont.'
-        : 'Sélectionnez un pont, un agent et un produit.');
+      : (sortiesGroupees && pontGerable && !parcOk
+        ? 'Sélectionnez un parc source avec stock suffisant.'
+        : (sortiesGroupees && !poidsValide
+          ? 'Le poids dépasse le stock disponible du parc.'
+          : (pontGerable
+            ? 'Aucun stock actif pour ce produit sur ce pont.'
+            : 'Sélectionnez un pont, un agent et un produit' + (sortiesGroupees ? ', et le poids.' : '.'))));
+  }
+
+  function appliquerDisponibleSurPoids(dispo, nomParc) {
+    poidsDisponibleParc = (dispo === null || dispo === undefined || isNaN(dispo)) ? null : dispo;
+    if (poidsGroupeInput) {
+      if (poidsDisponibleParc !== null) {
+        poidsGroupeInput.max = String(poidsDisponibleParc);
+      } else {
+        poidsGroupeInput.removeAttribute('max');
+      }
+    }
+    if (poidsGroupeHint) {
+      if (poidsDisponibleParc !== null) {
+        poidsGroupeHint.textContent = 'Maximum autorisé : ' + formatKg(poidsDisponibleParc) + ' kg'
+          + (nomParc ? ' (parc ' + nomParc + ')' : '') + '.';
+      } else {
+        poidsGroupeHint.textContent = 'Ne peut pas dépasser le stock disponible du parc source.';
+      }
+    }
+    validerPoidsContreParc();
+    mettreAJourBoutonEnregistrer();
+  }
+
+  function majAlerteStockDepuisParc() {
+    if (!sortiesGroupees || !stockAlert) return;
+    var opt = stockGroupeSelect && stockGroupeSelect.value
+      ? stockGroupeSelect.options[stockGroupeSelect.selectedIndex]
+      : null;
+    if (!opt || !opt.value) return;
+    var dispo = parseFloat(opt.dataset.disponible || '0');
+    var nomParc = opt.dataset.nomParc || (opt.textContent || '').split('—')[0].trim() || 'Parc';
+    afficherAlerteStock(
+      'Stock actif — Parc ' + nomParc + ' — disponible ' + formatKg(dispo) + ' kg',
+      'success'
+    );
+    appliquerDisponibleSurPoids(dispo, nomParc);
+  }
+
+  function chargerParcsGroupe() {
+    if (!sortiesGroupees || !parcGroupeSection) return;
+    var idPont = idPontHidden ? idPontHidden.value : '';
+    var produitId = produitSelect ? produitSelect.value : '';
+    var pontGerable = idPont && pontsGerableMap[idPont];
+
+    if (!pontGerable || !idPont || !produitId) {
+      parcGroupeSection.classList.add('d-none');
+      if (stockGroupeSelect) stockGroupeSelect.innerHTML = '<option value="">-- Sélectionner un parc --</option>';
+      if (parcGroupeHidden) parcGroupeHidden.value = '';
+      appliquerDisponibleSurPoids(null, null);
+      return;
+    }
+
+    parcGroupeSection.classList.remove('d-none');
+    stockGroupeSelect.innerHTML = '<option value="">Chargement…</option>';
+    var params = new URLSearchParams({ id_pont: idPont, produit_id: produitId });
+    fetch(stocksPontProduitUrl + '?' + params.toString(), {
+      headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+    })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        stockGroupeSelect.innerHTML = '<option value="">-- Sélectionner un parc --</option>';
+        (data.stocks || []).forEach(function(s) {
+          var opt = document.createElement('option');
+          opt.value = s.stock_id;
+          opt.dataset.parcId = s.parc_id || '';
+          opt.dataset.disponible = s.disponible;
+          opt.dataset.nomParc = s.nom_parc || 'Parc';
+          opt.textContent = (s.nom_parc || 'Parc') + ' — dispo ' + formatKg(s.disponible || 0) + ' kg';
+          stockGroupeSelect.appendChild(opt);
+        });
+        if (!(data.stocks || []).length) {
+          if (parcGroupeHint) parcGroupeHint.textContent = 'Aucun stock ouvert pour ce produit sur ce pont.';
+          appliquerDisponibleSurPoids(null, null);
+        } else {
+          if (parcGroupeHint) parcGroupeHint.textContent = 'Choisissez le parc, puis saisissez un poids ≤ au disponible.';
+          if (data.stocks.length === 1) {
+            stockGroupeSelect.value = String(data.stocks[0].stock_id);
+            if (parcGroupeHidden) parcGroupeHidden.value = data.stocks[0].parc_id || '';
+            majAlerteStockDepuisParc();
+          } else {
+            appliquerDisponibleSurPoids(null, null);
+          }
+        }
+        mettreAJourBoutonEnregistrer();
+      })
+      .catch(function() {
+        stockGroupeSelect.innerHTML = '<option value="">Erreur de chargement</option>';
+        mettreAJourBoutonEnregistrer();
+      });
+  }
+
+  if (stockGroupeSelect) {
+    stockGroupeSelect.addEventListener('change', function() {
+      var opt = this.options[this.selectedIndex];
+      if (parcGroupeHidden) {
+        parcGroupeHidden.value = opt && opt.dataset.parcId ? opt.dataset.parcId : '';
+      }
+      majAlerteStockDepuisParc();
+      mettreAJourBoutonEnregistrer();
+    });
+  }
+  if (poidsGroupeInput) {
+    poidsGroupeInput.addEventListener('input', function() {
+      validerPoidsContreParc();
+      mettreAJourBoutonEnregistrer();
+    });
   }
 
   function afficherAlerteStock(message, type) {
@@ -311,8 +510,17 @@ document.addEventListener('DOMContentLoaded', function() {
         stockPontProduitValide = !!data.valid;
         if (data.valid) {
           afficherAlerteStock(data.message, data.gerable === false ? 'info' : 'success');
+          if (sortiesGroupees && data.gerable !== false && typeof data.disponible !== 'undefined') {
+            // Plafond provisoire tant qu'aucun parc n'est choisi ; mis à jour au choix du parc.
+            if (!stockGroupeSelect || !stockGroupeSelect.value) {
+              appliquerDisponibleSurPoids(parseFloat(data.disponible), data.nom_parc || null);
+            }
+          }
         } else {
           afficherAlerteStock(data.message || 'Aucun stock actif pour ce produit sur ce pont.', 'warning');
+          if (sortiesGroupees) {
+            appliquerDisponibleSurPoids(null, null);
+          }
         }
         mettreAJourBoutonEnregistrer();
       })
@@ -351,6 +559,7 @@ document.addEventListener('DOMContentLoaded', function() {
     idPontHidden.value = String(pont.id);
     pontDisplayHidden.value = pont.label;
     verifierStockPontProduit();
+    chargerParcsGroupe();
   }
 
   function updatePontField(agentId) {
@@ -410,7 +619,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function remplirSelectUsines(produitId, valeurSelectionnee) {
-    if (!usineSelect) return;
+    if (!usineSelect || sortiesGroupees) return;
     var liste = usinesPourProduit(produitId);
     usineSelect.innerHTML = '<option value="">-- Sélectionner une usine --</option>';
     liste.forEach(function(u) {
@@ -439,10 +648,15 @@ document.addEventListener('DOMContentLoaded', function() {
       if (nomProduitHidden) {
         nomProduitHidden.value = opt && opt.dataset.nom ? opt.dataset.nom : '';
       }
-      remplirSelectUsines(this.value, '');
+      if (!sortiesGroupees) {
+        remplirSelectUsines(this.value, '');
+      }
       verifierStockPontProduit();
+      chargerParcsGroupe();
     });
-    remplirSelectUsines(produitSelect.value, '');
+    if (!sortiesGroupees) {
+      remplirSelectUsines(produitSelect.value, '');
+    }
   }
 
   // Autocomplétion pour les agents
@@ -536,6 +750,27 @@ document.addEventListener('DOMContentLoaded', function() {
         return false;
       }
 
+      if (sortiesGroupees) {
+        var idPontCheck = idPontHidden ? idPontHidden.value : '';
+        if (idPontCheck && pontsGerableMap[idPontCheck] && (!stockGroupeSelect || !stockGroupeSelect.value)) {
+          alert('Sélectionnez d\'abord le parc source.');
+          if (stockGroupeSelect) stockGroupeSelect.focus();
+          return false;
+        }
+        if (!poidsGroupeInput || !poidsGroupeInput.value || parseFloat(poidsGroupeInput.value) <= 0) {
+          alert('Indiquez le poids chargé (kg).');
+          if (poidsGroupeInput) poidsGroupeInput.focus();
+          return false;
+        }
+        if (!validerPoidsContreParc()) {
+          var dispoMax = getPoidsDisponibleSelectionne();
+          alert('Le poids ne peut pas dépasser le stock disponible du parc'
+            + (dispoMax !== null ? ' (' + formatKg(dispoMax) + ' kg).' : '.'));
+          if (poidsGroupeInput) poidsGroupeInput.focus();
+          return false;
+        }
+      }
+
       var formData = new FormData(formFicheSortie);
       var submitBtn = formFicheSortie.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
@@ -569,7 +804,10 @@ document.addEventListener('DOMContentLoaded', function() {
           
           // Rediriger après 2 secondes
           setTimeout(function() {
-            window.location.href = '{{ route("fiches_sortie.index") }}';
+            window.location.href = data.redirect_url
+              || (sortiesGroupees
+                ? ('{{ url('/sorties-groupees/fiche') }}/' + data.fiche_id)
+                : '{{ route("fiches_sortie.index") }}');
           }, 2000);
         } else {
           alert(data.message || 'Une erreur est survenue.');
@@ -616,7 +854,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <form method="POST" action="{{ route('vehicules.depenses.store', ['vehicule_id' => $vehicule['vehicules_id'] ?? 0]) }}">
+        <form method="POST" action="{{ route($depensesStoreRoute, ['vehicule_id' => $vehicule['vehicules_id'] ?? 0]) }}">
           @csrf
           <input type="hidden" name="matricule_vehicule" value="{{ $vehicule['matricule_vehicule'] ?? '' }}" />
 

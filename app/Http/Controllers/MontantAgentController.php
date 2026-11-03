@@ -757,18 +757,23 @@ class MontantAgentController extends Controller
         $validated = $request->validate([
             'date_debut' => ['required', 'date'],
             'date_fin' => ['required', 'date', 'after_or_equal:date_debut'],
+            'local' => ['nullable', 'boolean'],
         ]);
 
-        $fiches = $this->bordereauAgent->fichesEligibles(
+        $uniquementLocaux = $request->boolean('local');
+
+        $fiches = $this->bordereauAgent->lignesEligibles(
             $id_agent,
             $validated['date_debut'],
-            $validated['date_fin']
+            $validated['date_fin'],
+            $uniquementLocaux
         );
 
         return response()->json([
             'fiches' => $fiches,
             'total_montant' => (int) collect($fiches)->sum('montant'),
             'total_poids' => (float) collect($fiches)->sum('poids'),
+            'local' => $uniquementLocaux,
         ]);
     }
 
@@ -788,10 +793,12 @@ class MontantAgentController extends Controller
             'fiche_ids.*' => ['integer'],
             'ticket_ids' => ['required', 'array', 'min:1'],
             'ticket_ids.*' => ['integer'],
+            'local' => ['nullable', 'boolean'],
         ]);
 
+        $uniquementLocaux = $request->boolean('local');
         $ticketIds = $validated['ticket_ids'] ?? $validated['fiche_ids'] ?? [];
-        $lignesData = $this->bordereauAgent->construireLignesData($id_agent, $ticketIds);
+        $lignesData = $this->bordereauAgent->construireLignesData($id_agent, $ticketIds, $uniquementLocaux);
 
         if ($lignesData === []) {
             return back()->withErrors(['error' => 'Aucun ticket valide sélectionné (déjà bordereau ou introuvable).']);

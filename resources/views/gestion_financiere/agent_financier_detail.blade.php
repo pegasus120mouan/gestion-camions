@@ -122,9 +122,14 @@
             <h5 class="card-title mb-0" style="color: #842029;">
               <i class="bx bx-file me-2"></i>Gestion bordereaux
             </h5>
-            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#modalGenererBordereau">
-              <i class="bx bx-plus me-1"></i>Générer un bordereau
-            </button>
+            <div class="d-flex flex-wrap gap-2">
+              <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalGenererBordereau" data-bordereau-mode="local">
+                <i class="bx bx-plus me-1"></i>Générer un bordereau Local
+              </button>
+              <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#modalGenererBordereau" data-bordereau-mode="all">
+                <i class="bx bx-plus me-1"></i>Générer un bordereau
+              </button>
+            </div>
           </div>
           <div class="table-responsive gf-table-wrap">
             <table class="table table-sm table-bordered table-hover align-middle gf-table-financier mb-0">
@@ -549,20 +554,24 @@
 <div class="modal fade" id="modalGenererBordereau" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl">
     <div class="modal-content">
-      <div class="modal-header bg-danger text-white">
-        <h5 class="modal-title text-white"><i class="bx bx-file me-2"></i>Générer un bordereau</h5>
+      <div class="modal-header bg-danger text-white" id="modalGenererBordereauHeader">
+        <h5 class="modal-title text-white" id="modalGenererBordereauTitle"><i class="bx bx-file me-2"></i>Générer un bordereau</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <form method="POST" action="{{ route('gestionfinanciere.agent.bordereau.store', ['id_agent' => $idAgent]) }}" id="formGenererBordereau">
         @csrf
+        <input type="hidden" name="local" id="bordereau_local" value="0">
         <div class="modal-body">
-          <p class="text-muted small mb-3">
+          <p class="text-muted small mb-3" id="bordereauAideNumero">
             Un numéro de bordereau sera attribué automatiquement à la génération
             @if(!empty($exempleNumeroBordereau))
               (ex.&nbsp;: <strong>{{ $exempleNumeroBordereau }}</strong>).
             @else
               (ex.&nbsp;: <strong>BORD-XX1</strong>).
             @endif
+          </p>
+          <p class="text-muted small mb-3 d-none" id="bordereauAideLocal">
+            Bordereau limité aux <strong>tickets locaux</strong> validés (hors tickets Unipalm).
           </p>
           <div class="row g-3 align-items-end mb-3">
             <div class="col-md-4">
@@ -642,6 +651,14 @@
   var nbSel = document.getElementById('bordereauNbSelection');
   var montantSel = document.getElementById('bordereauMontantSelection');
   var checkAll = document.getElementById('checkAllFichesBordereau');
+  var inputLocal = document.getElementById('bordereau_local');
+  var modalHeader = document.getElementById('modalGenererBordereauHeader');
+  var modalTitle = document.getElementById('modalGenererBordereauTitle');
+  var aideNumero = document.getElementById('bordereauAideNumero');
+  var aideLocal = document.getElementById('bordereauAideLocal');
+  var aucuneMsgDefault = 'Aucun ticket validé disponible sur cette période (tickets déjà inclus dans un bordereau exclus).';
+  var aucuneMsgLocal = 'Aucun ticket local validé disponible sur cette période (tickets déjà inclus dans un bordereau exclus).';
+  var bordereauModeLocal = false;
 
   function formatNombre(n) {
     return new Intl.NumberFormat('fr-FR').format(n);
@@ -653,6 +670,38 @@
       return '';
     }
     return parseInt(digits, 10).toLocaleString('fr-FR').replace(/\u202F/g, ' ').replace(/,/g, ' ');
+  }
+
+  function appliquerModeBordereau(modeLocal) {
+    bordereauModeLocal = !!modeLocal;
+    if (inputLocal) {
+      inputLocal.value = bordereauModeLocal ? '1' : '0';
+    }
+    if (modalHeader) {
+      modalHeader.classList.toggle('bg-primary', bordereauModeLocal);
+      modalHeader.classList.toggle('bg-danger', !bordereauModeLocal);
+    }
+    if (modalTitle) {
+      modalTitle.innerHTML = bordereauModeLocal
+        ? '<i class="bx bx-file me-2"></i>Générer un bordereau Local'
+        : '<i class="bx bx-file me-2"></i>Générer un bordereau';
+    }
+    if (aideNumero) {
+      aideNumero.classList.toggle('d-none', bordereauModeLocal);
+    }
+    if (aideLocal) {
+      aideLocal.classList.toggle('d-none', !bordereauModeLocal);
+    }
+    if (aucuneBlock) {
+      aucuneBlock.textContent = bordereauModeLocal ? aucuneMsgLocal : aucuneMsgDefault;
+    }
+    if (btnSubmit) {
+      btnSubmit.classList.toggle('btn-primary', bordereauModeLocal);
+      btnSubmit.classList.toggle('btn-danger', !bordereauModeLocal);
+      btnSubmit.innerHTML = bordereauModeLocal
+        ? '<i class="bx bx-check me-1"></i>Générer le bordereau Local'
+        : '<i class="bx bx-check me-1"></i>Générer le bordereau';
+    }
   }
 
   function majTotauxSelection() {
@@ -709,6 +758,9 @@
     btnSubmit.disabled = true;
 
     var params = new URLSearchParams({ date_debut: debut, date_fin: fin });
+    if (bordereauModeLocal) {
+      params.set('local', '1');
+    }
     fetch(urlFiches + '?' + params.toString(), {
       headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
     })
@@ -753,12 +805,19 @@
     }
   });
 
+  document.getElementById('modalGenererBordereau').addEventListener('show.bs.modal', function(event) {
+    var trigger = event.relatedTarget;
+    var mode = trigger && trigger.getAttribute('data-bordereau-mode');
+    appliquerModeBordereau(mode === 'local');
+  });
+
   document.getElementById('modalGenererBordereau').addEventListener('hidden.bs.modal', function() {
     tbody.innerHTML = '';
     listeBlock.classList.add('d-none');
     aucuneBlock.classList.add('d-none');
     chargementBlock.classList.add('d-none');
     btnSubmit.disabled = true;
+    appliquerModeBordereau(false);
   });
 
   var urlPaiementBordereauBase = @json(url('/gestion-financiere/agent-financier/' . $idAgent . '/bordereaux'));

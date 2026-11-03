@@ -108,11 +108,18 @@ class BordereauAgentService
         $ficheIds = collect($lignesData)->pluck('fiche_id')->filter()->map(fn ($id) => (int) $id)->unique()->values()->all();
 
         if ($ticketIds !== []) {
+            // Inclut les tickets locaux liés via particulier_agent (id_agent parfois encore vide).
             Ticket::query()
-                ->where('id_agent', $bordereau->id_agent)
                 ->whereIn('id_ticket', $ticketIds)
                 ->whereNull('bordereau_agent_id')
-                ->update(['bordereau_agent_id' => $bordereau->id]);
+                ->where(function ($q) use ($bordereau) {
+                    $q->where('id_agent', $bordereau->id_agent)
+                        ->orWhereHas('particulierAgent', fn ($pa) => $pa->where('id_agent', $bordereau->id_agent));
+                })
+                ->update([
+                    'bordereau_agent_id' => $bordereau->id,
+                    'id_agent' => $bordereau->id_agent,
+                ]);
         }
 
         if ($ficheIds !== []) {
@@ -153,14 +160,15 @@ class BordereauAgentService
     /**
      * @return list<array<string, mixed>>
      */
-    public function lignesEligibles(int $idAgent, string $dateDebut, string $dateFin): array
+    public function lignesEligibles(int $idAgent, string $dateDebut, string $dateFin, bool $uniquementLocaux = false): array
     {
         $lignes = $this->reporting->lignesAvecMontant([
             'id_agent' => $idAgent,
             'date_debut' => $dateDebut,
             'date_fin' => $dateFin,
             'sans_bordereau' => true,
-        ]);
+            'uniquement_locaux' => $uniquementLocaux,
+        ], syncApi: ! $uniquementLocaux, inclureRefsApi: ! $uniquementLocaux);
 
         return array_map(fn (array $item) => $this->serialiserLigne($item), $lignes);
     }
@@ -175,7 +183,7 @@ class BordereauAgentService
      * @param  list<int>  $ticketIds
      * @return list<array<string, mixed>>
      */
-    public function construireLignesData(int $idAgent, array $ticketIds): array
+    public function construireLignesData(int $idAgent, array $ticketIds, bool $uniquementLocaux = false): array
     {
         $ticketIds = array_values(array_unique(array_map('intval', $ticketIds)));
         if ($ticketIds === []) {
@@ -185,7 +193,8 @@ class BordereauAgentService
         $lignes = $this->reporting->lignesAvecMontant([
             'id_agent' => $idAgent,
             'sans_bordereau' => true,
-        ]);
+            'uniquement_locaux' => $uniquementLocaux,
+        ], syncApi: ! $uniquementLocaux, inclureRefsApi: ! $uniquementLocaux);
 
         $lignesByTicket = collect($lignes)->keyBy(fn (array $item) => (int) $item['ticket']->id_ticket);
         $result = [];

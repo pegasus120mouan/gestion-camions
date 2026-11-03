@@ -3,13 +3,28 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class FicheSortie extends Model
 {
+    public const TYPE_NORMALE = 'normale';
+    public const TYPE_GROUPEE = 'groupee';
+
+    public const STATUT_GROUPE_EN_COURS = 'en_cours';
+    public const STATUT_GROUPE_CLOTUREE = 'cloturee';
+
+    public const LOCALISATION_TRANSIT = 'transit';
+    public const LOCALISATION_PARC = 'parc';
+
     protected $table = 'fiches_sortie';
 
     protected $fillable = [
         'numero_fiche',
+        'type_fiche',
+        'statut_groupe',
+        'localisation_type',
+        'localisation_parc_id',
+        'localisation_stock_id',
         'stock_id',
         'parc_id',
         'nom_parc',
@@ -57,5 +72,20 @@ class FicheSortie extends Model
     public function transporteur()
     {
         return $this->belongsTo(Transporteur::class);
+    }
+
+    public function etapesTransfertGroupe(): HasMany
+    {
+        return $this->hasMany(EtapeTransfertGroupe::class, 'fiche_sortie_id')->orderBy('ordre');
+    }
+
+    public function estGroupee(): bool
+    {
+        return ($this->type_fiche ?? self::TYPE_NORMALE) === self::TYPE_GROUPEE;
+    }
+
+    public function groupeEnCours(): bool
+    {
+        return $this->estGroupee() && ($this->statut_groupe === self::STATUT_GROUPE_EN_COURS);
     }
 }

@@ -338,11 +338,8 @@
                       ->first();
                   $stockDispo = 0;
                   if ($stockOuvert) {
-                    $sortiesStock = \App\Models\FicheSortie::where('stock_id', $stockOuvert->id)
-                      ->whereNotNull('date_dechargement')
-                      ->whereNotNull('poids_pont')
-                      ->sum('poids_pont');
-                    $stockDispo = max(0, (float) $stockOuvert->total_entrees - (float) $sortiesStock);
+                    $stockDispo = app(\App\Services\TransfertGroupeService::class)
+                      ->calculerStockDisponible($stockOuvert);
                   }
                   $selectedParc = (int) old('parc_id', $f->parc_id ?? 0) === (int) $parc->id;
                 @endphp

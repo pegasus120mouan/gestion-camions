@@ -82,12 +82,10 @@
     @foreach($stocksOuverts as $stockOuvert)
     @php
       $stockOuvertEntrees = $stockOuvert->total_entrees;
-      $sortiesFichesOuvert = \App\Models\FicheSortie::where('stock_id', $stockOuvert->id)
-          ->whereNotNull('date_dechargement')
-          ->whereNotNull('poids_pont')
-          ->sum('poids_pont');
+      $transfertGroupeSvc = app(\App\Services\TransfertGroupeService::class);
+      $sortiesFichesOuvert = $transfertGroupeSvc->calculerSortiesStock($stockOuvert);
+      $stockDisponibleOuvert = $transfertGroupeSvc->calculerStockDisponible($stockOuvert);
       $ecartOuvert = $sortiesFichesOuvert - $stockOuvertEntrees;
-      $stockDisponibleOuvert = $stockOuvertEntrees - $sortiesFichesOuvert;
     @endphp
     <div class="card mb-4 {{ $stockOuvert->isActif() ? 'border-primary' : 'border-secondary' }}">
       <div class="card-header {{ $stockOuvert->isActif() ? 'bg-primary' : 'bg-secondary' }} text-white d-flex justify-content-between align-items-center">
@@ -280,11 +278,7 @@
             @foreach($stocksFermes as $sf)
               @php
                 $entree = $sf->total_entrees;
-                // Sorties liées à ce stock spécifique (via stock_id)
-                $sortiesStock = \App\Models\FicheSortie::where('stock_id', $sf->id)
-                    ->whereNotNull('date_dechargement')
-                    ->whereNotNull('poids_pont')
-                    ->sum('poids_pont');
+                $sortiesStock = app(\App\Services\TransfertGroupeService::class)->calculerSortiesStock($sf);
                 $ecart = $sortiesStock - $entree;
               @endphp
               <tr>
@@ -372,6 +366,7 @@
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">Mouvements de stock (Entrées)</h5>
+        <span class="badge bg-light text-dark">{{ $nbMouvements ?? 0 }} mouvement(s)</span>
       </div>
       <div class="table-responsive">
         <table class="table table-hover">
@@ -379,6 +374,7 @@
             <tr>
               <th>Code</th>
               <th>Date</th>
+              <th>Type</th>
               <th>Produit</th>
               <th>Statut</th>
               <th>Quantité (kg)</th>
@@ -387,33 +383,58 @@
             </tr>
           </thead>
           <tbody>
-            @forelse($stocks->where('type', 'entree') as $s)
+            @forelse(($mouvementsEntree ?? collect()) as $m)
               <tr>
-                <td><span class="badge {{ $s->isOuvert() ? 'bg-primary' : 'bg-secondary' }}">{{ $s->code_stock ?? 'N/A' }}</span></td>
-                <td>{{ $s->date_mouvement ? $s->date_mouvement->format('d-m-Y') : '-' }}</td>
-                <td><span class="badge bg-info">{{ $s->nom_produit ?? '-' }}</span></td>
                 <td>
-                  @if($s->isOuvert())
+                  <span class="badge {{ $m->kind === 'ouverture' ? ($m->statut === 'ouvert' ? 'bg-primary' : 'bg-secondary') : 'bg-dark' }}">
+                    {{ $m->code ?? 'N/A' }}
+                  </span>
+                  @if(!empty($m->fiche))
+                    <small class="text-muted d-block">{{ $m->fiche }}</small>
+                  @endif
+                </td>
+                <td>
+                  @php
+                    $dateMvt = $m->date ? \Carbon\Carbon::parse($m->date)->format('d-m-Y') : '-';
+                  @endphp
+                  {{ $dateMvt }}
+                </td>
+                <td>
+                  <span class="badge {{ $m->badge }}">{{ $m->label_type }}</span>
+                  @if(!empty($m->agent))
+                    <small class="text-muted d-block">{{ $m->agent }}</small>
+                  @elseif(!empty($m->parc))
+                    <small class="text-muted d-block">{{ $m->parc }}</small>
+                  @endif
+                </td>
+                <td><span class="badge bg-info">{{ $m->produit ?? '-' }}</span></td>
+                <td>
+                  @if(($m->statut ?? '') === 'ouvert')
                     <span class="badge bg-success">Ouvert</span>
                   @else
                     <span class="badge bg-danger">Fermé</span>
-                    <small class="text-muted d-block">{{ $s->date_fermeture ? $s->date_fermeture->format('d/m/Y') : '' }}</small>
                   @endif
                 </td>
-                <td>{{ number_format((float)$s->quantite, 0, ',', ' ') }}</td>
+                <td class="fw-semibold {{ $m->kind === 'transfert' ? 'text-warning' : '' }}">
+                  {{ number_format((float)$m->quantite, 0, ',', ' ') }}
+                </td>
                 <td class="text-end">
-                  @if($s->montant_total > 0)
-                    <strong class="text-success">{{ number_format((float)$s->montant_total, 0, ',', ' ') }} FCFA</strong>
-                    <small class="text-muted d-block">{{ number_format((float)$s->prix_unitaire, 0, ',', ' ') }} FCFA/kg</small>
+                  @if($m->montant_total > 0)
+                    <strong class="text-success">{{ number_format((float)$m->montant_total, 0, ',', ' ') }} FCFA</strong>
+                    <small class="text-muted d-block">{{ number_format((float)$m->prix_unitaire, 0, ',', ' ') }} FCFA/kg</small>
                   @else
                     <span class="text-muted">-</span>
                   @endif
                 </td>
                 <td>
-                  @if($s->isOuvert())
-                    <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteStockModal{{ $s->id }}">
+                  @if($m->kind === 'ouverture' && ($m->statut ?? '') === 'ouvert')
+                    <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteStockModal{{ $m->stock_id }}">
                       <i class="bx bx-trash"></i>
                     </button>
+                  @elseif($m->kind === 'transfert')
+                    <span class="badge bg-warning text-dark" title="{{ $m->commentaire }}">
+                      <i class="bx bx-transfer"></i>
+                    </span>
                   @else
                     <span class="text-muted">-</span>
                   @endif
@@ -421,7 +442,7 @@
               </tr>
             @empty
               <tr>
-                <td colspan="7" class="text-center py-4">
+                <td colspan="8" class="text-center py-4">
                   <i class="bx bx-package text-muted" style="font-size: 3rem;"></i>
                   <p class="text-muted mt-2 mb-0">Aucun mouvement de stock enregistré</p>
                 </td>
@@ -464,39 +485,44 @@
     </div>
     @endforeach
 
-    <!-- Tableau des sorties (fiches déchargées) -->
-    @if(isset($fichesDechargees) && $fichesDechargees->count() > 0)
+    <!-- Tableau des sorties (fiches déchargées + transferts groupés) -->
+    @if(isset($mouvementsSortie) && $mouvementsSortie->count() > 0)
     <div class="card mt-4">
       <div class="card-header d-flex justify-content-between align-items-center bg-danger text-white">
-        <h5 class="mb-0 text-white"><i class="bx bx-up-arrow-circle me-2"></i>Sorties (Fiches déchargées)</h5>
+        <h5 class="mb-0 text-white"><i class="bx bx-up-arrow-circle me-2"></i>Sorties (mouvements)</h5>
+        <span class="badge bg-light text-dark">{{ $mouvementsSortie->count() }}</span>
       </div>
       <div class="table-responsive">
         <table class="table table-hover">
           <thead>
             <tr>
-              <th>Date déchargement</th>
+              <th>Date</th>
+              <th>Type</th>
               <th>Véhicule</th>
               <th>Agent</th>
-              <th>Usine</th>
+              <th>Destination / détail</th>
               <th>Produit</th>
               <th class="text-end">Poids (kg)</th>
             </tr>
           </thead>
           <tbody>
-            @foreach($fichesDechargees as $fiche)
+            @foreach($mouvementsSortie as $sortie)
               <tr>
-                <td>{{ $fiche->date_dechargement ? $fiche->date_dechargement->format('d-m-Y') : '-' }}</td>
-                <td><strong>{{ $fiche->matricule_vehicule }}</strong></td>
-                <td>{{ $fiche->nom_agent ?? '-' }}</td>
-                <td>{{ $fiche->usine ?? '-' }}</td>
                 <td>
-                  @if($fiche->nom_produit)
-                    <span class="badge bg-info">{{ $fiche->nom_produit }}</span>
+                  {{ $sortie->date ? \Carbon\Carbon::parse($sortie->date)->format('d-m-Y') : '-' }}
+                </td>
+                <td><span class="badge {{ $sortie->badge }}">{{ $sortie->type }}</span></td>
+                <td><strong>{{ $sortie->vehicule ?? '-' }}</strong></td>
+                <td>{{ $sortie->agent ?? '-' }}</td>
+                <td>{{ $sortie->detail ?? '-' }}</td>
+                <td>
+                  @if($sortie->produit)
+                    <span class="badge bg-info">{{ $sortie->produit }}</span>
                   @else
                     <span class="text-muted">-</span>
                   @endif
                 </td>
-                <td class="text-end fw-bold text-danger">{{ number_format((float)$fiche->poids_pont, 0, ',', ' ') }}</td>
+                <td class="text-end fw-bold text-danger">{{ number_format((float)$sortie->poids, 0, ',', ' ') }}</td>
               </tr>
             @endforeach
           </tbody>
@@ -586,11 +612,18 @@
 @foreach($stocks->where('type', 'entree') as $stockItem)
 @php
   $fichesStock = \App\Models\FicheSortie::where('stock_id', $stockItem->id)
-      ->whereNotNull('date_dechargement')
       ->whereNotNull('poids_pont')
-      ->orderBy('date_dechargement', 'desc')
+      ->where(function ($q) {
+          $q->where(function ($normale) {
+              $normale->where(function ($t) {
+                  $t->whereNull('type_fiche')->orWhere('type_fiche', 'normale');
+              })->whereNotNull('date_dechargement');
+          })->orWhere('type_fiche', 'groupee');
+      })
+      ->orderByDesc('date_chargement')
+      ->orderByDesc('id')
       ->get();
-  $totalSortiesModal = $fichesStock->sum('poids_pont');
+  $totalSortiesModal = app(\App\Services\TransfertGroupeService::class)->calculerSortiesStock($stockItem);
 @endphp
 <div class="modal fade" id="modalStockDetail-{{ $stockItem->id }}" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg">
@@ -846,10 +879,7 @@
 <!-- Modals Supprimer Stock Fermé -->
 @foreach($stocksFermes as $sf)
 @php
-  $sortiesStockModal = \App\Models\FicheSortie::where('stock_id', $sf->id)
-      ->whereNotNull('date_dechargement')
-      ->whereNotNull('poids_pont')
-      ->sum('poids_pont');
+  $sortiesStockModal = app(\App\Services\TransfertGroupeService::class)->calculerSortiesStock($sf);
 @endphp
 <div class="modal fade" id="modalDeleteStock-{{ $sf->id }}" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">

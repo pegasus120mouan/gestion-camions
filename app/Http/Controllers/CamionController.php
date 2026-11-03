@@ -35,7 +35,25 @@ class CamionController extends Controller
 
     public function index(Request $request)
     {
+        return $this->renderCamionsIndex($request, sortiesGroupees: false);
+    }
+
+    public function indexSortiesGroupees(Request $request)
+    {
+        return $this->renderCamionsIndex($request, sortiesGroupees: true);
+    }
+
+    private function renderCamionsIndex(Request $request, bool $sortiesGroupees = false)
+    {
         $timeout = 10;
+        $emptyViewData = [
+            'camions' => new LengthAwarePaginator([], 0, 20),
+            'chauffeurs' => collect(),
+            'external_camions' => [],
+            'etats_par_vehicule' => [],
+            'vehicules_en_cours' => [],
+            'sortiesGroupees' => $sortiesGroupees,
+        ];
 
         try {
             $response = Http::acceptJson()
@@ -43,27 +61,17 @@ class CamionController extends Controller
                 ->timeout($timeout)
                 ->get('https://api.objetombrepegasus.online/api/camions/mes_camions.php');
         } catch (\Throwable $e) {
-            return view('camions.index', [
-                'camions' => new LengthAwarePaginator([], 0, 20),
-                'chauffeurs' => collect(),
-                'external_camions' => [],
-                'etats_par_vehicule' => [],
-                'vehicules_en_cours' => [],
+            return view('camions.index', array_merge($emptyViewData, [
                 'external_error' => "Impossible de joindre le service camions.",
-            ]);
+            ]));
         }
 
         if (! $response->successful()) {
             $message = (string) ($response->json('error') ?? 'Erreur API.');
 
-            return view('camions.index', [
-                'camions' => new LengthAwarePaginator([], 0, 20),
-                'chauffeurs' => collect(),
-                'external_camions' => [],
-                'etats_par_vehicule' => [],
-                'vehicules_en_cours' => [],
+            return view('camions.index', array_merge($emptyViewData, [
                 'external_error' => $message,
-            ]);
+            ]));
         }
 
         $vehicules = $response->json('vehicules');
@@ -138,6 +146,7 @@ class CamionController extends Controller
             'external_camions' => $vehicules,
             'etats_par_vehicule' => $etatsParVehicule,
             'vehicules_en_cours' => $vehiculesEnCours,
+            'sortiesGroupees' => $sortiesGroupees,
             'external_error' => null,
         ]);
     }

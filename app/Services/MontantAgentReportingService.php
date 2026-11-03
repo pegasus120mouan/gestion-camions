@@ -114,6 +114,11 @@ class MontantAgentReportingService
             });
         }
 
+        // Tickets créés via « Tickets locaux » (particulier_agent_id renseigné).
+        if (! empty($filtres['uniquement_locaux'])) {
+            $query->whereNotNull('particulier_agent_id');
+        }
+
         return $query;
     }
 

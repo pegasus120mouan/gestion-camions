@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EntreeStock;
+use App\Models\EtapeTransfertGroupe;
+use App\Models\FicheSortie;
 use App\Models\PontEtat;
 use App\Models\Stock;
 use App\Models\Usine;
+use App\Services\TransfertGroupeService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 
@@ -143,20 +148,14 @@ class PontController extends Controller
                 ->where('statut', 'ouvert')
                 ->get();
             
+            $transfertGroupe = app(TransfertGroupeService::class);
             $totalStockDisponible = 0;
-            
+
             foreach ($stocksOuverts as $stockOuvert) {
-                $entrees = $stockOuvert->total_entrees;
-                
-                // Sorties liées à ce stock spécifique (via stock_id)
-                $sorties = \App\Models\FicheSortie::where('stock_id', $stockOuvert->id)
-                    ->whereNotNull('date_dechargement')
-                    ->whereNotNull('poids_pont')
-                    ->sum('poids_pont');
-                
-                $totalStockDisponible += max(0, $entrees - $sorties);
+                // Inclut les fiches groupées dès le chargement (pas seulement les déchargées).
+                $totalStockDisponible += $transfertGroupe->calculerStockDisponible($stockOuvert);
             }
-            
+
             $pont['stock_disponible'] = $totalStockDisponible;
 
             // Calculer le solde (total approvisionnements - total dépenses stocks - total dépenses entrées - dépenses pont)
@@ -240,31 +239,151 @@ class PontController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        // Calculer les totaux
-        $totalEntrees = Stock::where('id_pont', $id_pont)->where('type', 'entree')->sum('quantite');
-        $totalSortiesManuelles = Stock::where('id_pont', $id_pont)->where('type', 'sortie')->sum('quantite');
-        
-        // Calculer les sorties réelles du pont (poids_pont des fiches de sortie déchargées)
-        $totalSortiesFiches = \App\Models\FicheSortie::where('id_pont', $id_pont)
-            ->whereNotNull('date_dechargement')
-            ->whereNotNull('poids_pont')
-            ->sum('poids_pont');
-        
-        // Total des sorties = sorties manuelles + sorties des fiches déchargées
+        // Calculer les totaux (entrées = quantite initiale + entrees_stock)
+        $transfertGroupe = app(TransfertGroupeService::class);
+        $stocksEntree = Stock::where('id_pont', $id_pont)->where('type', 'entree')->get();
+        $totalEntrees = 0.0;
+        $totalSortiesFiches = 0.0;
+        $stockDisponible = 0.0;
+        foreach ($stocksEntree as $stockEntree) {
+            $totalEntrees += (float) $stockEntree->total_entrees;
+            $totalSortiesFiches += $transfertGroupe->calculerSortiesStock($stockEntree);
+            $stockDisponible += $transfertGroupe->calculerStockDisponible($stockEntree);
+        }
+        $totalSortiesManuelles = (float) Stock::where('id_pont', $id_pont)->where('type', 'sortie')->sum('quantite');
         $totalSorties = $totalSortiesManuelles + $totalSortiesFiches;
-        
-        // Stock disponible = entrées - sorties totales
         $stockTotal = $totalEntrees;
-        $stockDisponible = $totalEntrees - $totalSorties;
+        $stockDisponible = max(0, $stockDisponible - $totalSortiesManuelles);
         
-        $nbMouvements = $stocks->count();
-        
-        // Récupérer les fiches de sortie déchargées pour ce pont
-        $fichesDechargees = \App\Models\FicheSortie::where('id_pont', $id_pont)
+        // Historique unifié des entrées : ouverture de stock + entrées supplémentaires (dont transferts groupés)
+        $stockIds = $stocksEntree->pluck('id')->all();
+        $entreeIds = empty($stockIds)
+            ? collect()
+            : EntreeStock::query()->whereIn('stock_id', $stockIds)->pluck('id');
+        $etapesParEntree = $entreeIds->isEmpty()
+            ? collect()
+            : EtapeTransfertGroupe::query()
+                ->whereIn('entree_stock_id', $entreeIds)
+                ->with('ficheSortie')
+                ->get()
+                ->keyBy('entree_stock_id');
+
+        $mouvementsEntree = collect();
+        foreach ($stocksEntree as $stockItem) {
+            $mouvementsEntree->push((object) [
+                'kind' => 'ouverture',
+                'date' => $stockItem->date_mouvement,
+                'code' => $stockItem->code_stock,
+                'produit' => $stockItem->nom_produit,
+                'parc' => $stockItem->nom_parc,
+                'quantite' => (float) $stockItem->quantite,
+                'prix_unitaire' => (float) ($stockItem->prix_unitaire ?? 0),
+                'montant_total' => (float) ($stockItem->montant_total ?? 0),
+                'statut' => $stockItem->statut,
+                'label_type' => 'Ouverture stock',
+                'badge' => $stockItem->isOuvert() ? 'bg-primary' : 'bg-secondary',
+                'commentaire' => null,
+                'stock_id' => $stockItem->id,
+            ]);
+
+            foreach ($stockItem->entreesStock()->orderByDesc('date_entree')->orderByDesc('id')->get() as $entree) {
+                $etape = $etapesParEntree->get($entree->id);
+                $isTransfert = $etape !== null
+                    || str_starts_with((string) ($entree->commentaire ?? ''), 'Transfert groupé');
+
+                $mouvementsEntree->push((object) [
+                    'kind' => $isTransfert ? 'transfert' : 'entree',
+                    'date' => $entree->date_entree,
+                    'code' => $stockItem->code_stock,
+                    'produit' => $stockItem->nom_produit,
+                    'parc' => $stockItem->nom_parc,
+                    'quantite' => (float) $entree->quantite,
+                    'prix_unitaire' => (float) ($entree->prix_unitaire ?? 0),
+                    'montant_total' => (float) ($entree->montant_total ?? 0),
+                    'statut' => $stockItem->statut,
+                    'label_type' => $isTransfert ? 'Transfert groupé' : 'Entrée complémentaire',
+                    'badge' => $isTransfert ? 'bg-warning text-dark' : 'bg-info',
+                    'commentaire' => $entree->commentaire,
+                    'agent' => $etape?->nom_agent,
+                    'fiche' => $etape?->ficheSortie?->numero_fiche,
+                    'stock_id' => $stockItem->id,
+                    'entree_id' => $entree->id,
+                ]);
+            }
+        }
+        $mouvementsEntree = $mouvementsEntree
+            ->sortByDesc(fn ($m) => ($m->date ? Carbon::parse($m->date)->format('Y-m-d') : '1970-01-01') . '-' . ($m->entree_id ?? $m->stock_id))
+            ->values();
+
+        $nbMouvements = $mouvementsEntree->count();
+
+        // Sorties : fiches déchargées + chargements groupés + reprises de transferts
+        $fichesDechargees = FicheSortie::where('id_pont', $id_pont)
             ->whereNotNull('date_dechargement')
             ->whereNotNull('poids_pont')
             ->orderBy('date_dechargement', 'desc')
             ->get();
+
+        $mouvementsSortie = collect();
+        foreach ($fichesDechargees as $fiche) {
+            $mouvementsSortie->push((object) [
+                'date' => $fiche->date_dechargement,
+                'type' => 'Fiche déchargée',
+                'vehicule' => $fiche->matricule_vehicule,
+                'agent' => $fiche->nom_agent,
+                'detail' => $fiche->usine ?: ($fiche->nom_parc ?: '—'),
+                'produit' => $fiche->nom_produit,
+                'poids' => (float) $fiche->poids_pont,
+                'badge' => 'bg-danger',
+            ]);
+        }
+
+        if (!empty($stockIds)) {
+            $fichesGroupeesSource = FicheSortie::query()
+                ->where('type_fiche', FicheSortie::TYPE_GROUPEE)
+                ->whereIn('stock_id', $stockIds)
+                ->whereNotNull('poids_pont')
+                ->orderByDesc('date_chargement')
+                ->get();
+            foreach ($fichesGroupeesSource as $fiche) {
+                $mouvementsSortie->push((object) [
+                    'date' => $fiche->date_chargement,
+                    'type' => 'Chargement groupé',
+                    'vehicule' => $fiche->matricule_vehicule,
+                    'agent' => $fiche->nom_agent,
+                    'detail' => $fiche->numero_fiche ?: 'Transit camion',
+                    'produit' => $fiche->nom_produit,
+                    'poids' => (float) $fiche->poids_pont,
+                    'badge' => 'bg-warning text-dark',
+                ]);
+            }
+
+            $etapesReprise = EtapeTransfertGroupe::query()
+                ->whereIn('stock_source_id', $stockIds)
+                ->where('type_etape', '!=', EtapeTransfertGroupe::TYPE_CHARGEMENT)
+                ->with('ficheSortie')
+                ->orderByDesc('date_etape')
+                ->get();
+            foreach ($etapesReprise as $etape) {
+                $mouvementsSortie->push((object) [
+                    'date' => $etape->date_etape,
+                    'type' => $etape->type_etape === EtapeTransfertGroupe::TYPE_CLOTURE_USINE
+                        ? 'Clôture usine'
+                        : 'Reprise transfert',
+                    'vehicule' => $etape->matricule_vehicule,
+                    'agent' => $etape->nom_agent,
+                    'detail' => $etape->usine_destination
+                        ?: ($etape->nom_pont_destination ?: ($etape->ficheSortie?->numero_fiche ?: '—')),
+                    'produit' => $etape->ficheSortie?->nom_produit,
+                    'poids' => (float) $etape->poids,
+                    'badge' => 'bg-warning text-dark',
+                ]);
+            }
+        }
+
+        $mouvementsSortie = $mouvementsSortie
+            ->sortByDesc(fn ($m) => $m->date ? Carbon::parse($m->date)->format('Y-m-d') : '1970-01-01')
+            ->values();
 
         // Résoudre les IDs numériques d'usine en noms
         $usinesById = [];
@@ -293,7 +412,7 @@ class PontController extends Controller
         // Calculer le solde (total approvisionnements - total dépenses stocks - total dépenses entrées - dépenses pont)
         $totalApprovisionnements = \App\Models\Approvisionnement::where('pont_id', $id_pont)->sum('montant');
         $totalDepensesStocks = Stock::where('id_pont', $id_pont)->where('type', 'entree')->sum('montant_total');
-        $totalDepensesEntrees = \App\Models\EntreeStock::whereHas('stock', function($q) use ($id_pont) {
+        $totalDepensesEntrees = EntreeStock::whereHas('stock', function ($q) use ($id_pont) {
             $q->where('id_pont', $id_pont);
         })->sum('montant_total');
         $totalDepensesPont = \App\Models\DepensePont::where('id_pont', $id_pont)->sum('montant');
@@ -313,6 +432,8 @@ class PontController extends Controller
             'totalSorties' => $totalSorties,
             'stockDisponible' => $stockDisponible,
             'fichesDechargees' => $fichesDechargees,
+            'mouvementsEntree' => $mouvementsEntree,
+            'mouvementsSortie' => $mouvementsSortie,
             'nbMouvements' => $nbMouvements,
             'solde' => $solde,
             'depensesPont' => $depensesPont,
