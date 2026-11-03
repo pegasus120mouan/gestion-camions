@@ -234,13 +234,18 @@
               Sélectionnez l’agent, son pont, le parc (produit de départ), le poids ≤ stock disponible, puis l’usine.
               Aucun ajout de stock parc — déduction du parc choisi et clôture de la fiche.
             </p>
+            @php
+              $clotureAgentDisplay = trim(($fiche->nom_agent ?? '') . ($fiche->numero_agent ? ' (' . $fiche->numero_agent . ')' : ''));
+            @endphp
             <form method="POST" action="{{ route('sorties_groupees.cloture_usine', $fiche->id) }}" id="formClotureUsine">
               @csrf
-              <input type="hidden" name="id_agent" id="cloture_id_agent" required>
+              <input type="hidden" name="id_agent" id="cloture_id_agent" value="{{ old('id_agent', $fiche->id_agent) }}" required>
               <input type="hidden" name="id_pont" id="cloture_id_pont" value="">
               <div class="mb-3">
                 <label class="form-label">Agent <span class="text-danger">*</span></label>
-                <input type="text" id="cloture_agent_search" name="agent_display" class="form-control" placeholder="Rechercher par N° ou nom..." autocomplete="off" required>
+                <input type="text" id="cloture_agent_search" name="agent_display" class="form-control"
+                       value="{{ old('agent_display', $clotureAgentDisplay) }}"
+                       placeholder="Rechercher par N° ou nom..." autocomplete="off" required>
                 <div id="cloture_agent_dropdown" class="dropdown-menu w-100" style="max-height: 220px; overflow-y: auto; display: none;">
                   @foreach($agents as $agent)
                     <a href="#" class="dropdown-item cloture-agent-option"
@@ -252,6 +257,7 @@
                     </a>
                   @endforeach
                 </div>
+                <small class="text-muted">Agent actuel de la fiche (modifiable).</small>
               </div>
               <div class="mb-3" id="cloture_pont_section">
                 <label class="form-label">Pont <span class="text-danger">*</span></label>
@@ -273,10 +279,10 @@
               <div class="mb-3">
                 <label class="form-label">Poids (kg) <span class="text-danger">*</span></label>
                 <input type="number" name="poids" id="cloture_poids" class="form-control" min="0.01" step="0.01" required
-                       placeholder="Ex: {{ number_format((float) $fiche->poids_pont, 0, '.', '') }}"
-                       value="{{ old('poids', (float) $fiche->poids_pont) }}">
+                       placeholder="Saisir le poids"
+                       value="{{ old('poids') }}">
                 <small class="text-muted" id="cloture_poids_hint">
-                  Poids en transit : {{ number_format((float) $fiche->poids_pont, 0, ',', ' ') }} kg — plafonné au stock disponible du parc.
+                  À renseigner manuellement — max = stock disponible du parc choisi.
                 </small>
                 <div class="text-danger small mt-1 d-none" id="cloture_poids_error"></div>
               </div>
@@ -417,14 +423,13 @@ document.addEventListener('DOMContentLoaded', function () {
       if (dispo !== null && dispo !== undefined && !isNaN(dispo)) {
         poidsInput.max = String(dispo);
         if (poidsHint) {
-          poidsHint.textContent = 'Poids en transit : ' + formatKg(poidsTransit) + ' kg — max parc'
+          poidsHint.textContent = 'À renseigner manuellement — max'
             + (nomParc ? ' ' + nomParc : '') + ' : ' + formatKg(dispo) + ' kg.';
         }
       } else {
         poidsInput.removeAttribute('max');
         if (poidsHint) {
-          poidsHint.textContent = 'Poids en transit : ' + formatKg(poidsTransit)
-            + ' kg — plafonné au stock disponible du parc.';
+          poidsHint.textContent = 'À renseigner manuellement — max = stock disponible du parc choisi.';
         }
       }
       validerPoids();
@@ -493,9 +498,6 @@ document.addEventListener('DOMContentLoaded', function () {
               stockSelect.value = String(data.stocks[0].stock_id);
               if (mode === 'cloture') {
                 appliquerDispo(data.stocks[0].disponible, data.stocks[0].nom_parc);
-                if (poidsInput && (!poidsInput.value || parseFloat(poidsInput.value) <= 0)) {
-                  poidsInput.value = String(Math.min(poidsTransit, data.stocks[0].disponible || poidsTransit));
-                }
               }
             } else if (mode === 'cloture') {
               appliquerDispo(null, null);
@@ -641,6 +643,12 @@ document.addEventListener('DOMContentLoaded', function () {
     clotureUi.updatePourAgent
   );
 
+  // Préremplir agent actuel + son pont
+  var clotureAgentInit = document.getElementById('cloture_id_agent');
+  if (clotureAgentInit && clotureAgentInit.value) {
+    clotureUi.updatePourAgent(clotureAgentInit.value);
+  }
+
   var formTransfert = document.getElementById('formTransfertPont');
   if (formTransfert) {
     formTransfert.addEventListener('submit', function (e) {
@@ -687,6 +695,13 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       if (!clotureUi.stockSelect || !clotureUi.stockSelect.value) {
         alert('Sélectionnez un parc / stock source.');
+        return;
+      }
+      var poidsInputCheck = document.getElementById('cloture_poids');
+      var poidsVal = poidsInputCheck ? parseFloat(poidsInputCheck.value || '') : NaN;
+      if (!poidsVal || poidsVal <= 0) {
+        alert('Saisissez le poids à clôturer.');
+        if (poidsInputCheck) poidsInputCheck.focus();
         return;
       }
       if (!clotureUi.validerPoids()) {
