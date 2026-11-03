@@ -99,6 +99,15 @@ class SortiesGroupeesController extends Controller
             ?? $usinesParProduit[(string) $fiche->produit_id]
             ?? [];
 
+        $stockLocalisation = null;
+        $stockActuelChaine = null;
+        if ($fiche->localisation_type === FicheSortie::LOCALISATION_PARC && $fiche->localisation_stock_id) {
+            $stockLocalisation = Stock::query()->find($fiche->localisation_stock_id);
+            if ($stockLocalisation) {
+                $stockActuelChaine = $this->transfertGroupe->calculerStockActuelChaine($stockLocalisation);
+            }
+        }
+
         return view('sorties_groupees.show', [
             'fiche' => $fiche,
             'etapes' => $fiche->etapesTransfertGroupe,
@@ -107,6 +116,8 @@ class SortiesGroupeesController extends Controller
             'agentsPontsMap' => $agentsPontsMap,
             'usines' => $usines,
             'produits' => Produit::orderBy('nom')->get(),
+            'stockLocalisation' => $stockLocalisation,
+            'stockActuelChaine' => $stockActuelChaine,
         ]);
     }
 
@@ -145,12 +156,10 @@ class SortiesGroupeesController extends Controller
         [$nomAgent, $numeroAgent] = $this->parseAgentDisplay($validated['agent_display'] ?? '');
 
         $stock = Stock::query()->findOrFail((int) $validated['stock_id']);
-
-        $poids = (float) ($fiche->poids_pont ?? 0);
         $entreesAvant = (float) $stock->total_entrees;
 
         try {
-            $this->transfertGroupe->transfererVersPont($fiche, [
+            $etape = $this->transfertGroupe->transfererVersPont($fiche, [
                 'id_agent' => (int) $validated['id_agent'],
                 'nom_agent' => $nomAgent,
                 'numero_agent' => $numeroAgent,
@@ -163,13 +172,14 @@ class SortiesGroupeesController extends Controller
 
         $stock->refresh();
         $entreesApres = (float) $stock->total_entrees;
+        $poids = (float) $etape->poids;
 
         return redirect()
             ->route('sorties_groupees.show', $fiche->id)
             ->with(
                 'success',
                 sprintf(
-                    'Transfert enregistré : %s kg ajoutés sur %s (%s). Stock entrée : %s → %s kg.',
+                    'Transfert enregistré : %s kg (stock actuel source) ajoutés sur %s (%s). Stock entrée : %s → %s kg.',
                     number_format($poids, 0, ',', ' '),
                     $stock->nom_parc ?? 'parc',
                     $stock->nom_pont ?? 'pont',

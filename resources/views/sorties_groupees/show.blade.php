@@ -151,18 +151,28 @@
           </div>
           <div class="card-body">
             <p class="text-muted small">
-              Un autre agent peut reprendre la marchandise. Le pont destination est celui de l’agent sélectionné.
-              Le poids sera <strong>ajouté</strong> au parc de ce pont
-              @if($fiche->localisation_type === 'parc')
-                , après déduction du parc actuel
-              @endif
-              .
+              Chaîne de transferts : le parc destination reçoit
+              <strong>son stock + le stock actuel du parc source</strong>
+              (stock déjà présent + transferts reçus), pas seulement le poids initial de chargement.
             </p>
-            <div class="alert alert-info py-2">
-              Poids du transfert :
-              <strong>{{ number_format((float) $fiche->poids_pont, 0, ',', ' ') }} kg</strong>
-              — sera ajouté au stock entrée du parc destination.
-            </div>
+            @if($stockLocalisation)
+              <div class="alert alert-warning py-2 small mb-2">
+                Parc source actuel :
+                <strong>{{ $stockLocalisation->nom_pont }} / {{ $stockLocalisation->nom_parc }}</strong>
+                — stock actuel chaîne
+                <strong>{{ number_format((float) ($stockActuelChaine ?? 0), 0, ',', ' ') }} kg</strong>
+                (entrées {{ number_format((float) $stockLocalisation->total_entrees, 0, ',', ' ') }} kg).
+              </div>
+              <div class="alert alert-info py-2">
+                Poids qui sera crédité à destination :
+                <strong>{{ number_format((float) ($stockActuelChaine ?? 0), 0, ',', ' ') }} kg</strong>
+              </div>
+            @else
+              <div class="alert alert-info py-2">
+                Marchandise en transit camion — poids crédité :
+                <strong>{{ number_format((float) $fiche->poids_pont, 0, ',', ' ') }} kg</strong>
+              </div>
+            @endif
             <form method="POST" action="{{ route('sorties_groupees.transfert_pont', $fiche->id) }}" id="formTransfertPont">
               @csrf
               <input type="hidden" name="id_agent" id="transfert_id_agent" required>
@@ -290,10 +300,63 @@
                 <label class="form-label">Commentaire</label>
                 <input type="text" name="commentaire" class="form-control" maxlength="500">
               </div>
-              <button type="submit" class="btn btn-danger" onclick="return confirm('Clôturer définitivement cette fiche groupée vers l\'usine ?')">
+              <button type="submit" class="btn btn-danger" id="btnClotureUsine">
                 <i class="bx bx-check me-1"></i>Clôturer la fiche
               </button>
             </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal confirmation clôture usine -->
+    <div class="modal fade" id="modalConfirmClotureUsine" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+          <div class="modal-header bg-danger text-white">
+            <h5 class="modal-title text-white">
+              <i class="bx bx-error-circle me-2"></i>Confirmer la clôture
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fermer"></button>
+          </div>
+          <div class="modal-body text-center py-4">
+            <div class="mb-3">
+              <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger bg-opacity-10" style="width:72px;height:72px;">
+                <i class="bx bx-building-house text-danger" style="font-size:2.25rem;"></i>
+              </span>
+            </div>
+            <h5 class="mb-2">Clôturer cette fiche groupée ?</h5>
+            <p class="text-muted mb-3">
+              Fiche <strong>{{ $fiche->numero_fiche }}</strong>
+              · {{ $fiche->matricule_vehicule }}
+              · {{ number_format((float) $fiche->poids_pont, 0, ',', ' ') }} kg
+            </p>
+            <div class="bg-light rounded p-3 text-start small mb-3">
+              <div class="d-flex justify-content-between mb-1">
+                <span class="text-muted">Usine</span>
+                <strong id="confirmClotureUsineLabel">—</strong>
+              </div>
+              <div class="d-flex justify-content-between mb-1">
+                <span class="text-muted">Agent</span>
+                <strong id="confirmClotureAgentLabel">—</strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span class="text-muted">Poids</span>
+                <strong id="confirmCloturePoidsLabel">—</strong>
+              </div>
+            </div>
+            <div class="alert alert-warning mb-0 py-2 text-start">
+              <i class="bx bx-info-circle me-1"></i>
+              La marchandise sera déduite du parc choisi. La fiche passera en non déchargées vers l’usine.
+            </div>
+          </div>
+          <div class="modal-footer justify-content-center border-0 pt-0">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+              <i class="bx bx-x me-1"></i>Annuler
+            </button>
+            <button type="button" class="btn btn-danger" id="btnConfirmClotureUsine">
+              <i class="bx bx-check me-1"></i>Oui, clôturer
+            </button>
           </div>
         </div>
       </div>
@@ -306,7 +369,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   var produitId = {{ (int) $fiche->produit_id }};
-  var poidsTransit = {{ (float) $fiche->poids_pont }};
+  var poidsTransit = {{ (float) ($stockActuelChaine ?? $fiche->poids_pont) }};
   var stocksUrl = @json(route('sorties_groupees.stocks_pont_produit'));
   var agentsPontsMap = {!! json_encode($agentsPontsMap ?? []) !!};
 
@@ -410,9 +473,10 @@ document.addEventListener('DOMContentLoaded', function () {
             opt.dataset.nomParc = s.nom_parc || 'Parc';
             if (mode === 'transfert') {
               var entrees = Math.round(s.total_entrees || 0);
+              var ajout = Math.round(poidsTransit);
               opt.textContent = (s.nom_parc || 'Parc')
-                + ' — ' + entrees.toLocaleString('fr-FR') + ' kg'
-                + ' → ' + (entrees + Math.round(poidsTransit)).toLocaleString('fr-FR') + ' kg après transfert';
+                + ' — stock ' + entrees.toLocaleString('fr-FR') + ' kg'
+                + ' → ' + (entrees + ajout).toLocaleString('fr-FR') + ' kg (+' + ajout.toLocaleString('fr-FR') + ' kg fiche)';
             } else {
               opt.textContent = (s.nom_parc || 'Parc')
                 + ' — dispo ' + formatKg(s.disponible || 0) + ' kg';
@@ -599,29 +663,62 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   var formCloture = document.getElementById('formClotureUsine');
-  if (formCloture) {
+  var modalClotureEl = document.getElementById('modalConfirmClotureUsine');
+  var btnConfirmCloture = document.getElementById('btnConfirmClotureUsine');
+  var clotureConfirmed = false;
+
+  function formatKgConfirm(n) {
+    return Math.round(n || 0).toLocaleString('fr-FR') + ' kg';
+  }
+
+  if (formCloture && modalClotureEl) {
     formCloture.addEventListener('submit', function (e) {
+      if (clotureConfirmed) return;
+
+      e.preventDefault();
       var hidden = formCloture.querySelector('input[name="id_agent"]');
       if (!hidden || !hidden.value) {
-        e.preventDefault();
         alert('Sélectionnez un agent dans la liste.');
         return;
       }
       if (!clotureUi.idPontHidden || !clotureUi.idPontHidden.value) {
-        e.preventDefault();
         alert('Sélectionnez le pont de l\'agent.');
         return;
       }
       if (!clotureUi.stockSelect || !clotureUi.stockSelect.value) {
-        e.preventDefault();
         alert('Sélectionnez un parc / stock source.');
         return;
       }
       if (!clotureUi.validerPoids()) {
-        e.preventDefault();
         alert('Le poids dépasse le stock disponible du parc.');
+        return;
       }
+
+      var usineSelect = formCloture.querySelector('select[name="usine"]');
+      var agentInput = document.getElementById('cloture_agent_search');
+      var poidsInput = document.getElementById('cloture_poids');
+      var usineLabel = document.getElementById('confirmClotureUsineLabel');
+      var agentLabel = document.getElementById('confirmClotureAgentLabel');
+      var poidsLabel = document.getElementById('confirmCloturePoidsLabel');
+
+      if (usineLabel) usineLabel.textContent = (usineSelect && usineSelect.value) ? usineSelect.value : '—';
+      if (agentLabel) agentLabel.textContent = (agentInput && agentInput.value) ? agentInput.value : '—';
+      if (poidsLabel) poidsLabel.textContent = formatKgConfirm(parseFloat((poidsInput && poidsInput.value) || 0));
+
+      var modal = bootstrap.Modal.getOrCreateInstance(modalClotureEl);
+      modal.show();
     });
+
+    if (btnConfirmCloture) {
+      btnConfirmCloture.addEventListener('click', function () {
+        clotureConfirmed = true;
+        var modal = bootstrap.Modal.getOrCreateInstance(modalClotureEl);
+        modal.hide();
+        btnConfirmCloture.disabled = true;
+        btnConfirmCloture.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Clôture…';
+        formCloture.submit();
+      });
+    }
   }
 });
 </script>

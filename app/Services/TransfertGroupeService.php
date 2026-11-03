@@ -67,6 +67,19 @@ class TransfertGroupeService
     }
 
     /**
+     * Stock « actuel » pour la chaîne de transferts groupés :
+     * entrées − chargements groupés − reprises/clôtures (sans les sorties normales / écart).
+     * Ex. : parc à 25 000 + transfert 25 000 → 50 000 à créditer au hop suivant.
+     */
+    public function calculerStockActuelChaine(Stock $stock, ?int $excludeFicheId = null, ?int $excludeEtapeId = null): float
+    {
+        $parts = $this->calculerSortiesStockDetail($stock, $excludeFicheId, $excludeEtapeId);
+        $entrees = (float) $stock->total_entrees;
+
+        return max(0, $entrees - $parts['groupees'] - $parts['etapes']);
+    }
+
+    /**
      * @return list<array{stock_id: int, parc_id: int|null, nom_parc: string, disponible: float, produit_id: int|null, nom_produit: string|null}>
      */
     public function stocksOuvertsPourPontProduit(int $idPont, int $produitId): array
@@ -145,11 +158,6 @@ class TransfertGroupeService
             throw new InvalidArgumentException('Cette fiche groupée n\'est plus en cours.');
         }
 
-        $poids = (float) ($fiche->poids_pont ?? 0);
-        if ($poids <= 0) {
-            throw new InvalidArgumentException('Poids de la fiche invalide.');
-        }
-
         if (! $stockDestination->accepteEntrees()) {
             throw new InvalidArgumentException('Le stock destination n\'accepte pas d\'entrées.');
         }
@@ -158,25 +166,36 @@ class TransfertGroupeService
             throw new InvalidArgumentException('Le stock destination ne correspond pas au produit de la fiche.');
         }
 
-        return DB::transaction(function () use ($fiche, $data, $stockDestination, $poids) {
+        return DB::transaction(function () use ($fiche, $data, $stockDestination) {
             $stockSource = null;
             $parcSourceId = null;
             $nomParcSource = null;
 
-            // Si la marchandise est sur un parc, on la reprend (déduction)
+            // Depuis un parc : on déplace le stock actuel de la chaîne
+            // (stock parc + transferts déjà reçus), pas seulement le poids initial.
+            // Depuis le camion (transit) : on déplace le poids de la fiche.
             if ($fiche->localisation_type === FicheSortie::LOCALISATION_PARC && $fiche->localisation_stock_id) {
                 $stockSource = Stock::query()->find($fiche->localisation_stock_id);
                 if (! $stockSource) {
                     throw new InvalidArgumentException('Stock de localisation introuvable.');
                 }
-                $dispo = $this->calculerStockDisponible($stockSource);
-                if ($poids > $dispo + 0.0001) {
+                if ((int) $stockSource->id === (int) $stockDestination->id) {
+                    throw new InvalidArgumentException('Le parc destination doit être différent du parc actuel.');
+                }
+                $poids = $this->calculerStockActuelChaine($stockSource);
+                if ($poids <= 0) {
                     throw new InvalidArgumentException(
-                        'Stock insuffisant sur le parc actuel (disponible : ' . number_format($dispo, 0, ',', ' ') . ' kg).'
+                        'Aucun stock actuel à transférer sur '
+                        . ($stockSource->nom_parc ?? 'ce parc') . '.'
                     );
                 }
                 $parcSourceId = $stockSource->parc_id;
                 $nomParcSource = $stockSource->nom_parc;
+            } else {
+                $poids = (float) ($fiche->poids_pont ?? 0);
+                if ($poids <= 0) {
+                    throw new InvalidArgumentException('Poids de la fiche invalide.');
+                }
             }
 
             $entree = EntreeStock::create([
@@ -188,9 +207,10 @@ class TransfertGroupeService
                     : null,
                 'date_entree' => $data['date_etape'],
                 'commentaire' => sprintf(
-                    'Transfert groupé fiche %s — agent %s',
+                    'Transfert groupé fiche %s — agent %s (%s kg stock actuel source)',
                     $fiche->numero_fiche ?? $fiche->id,
-                    $data['nom_agent'] ?? ($data['numero_agent'] ?? '')
+                    $data['nom_agent'] ?? ($data['numero_agent'] ?? ''),
+                    number_format($poids, 0, ',', ' ')
                 ),
             ]);
 
@@ -224,6 +244,7 @@ class TransfertGroupeService
                 'id_agent' => $data['id_agent'],
                 'nom_agent' => $data['nom_agent'] ?? $fiche->nom_agent,
                 'numero_agent' => $data['numero_agent'] ?? $fiche->numero_agent,
+                'poids_pont' => $poids,
                 'localisation_type' => FicheSortie::LOCALISATION_PARC,
                 'localisation_parc_id' => $stockDestination->parc_id,
                 'localisation_stock_id' => $stockDestination->id,
