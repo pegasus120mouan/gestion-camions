@@ -288,21 +288,27 @@ class PontController extends Controller
 
             foreach ($stockItem->entreesStock()->orderByDesc('date_entree')->orderByDesc('id')->get() as $entree) {
                 $etape = $etapesParEntree->get($entree->id);
-                $isTransfert = $etape !== null
-                    || str_starts_with((string) ($entree->commentaire ?? ''), 'Transfert groupé');
+                $qte = (float) $entree->quantite;
+                $commentaire = (string) ($entree->commentaire ?? '');
+                $isDebit = $qte < 0 || str_starts_with($commentaire, 'Débit');
+                $isTransfert = ! $isDebit && (
+                    $etape !== null || str_starts_with($commentaire, 'Transfert groupé')
+                );
 
                 $mouvementsEntree->push((object) [
-                    'kind' => $isTransfert ? 'transfert' : 'entree',
+                    'kind' => $isDebit ? 'debit' : ($isTransfert ? 'transfert' : 'entree'),
                     'date' => $entree->date_entree,
                     'code' => $stockItem->code_stock,
                     'produit' => $stockItem->nom_produit,
                     'parc' => $stockItem->nom_parc,
-                    'quantite' => (float) $entree->quantite,
+                    'quantite' => $qte,
                     'prix_unitaire' => (float) ($entree->prix_unitaire ?? 0),
                     'montant_total' => (float) ($entree->montant_total ?? 0),
                     'statut' => $stockItem->statut,
-                    'label_type' => $isTransfert ? 'Transfert groupé' : 'Entrée complémentaire',
-                    'badge' => $isTransfert ? 'bg-warning text-dark' : 'bg-info',
+                    'label_type' => $isDebit
+                        ? 'Débit transfert'
+                        : ($isTransfert ? 'Transfert groupé' : 'Entrée complémentaire'),
+                    'badge' => $isDebit ? 'bg-danger' : ($isTransfert ? 'bg-warning text-dark' : 'bg-info'),
                     'commentaire' => $entree->commentaire,
                     'agent' => $etape?->nom_agent,
                     'fiche' => $etape?->ficheSortie?->numero_fiche,

@@ -483,8 +483,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 + ' — stock ' + entrees.toLocaleString('fr-FR') + ' kg'
                 + ' → ' + (entrees + ajout).toLocaleString('fr-FR') + ' kg (+' + ajout.toLocaleString('fr-FR') + ' kg fiche)';
             } else {
+              var chaine = (s.stock_actuel_chaine !== undefined && s.stock_actuel_chaine !== null)
+                ? s.stock_actuel_chaine
+                : s.disponible;
+              opt.dataset.disponible = chaine;
               opt.textContent = (s.nom_parc || 'Parc')
-                + ' — dispo ' + formatKg(s.disponible || 0) + ' kg';
+                + ' — stock actuel ' + formatKg(chaine || 0) + ' kg';
             }
             stockSelect.appendChild(opt);
           });
@@ -497,7 +501,10 @@ document.addEventListener('DOMContentLoaded', function () {
             if (data.stocks.length === 1) {
               stockSelect.value = String(data.stocks[0].stock_id);
               if (mode === 'cloture') {
-                appliquerDispo(data.stocks[0].disponible, data.stocks[0].nom_parc);
+                var chaineOne = (data.stocks[0].stock_actuel_chaine !== undefined && data.stocks[0].stock_actuel_chaine !== null)
+                  ? data.stocks[0].stock_actuel_chaine
+                  : data.stocks[0].disponible;
+                appliquerDispo(chaineOne, data.stocks[0].nom_parc);
               }
             } else if (mode === 'cloture') {
               appliquerDispo(null, null);

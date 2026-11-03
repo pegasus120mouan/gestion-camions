@@ -42,18 +42,14 @@ class TransfertGroupeService
             $sortiesGroupees->where('id', '!=', $excludeFicheId);
         }
 
-        $sortiesEtapes = EtapeTransfertGroupe::query()
-            ->where('stock_source_id', $stock->id)
-            ->where('type_etape', '!=', EtapeTransfertGroupe::TYPE_CHARGEMENT);
-
-        if ($excludeEtapeId) {
-            $sortiesEtapes->where('id', '!=', $excludeEtapeId);
-        }
+        // Les transferts / clôtures débitent physiquement le stock (quantite / entrees_stock).
+        // On ne les recompte pas ici pour éviter un double débit.
+        $sortiesEtapes = 0.0;
 
         return [
             'normales' => (float) $sortiesNormales->sum('poids_pont'),
             'groupees' => (float) $sortiesGroupees->sum('poids_pont'),
-            'etapes' => (float) $sortiesEtapes->sum('poids'),
+            'etapes' => $sortiesEtapes,
         ];
     }
 
@@ -62,13 +58,13 @@ class TransfertGroupeService
         $entrees = (float) $stock->total_entrees;
         $sorties = $this->calculerSortiesStock($stock, $excludeFicheId, $excludeEtapeId);
 
-        // Disponible = entrées − toutes les sorties (normales + groupées + étapes)
+        // Disponible = entrées − sorties (normales + chargements groupés)
         return max(0, $entrees - $sorties);
     }
 
     /**
      * Stock « actuel » pour la chaîne de transferts groupés :
-     * entrées − chargements groupés − reprises/clôtures (sans les sorties normales / écart).
+     * entrées restantes − chargements groupés encore liés (sans écart des sorties normales).
      * Ex. : parc à 25 000 + transfert 25 000 → 50 000 à créditer au hop suivant.
      */
     public function calculerStockActuelChaine(Stock $stock, ?int $excludeFicheId = null, ?int $excludeEtapeId = null): float
@@ -76,7 +72,29 @@ class TransfertGroupeService
         $parts = $this->calculerSortiesStockDetail($stock, $excludeFicheId, $excludeEtapeId);
         $entrees = (float) $stock->total_entrees;
 
-        return max(0, $entrees - $parts['groupees'] - $parts['etapes']);
+        return max(0, $entrees - $parts['groupees']);
+    }
+
+    /**
+     * Débite un stock source via une entrée négative (historique conservé, Entrée nette diminue).
+     */
+    public function debiterStockSource(Stock $stock, float $poids, ?string $commentaire = null, ?string $date = null): void
+    {
+        if ($poids <= 0) {
+            return;
+        }
+
+        $poids = abs($poids);
+        EntreeStock::create([
+            'stock_id' => $stock->id,
+            'quantite' => -1 * $poids,
+            'prix_unitaire' => $stock->prix_unitaire,
+            'montant_total' => $stock->prix_unitaire !== null
+                ? round(-1 * $poids * (float) $stock->prix_unitaire, 2)
+                : null,
+            'date_entree' => $date ?: now()->toDateString(),
+            'commentaire' => $commentaire ?: 'Débit transfert / clôture groupée',
+        ]);
     }
 
     /**
@@ -105,6 +123,7 @@ class TransfertGroupeService
                 'nom_parc' => (string) ($stock->nom_parc ?? 'Parc'),
                 'total_entrees' => $totalEntrees,
                 'disponible' => $this->calculerStockDisponible($stock),
+                'stock_actuel_chaine' => $this->calculerStockActuelChaine($stock),
                 'produit_id' => $stock->produit_id ? (int) $stock->produit_id : null,
                 'nom_produit' => $stock->nom_produit,
             ];
@@ -191,6 +210,17 @@ class TransfertGroupeService
                 }
                 $parcSourceId = $stockSource->parc_id;
                 $nomParcSource = $stockSource->nom_parc;
+                // Débit réel du parc source (Entrée nette diminue)
+                $this->debiterStockSource(
+                    $stockSource,
+                    $poids,
+                    sprintf(
+                        'Débit transfert groupé fiche %s → %s',
+                        $fiche->numero_fiche ?? $fiche->id,
+                        $stockDestination->nom_pont ?? 'pont destination'
+                    ),
+                    $data['date_etape'] ?? null
+                );
             } else {
                 $poids = (float) ($fiche->poids_pont ?? 0);
                 if ($poids <= 0) {
@@ -282,19 +312,32 @@ class TransfertGroupeService
         }
 
         // Si le parc choisi est celui du chargement initial, la déduction est déjà
-        // comptée via fiche.stock_id — ne pas re-déduire via l'étape.
+        // comptée via fiche.stock_id — ne pas re-débiter physiquement.
         $memeStockChargement = $fiche->stock_id && (int) $stockSource->id === (int) $fiche->stock_id;
 
         if (! $memeStockChargement) {
-            $dispo = $this->calculerStockDisponible($stockSource);
-            if ($poids > $dispo + 0.0001) {
+            $stockActuel = $this->calculerStockActuelChaine($stockSource);
+            if ($poids > $stockActuel + 0.0001) {
                 throw new InvalidArgumentException(
-                    'Stock insuffisant sur le parc (disponible : ' . number_format($dispo, 0, ',', ' ') . ' kg).'
+                    'Stock insuffisant sur le parc (stock actuel : ' . number_format($stockActuel, 0, ',', ' ') . ' kg).'
                 );
             }
         }
 
         return DB::transaction(function () use ($fiche, $data, $usine, $poids, $stockSource, $memeStockChargement) {
+            if (! $memeStockChargement) {
+                $this->debiterStockSource(
+                    $stockSource,
+                    $poids,
+                    sprintf(
+                        'Débit clôture usine fiche %s → %s',
+                        $fiche->numero_fiche ?? $fiche->id,
+                        $usine
+                    ),
+                    $data['date_etape'] ?? null
+                );
+            }
+
             $ordre = (int) $fiche->etapesTransfertGroupe()->max('ordre') + 1;
 
             $etape = EtapeTransfertGroupe::create([
