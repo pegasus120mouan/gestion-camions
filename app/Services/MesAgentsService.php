@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\PontEtat;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -759,6 +760,79 @@ class MesAgentsService
         }
 
         return null;
+    }
+
+    /**
+     * Ponts gérés par un agent (table Unipalm pont_bascule).
+     *
+     * @return list<array{id: int, code: string, nom: string, label: string, gerant: string, gerable: bool}>
+     */
+    public function pontsPourAgent(int $idAgent, ?string $nomComplet = null): array
+    {
+        if ($idAgent <= 0) {
+            return [];
+        }
+
+        $connection = $this->databaseResolver->connection()
+            ?? $this->databaseResolver->connectionForAuth();
+
+        if ($connection === null || ! Schema::connection($connection)->hasTable('pont_bascule')) {
+            return [];
+        }
+
+        try {
+            $nom = trim((string) $nomComplet);
+            $query = DB::connection($connection)
+                ->table('pont_bascule')
+                ->select(['id_pont', 'code_pont', 'nom_pont', 'gerant', 'id_agent'])
+                ->where(function ($q) use ($idAgent, $nom) {
+                    $q->where('id_agent', $idAgent);
+                    if ($nom !== '') {
+                        $q->orWhere(function ($q2) use ($nom) {
+                            $q2->where(function ($q3) {
+                                $q3->whereNull('id_agent')->orWhere('id_agent', 0);
+                            })->where(function ($q3) use ($nom) {
+                                $q3->whereRaw('LOWER(TRIM(gerant)) = ?', [mb_strtolower($nom, 'UTF-8')]);
+                            });
+                        });
+                    }
+                })
+                ->orderBy('nom_pont');
+
+            $rows = $query->get();
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        $gerableParPont = PontEtat::query()
+            ->pluck('gerable', 'id_pont')
+            ->map(fn ($v) => (bool) $v)
+            ->all();
+
+        $ponts = [];
+        $seen = [];
+        foreach ($rows as $row) {
+            $idPont = (int) ($row->id_pont ?? 0);
+            if ($idPont <= 0 || isset($seen[$idPont])) {
+                continue;
+            }
+
+            $seen[$idPont] = true;
+            $nomPont = trim((string) ($row->nom_pont ?? ''));
+            $code = trim((string) ($row->code_pont ?? ''));
+            $ponts[] = [
+                'id' => $idPont,
+                'code' => $code,
+                'nom' => $nomPont !== '' ? $nomPont : 'Pont #' . $idPont,
+                'label' => $code !== '' ? ($nomPont . ' (' . $code . ')') : $nomPont,
+                'gerant' => trim((string) ($row->gerant ?? '')),
+                'gerable' => (bool) ($gerableParPont[$idPont] ?? false),
+            ];
+        }
+
+        usort($ponts, fn ($a, $b) => strcasecmp($a['nom'], $b['nom']));
+
+        return $ponts;
     }
 
     /**

@@ -260,9 +260,15 @@ class AgentController extends Controller
             'autre_camion' => $prixAutreCamion->count(),
         ];
 
+        $mesPonts = $this->mesAgentsService->pontsPourAgent(
+            $id_agent,
+            (string) ($agent['nom_complet'] ?? '')
+        );
+
         return view('agents.show', [
             'agent' => $agent,
             'horsPgf' => $horsPgf,
+            'mesPonts' => $mesPonts,
             'produits' => $produits,
             'usinesParProduit' => $usinesParProduit,
             'codesTransporteurs' => $codesTransporteurs,

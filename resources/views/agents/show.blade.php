@@ -83,6 +83,38 @@
           </div>
         </div>
 
+        <div class="card mb-4">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0 text-white">
+              <i class="bx bx-map me-2"></i>Mes ponts
+              <span class="badge bg-white text-success ms-1">{{ count($mesPonts ?? []) }}</span>
+            </h5>
+          </div>
+          <div class="card-body p-0">
+            @forelse($mesPonts ?? [] as $pont)
+              <a href="{{ route('ponts.stock', ['id_pont' => $pont['id']]) }}"
+                 class="d-flex align-items-center justify-content-between px-3 py-3 text-decoration-none border-bottom">
+                <div class="me-2">
+                  <div class="fw-semibold text-body">{{ $pont['nom'] }}</div>
+                  @if(!empty($pont['code']))
+                    <small class="text-muted">{{ $pont['code'] }}</small>
+                  @endif
+                </div>
+                <div class="text-end flex-shrink-0">
+                  @if(!empty($pont['gerable']))
+                    <span class="badge bg-label-success">Gérable</span>
+                  @else
+                    <span class="badge bg-label-secondary">Non gérable</span>
+                  @endif
+                  <i class="bx bx-chevron-right text-muted ms-1"></i>
+                </div>
+              </a>
+            @empty
+              <div class="p-3 text-muted text-center">Aucun pont associé à cet agent.</div>
+            @endforelse
+          </div>
+        </div>
+
         <div class="card mb-4 border-0 shadow-sm">
           <div class="card-header bg-gradient-info text-white" style="background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);">
             <h5 class="mb-0 text-white"><i class="bx bx-truck me-2"></i>Codes Transporteurs</h5>
