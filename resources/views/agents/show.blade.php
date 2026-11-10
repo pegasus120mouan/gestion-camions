@@ -92,6 +92,7 @@
           </div>
           <div class="card-body p-0">
             @forelse($mesPonts ?? [] as $pont)
+              @php $soldePont = (float) ($pont['solde'] ?? 0); @endphp
               <a href="{{ route('ponts.stock', ['id_pont' => $pont['id']]) }}"
                  class="d-flex align-items-center justify-content-between px-3 py-3 text-decoration-none border-bottom">
                 <div class="me-2">
@@ -99,6 +100,15 @@
                   @if(!empty($pont['code']))
                     <small class="text-muted">{{ $pont['code'] }}</small>
                   @endif
+                  <div class="mt-1">
+                    @if($soldePont > 0)
+                      <span class="fw-semibold text-success">{{ number_format($soldePont, 0, ',', ' ') }} FCFA</span>
+                    @elseif($soldePont < 0)
+                      <span class="fw-semibold text-danger">{{ number_format($soldePont, 0, ',', ' ') }} FCFA</span>
+                    @else
+                      <span class="text-muted">0 FCFA</span>
+                    @endif
+                  </div>
                 </div>
                 <div class="text-end flex-shrink-0">
                   @if(!empty($pont['gerable']))

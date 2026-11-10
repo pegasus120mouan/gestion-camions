@@ -2,7 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\Approvisionnement;
+use App\Models\DepensePont;
+use App\Models\EntreeStock;
 use App\Models\PontEtat;
+use App\Models\Stock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -765,7 +769,7 @@ class MesAgentsService
     /**
      * Ponts gérés par un agent (table Unipalm pont_bascule).
      *
-     * @return list<array{id: int, code: string, nom: string, label: string, gerant: string, gerable: bool}>
+     * @return list<array{id: int, code: string, nom: string, label: string, gerant: string, gerable: bool, solde: float}>
      */
     public function pontsPourAgent(int $idAgent, ?string $nomComplet = null): array
     {
@@ -827,12 +831,29 @@ class MesAgentsService
                 'label' => $code !== '' ? ($nomPont . ' (' . $code . ')') : $nomPont,
                 'gerant' => trim((string) ($row->gerant ?? '')),
                 'gerable' => (bool) ($gerableParPont[$idPont] ?? false),
+                'solde' => $this->calculerSoldePont($idPont),
             ];
         }
 
         usort($ponts, fn ($a, $b) => strcasecmp($a['nom'], $b['nom']));
 
         return $ponts;
+    }
+
+    private function calculerSoldePont(int $idPont): float
+    {
+        if ($idPont <= 0) {
+            return 0.0;
+        }
+
+        $approvisionnements = (float) Approvisionnement::query()->where('pont_id', $idPont)->sum('montant');
+        $depensesStocks = (float) Stock::query()->where('id_pont', $idPont)->where('type', 'entree')->sum('montant_total');
+        $depensesEntrees = (float) EntreeStock::query()
+            ->whereHas('stock', fn ($q) => $q->where('id_pont', $idPont))
+            ->sum('montant_total');
+        $depensesPont = (float) DepensePont::query()->where('id_pont', $idPont)->sum('montant');
+
+        return $approvisionnements - $depensesStocks - $depensesEntrees - $depensesPont;
     }
 
     /**
